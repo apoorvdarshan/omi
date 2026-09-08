@@ -1,1 +1,1 @@
-file:///workspace/omi/backend/utils/chat.py
+import base64
