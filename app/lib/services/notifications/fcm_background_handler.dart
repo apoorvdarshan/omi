@@ -36,10 +36,10 @@ Future<void> omiFirebaseMessagingBackgroundHandler(RemoteMessage message) async 
     await ActionItemNotificationHandler.handleReminderMessage(data, channelKey);
   } else if (messageType == 'action_item_update') {
     await ActionItemNotificationHandler.handleUpdateMessage(data, channelKey);
-  } else if (messageType == 'merge_completed') {
-    await MergeNotificationHandler.handleMergeCompleted(data, channelKey, isAppInForeground: false);
   } else if (messageType == 'action_item_delete') {
     await ActionItemNotificationHandler.handleDeletionMessage(data);
+  } else if (messageType == 'merge_completed') {
+    await MergeNotificationHandler.handleMergeCompleted(data, channelKey, isAppInForeground: false);
   } else if (messageType == 'important_conversation') {
     await ImportantConversationNotificationHandler.handleImportantConversation(
       data,
