@@ -6,6 +6,7 @@ import logging
 from firebase_admin import messaging
 
 import database.notifications as notification_db
+from utils.executors import postprocess_executor, run_blocking
 
 logger = logging.getLogger(__name__)
 
@@ -88,3 +89,16 @@ def send_client_displayed_notification(user_id, title, body, data=None, tokens=N
         logger.info(f'FCM client-displayed batch send: {success_count}/{len(tokens)} successful')
     except Exception as e:
         logger.error(f'FCM client-displayed batch send error: {e}')
+
+
+async def send_client_displayed_notification_async(user_id, title, body, data=None, tokens=None):
+    """Async boundary for streaming chat so FCM send does not block the SSE loop."""
+    await run_blocking(
+        postprocess_executor,
+        send_client_displayed_notification,
+        user_id,
+        title,
+        body,
+        data,
+        tokens,
+    )
