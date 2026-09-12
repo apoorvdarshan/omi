@@ -75,14 +75,31 @@ final class MemoryHubSidebarRoutingTests: XCTestCase {
       MemoryHubDestination.destination(forAutomationTarget: "conversations"), .conversations)
     XCTAssertEqual(
       MemoryHubDestination.destination(forAutomationTarget: "Conversations"), .conversations)
+    XCTAssertEqual(
+      MemoryHubDestination.destination(forAutomationTarget: "CONVERSATIONS"),
+      .conversations)
     XCTAssertEqual(MemoryHubDestination.destination(forAutomationTarget: "memories"), .memories)
+    XCTAssertEqual(MemoryHubDestination.destination(forAutomationTarget: "rewind"), .rewind)
   }
 
   /// Targets outside the hub must leave the remembered view untouched on their way past.
   func testAnAutomationCallerNamingAPageOutsideTheHubResolvesNoHubView() {
     XCTAssertNil(MemoryHubDestination.destination(forAutomationTarget: "tasks"))
     XCTAssertNil(MemoryHubDestination.destination(forAutomationTarget: "chat"))
+    XCTAssertNil(MemoryHubDestination.destination(forAutomationTarget: "dashboard"))
     XCTAssertNil(MemoryHubDestination.destination(forAutomationTarget: "settings"))
+    XCTAssertNil(MemoryHubDestination.destination(forAutomationTarget: "help"))
     XCTAssertNil(MemoryHubDestination.destination(forAutomationTarget: "not-a-target"))
+  }
+
+  /// `navigate permissions` must acknowledge `more.permissions`, not `more.settings`.
+  /// Mapping the name into `SidebarNavItem.permissions` sends automation through the
+  /// legacy adapter (`selectMore(.settings)`), which breaks `waitForNavigationTarget`.
+  func testAutomationPermissionsNameMapsToVisibleMorePermissionsRoute() {
+    XCTAssertNil(SidebarNavItem.automationDestination(named: "permissions"))
+    XCTAssertNil(SidebarNavItem.automationDestination(named: "PERMISSIONS"))
+    XCTAssertEqual(
+      ChatFirstRoute.automationVisibilityDestination(named: "permissions"),
+      .more(.permissions))
   }
 }
