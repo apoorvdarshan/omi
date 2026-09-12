@@ -66,11 +66,20 @@ final class MemoryHubSidebarRoutingTests: XCTestCase {
     XCTAssertEqual(MemoryHubDestination.destination(for: .rewind), .rewind)
   }
 
+<<<<<<< HEAD
   /// The automation bridge (`omi-ctl navigate conversations`) shares the same failure shape as the
   /// menu path did: it resolved only the shell route, so a named Conversations target landed on the
   /// hub's remembered view — `.memories` out of the box. The bridge resolves the hub page through
   /// this seam before selecting the route.
   func testAnAutomationCallerNamingConversationsResolvesConversationsNotTheRememberedView() {
+=======
+  /// `bridge.navigate conversations` used to select only the memories *route*,
+  /// so the hub stayed on its remembered view (default Memories). Automation
+  /// resolves the hub through `destination(forAutomationTarget:)` inside
+  /// `navigateToLegacyDestination(_:automationTarget:)` — the same helper this
+  /// test calls — before selecting the chat-first route.
+  func testAutomationNameConversationsSelectsConversationsHubNotRememberedMemories() {
+>>>>>>> 296ea3f1f4 (fix(desktop): wire automation hub resolution through production helper)
     XCTAssertEqual(
       MemoryHubDestination.destination(forAutomationTarget: "conversations"), .conversations)
     XCTAssertEqual(
