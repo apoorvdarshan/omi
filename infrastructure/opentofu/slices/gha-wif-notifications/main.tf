@@ -78,9 +78,9 @@ resource "google_service_account_iam_member" "notifications_job_runtime_act_as" 
   member             = "serviceAccount:${google_service_account.deploy.email}"
 }
 
-# Existing workflow calls get-gke-credentials for the gateway serving gate.
-resource "google_project_iam_member" "gke_cluster_viewer" {
+# kubectl get deployment for the gateway serving gate (clusterViewer is credentials only).
+resource "google_project_iam_member" "gke_viewer" {
   project = var.project_id
-  role    = "roles/container.clusterViewer"
+  role    = "roles/container.viewer"
   member  = "serviceAccount:${google_service_account.deploy.email}"
 }
