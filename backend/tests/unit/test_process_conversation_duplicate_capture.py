@@ -270,7 +270,7 @@ class TestSameRoomDuplicateIsDiscarded:
         for call in lookup.call_args_list:
             assert call.args == ('uid-3244',)
             assert call.kwargs['finished_after'] == conversation.started_at
-            assert call.kwargs['limit'] == pc.DUPLICATE_CAPTURE_CANDIDATE_LIMIT
+            assert call.kwargs['limit'] == pc.CANDIDATE_PAGE_LIMIT
 
     def test_the_later_of_two_concurrently_processing_captures_yields(self):
         conversation = _pendant_conversation()

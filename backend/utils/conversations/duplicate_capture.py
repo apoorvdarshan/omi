@@ -55,6 +55,10 @@ MIN_OVERLAP_SECONDS = 30.0
 MIN_WINDOW_COVERAGE = 0.8
 # Fraction of the candidate's word bigrams (multiset) present in the primary.
 MIN_TRANSCRIPT_CONTAINMENT = 0.5
+# One bounded page per status. The candidate read is ordered by the activity
+# clock from the candidate's start, so the overlapping captures come first;
+# anything beyond the page finished long after it and cannot cover it.
+CANDIDATE_PAGE_LIMIT = 25
 
 _PRIMARY_ELIGIBLE_STATUSES = frozenset({'completed', 'processing'})
 _WORD_RE = re.compile(r'[^\W_]+', re.UNICODE)
@@ -187,6 +191,18 @@ def is_primary_eligible(candidate: CaptureRecord, other: CaptureRecord) -> bool:
     if other.status == 'completed':
         return True
     return (other.created_at, other.conversation_id) < (candidate.created_at, candidate.conversation_id or '')
+
+
+def mark_duplicate_capture(conversation: Any, match: DuplicateCaptureMatch) -> None:
+    """Record the primary on the conversation model that is about to be discarded.
+
+    ``external_data`` rides the same persist as the discard flag (``dict()`` on
+    both the live and the ingress-create model), so pointer and verdict land in
+    one write.
+    """
+    external_data = dict(getattr(conversation, 'external_data', None) or {})
+    external_data[DUPLICATE_CAPTURE_OF_KEY] = match.primary_conversation_id
+    conversation.external_data = external_data
 
 
 def find_duplicate_capture(
