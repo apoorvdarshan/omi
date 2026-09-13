@@ -78,9 +78,38 @@ resource "google_service_account_iam_member" "notifications_job_runtime_act_as" 
   member             = "serviceAccount:${google_service_account.deploy.email}"
 }
 
-# Existing workflow calls get-gke-credentials for the gateway serving gate.
-resource "google_project_iam_member" "gke_cluster_viewer" {
+# kubectl get deployment for the gateway serving gate (clusterViewer is credentials only).
+resource "google_project_iam_member" "gke_viewer" {
   project = var.project_id
-  role    = "roles/container.clusterViewer"
+  role    = "roles/container.viewer"
   member  = "serviceAccount:${google_service_account.deploy.email}"
+}
+
+# Gateway serving gate: addresses.describe + forwarding-rules.list
+resource "google_project_iam_member" "compute_network_viewer" {
+  project = var.project_id
+  role    = "roles/compute.networkViewer"
+  member  = "serviceAccount:${google_service_account.deploy.email}"
+}
+
+# Throwaway llm-gateway-vpc-probe-* jobs are created at deploy time.
+resource "google_project_iam_member" "run_developer" {
+  project = var.project_id
+  role    = "roles/run.developer"
+  member  = "serviceAccount:${google_service_account.deploy.email}"
+}
+
+# Probe job --network/--subnet attach.
+resource "google_project_iam_member" "compute_network_user" {
+  project = var.project_id
+  role    = "roles/compute.networkUser"
+  member  = "serviceAccount:${google_service_account.deploy.email}"
+}
+
+# Probe --set-secrets=OMI_LLM_GATEWAY_SERVICE_TOKEN
+resource "google_secret_manager_secret_iam_member" "gateway_token" {
+  project   = var.project_id
+  secret_id = "OMI_LLM_GATEWAY_SERVICE_TOKEN"
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.deploy.email}"
 }
