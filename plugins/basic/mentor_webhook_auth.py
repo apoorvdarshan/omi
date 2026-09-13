@@ -17,10 +17,10 @@ def _configured_secret() -> str | None:
 
 def _presented_token(request: Request) -> str | None:
     auth = request.headers.get('Authorization')
-    if auth and auth.startswith('Bearer '):
-        token = auth[7:].strip()
-        if token:
-            return token
+    if auth:
+        scheme, _, credentials = auth.partition(' ')
+        if scheme.lower() == 'bearer' and credentials.strip():
+            return credentials.strip()
     query_token = request.query_params.get(_QUERY_TOKEN_PARAM)
     if query_token and query_token.strip():
         return query_token.strip()
@@ -40,4 +40,8 @@ def require_mentor_webhook_auth(
     if not token or not hmac.compare_digest(token, secret):
         raise HTTPException(status_code=401, detail='unauthorized')
 
-    return uid.strip()
+    trimmed_uid = uid.strip()
+    if not trimmed_uid:
+        raise HTTPException(status_code=422, detail='uid must not be empty')
+
+    return trimmed_uid

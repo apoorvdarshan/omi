@@ -160,6 +160,16 @@ class MentorSessionAuthTests(unittest.TestCase):
         else:
             os.environ['BASIC_MENTOR_WEBHOOK_SECRET'] = self._old_secret
 
+    def test_fails_closed_when_webhook_secret_unconfigured(self):
+        os.environ.pop('BASIC_MENTOR_WEBHOOK_SECRET', None)
+        response = self.client.post(
+            '/mentor?uid=user-a',
+            headers={'Authorization': f'Bearer {TEST_SECRET}'},
+            json={'session_id': 'user-a', 'segments': [_segment('hey Omi what do you think')]},
+        )
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(self.store.buffers, {})
+
     def test_unauthenticated_cross_session_write_is_blocked(self):
         response = self.client.post(
             '/mentor?uid=victim-uid',
