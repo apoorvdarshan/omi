@@ -22,9 +22,28 @@ enum AgentAdapterId: String {
 }
 
 enum AgentRuntimeRouting {
+  /// Adapters that register a single model and ignore cloud QoS hints must not
+  /// persist `ModelQoS.Claude.chat` as the session/run model id.
+  static func adapterOwnsModelSelection(harnessMode: String, chatBridgeMode: String) -> Bool {
+    if chatBridgeMode == ChatProvider.BridgeMode.local.rawValue {
+      return true
+    }
+    switch AgentHarnessMode(rawValue: harnessMode) {
+    case .hermes, .openclaw:
+      return true
+    case .piMono, .acp, .none:
+      return false
+    }
+  }
+
+  static func defaultModelProfile(harnessMode: String, chatBridgeMode: String) -> String? {
+    adapterOwnsModelSelection(harnessMode: harnessMode, chatBridgeMode: chatBridgeMode)
+      ? nil : ModelQoS.Claude.chat
+  }
+
   static func harnessMode(for mode: ChatProvider.BridgeMode) -> AgentHarnessMode {
     switch mode {
-    case .omiAI, .piMono:
+    case .omiAI, .piMono, .local:
       return .piMono
     case .userClaude:
       return .acp
@@ -47,6 +66,8 @@ enum AgentRuntimeRouting {
       return .hermes
     case AgentHarnessMode.openclaw.rawValue, "openClaw":
       return .openclaw
+    case ChatProvider.BridgeMode.local.rawValue:
+      return .piMono
     default:
       return nil
     }
