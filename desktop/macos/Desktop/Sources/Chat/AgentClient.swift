@@ -678,10 +678,10 @@ enum AgentClient {
         ?? ChatProvider.BridgeMode.piMono.rawValue
       let creationProfile = AgentSessionCreationProfile(
         adapterId: requestedAdapter,
-        modelProfile: model
-          ?? AgentRuntimeRouting.defaultModelProfileForRunHarness(
-            harnessMode,
-            persistedChatBridgeMode: persistedChatBridgeMode),
+        modelProfile: model ?? AgentRuntimeRouting.defaultModelProfileForRunHarness(
+          harnessMode,
+          persistedChatBridgeMode: persistedChatBridgeMode
+        ),
         workingDirectory: cwd?.isEmpty == false ? cwd! : AgentRuntimeProcess.defaultArtifactsDirectory()
       )
       let session = try await bridge.resolveSurfaceSession(
