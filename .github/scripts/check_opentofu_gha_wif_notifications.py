@@ -24,6 +24,9 @@ EXPECTED_RESOURCES = frozenset(
         "google_service_account_iam_member.notifications_job_runtime_act_as",
         "google_project_iam_member.gke_viewer",
         "google_project_iam_member.compute_network_viewer",
+        "google_project_iam_member.run_developer",
+        "google_project_iam_member.compute_network_user",
+        "google_secret_manager_secret_iam_member.gateway_token",
     }
 )
 FORBIDDEN = (
