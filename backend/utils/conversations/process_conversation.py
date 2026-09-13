@@ -64,6 +64,13 @@ from models.conversation_enums import (
     ExternalIntegrationConversationSource,
 )
 from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
+from utils.conversations.duplicate_capture import (
+    DUPLICATE_CAPTURE_OF_KEY,
+    DuplicateCaptureMatch,
+    MIN_CANDIDATE_WORDS,
+    capture_record,
+    find_duplicate_capture,
+)
 from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.projection_payload import (
@@ -372,6 +379,77 @@ def _proposes_task_candidates(conversation: Any) -> bool:
     return getattr(conversation, 'source', None) == ConversationSource.desktop
 
 
+# One bounded page per status. The query is ordered by the activity clock from
+# this recording's start, so the overlapping captures come first; anything
+# beyond the page finished long after this recording and cannot cover it.
+DUPLICATE_CAPTURE_CANDIDATE_LIMIT = 25
+
+
+def _detect_duplicate_capture(
+    uid: str, conversation: Union[Conversation, CreateConversation]
+) -> Optional[DuplicateCaptureMatch]:
+    """Find another capture client's conversation that already carries this one (#3244).
+
+    Fails open: any read failure keeps this conversation on the ordinary path,
+    which is the pre-fix outcome (two visible conversations), never a lost one.
+    """
+    candidate = capture_record(conversation)
+    if candidate is None or len(candidate.words) < MIN_CANDIDATE_WORDS:
+        return None
+    try:
+        rows: List[Dict[str, Any]] = []
+        for status in (ConversationStatus.completed.value, ConversationStatus.processing.value):
+            rows.extend(
+                conversations_db.get_conversations_finished_after(
+                    uid,
+                    status=status,
+                    finished_after=candidate.started_at,
+                    limit=DUPLICATE_CAPTURE_CANDIDATE_LIMIT,
+                )
+            )
+    except Exception as error:
+        record_fallback(
+            component='conversation_finalization',
+            from_mode='duplicate_capture_check',
+            to_mode='keep_both_captures',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
+        logger.warning(
+            'duplicate capture lookup failed; keeping conversation uid=%s conversation=%s error=%s',
+            uid,
+            getattr(conversation, 'id', None),
+            type(error).__name__,
+        )
+        return None
+    others = [record for record in (capture_record(row) for row in rows) if record is not None]
+    match = find_duplicate_capture(candidate, others)
+    if match is not None:
+        logger.info(
+            'duplicate capture folded into primary uid=%s conversation=%s primary=%s coverage=%.2f containment=%.2f',
+            uid,
+            getattr(conversation, 'id', None),
+            match.primary_conversation_id,
+            match.window_coverage,
+            match.transcript_containment,
+        )
+    return match
+
+
+def _mark_duplicate_capture(
+    conversation: Union[Conversation, CreateConversation], match: DuplicateCaptureMatch
+) -> None:
+    """Record the primary on the conversation that is about to be discarded.
+
+    ``external_data`` rides the same persist as the discard flag (``dict()`` on
+    both models), so the pointer and the verdict land in one write.
+    """
+    external_data = dict(conversation.external_data or {})
+    external_data[DUPLICATE_CAPTURE_OF_KEY] = match.primary_conversation_id
+    conversation.external_data = external_data
+
+
 def _get_structured(
     uid: str,
     language_code: str,
@@ -534,6 +612,17 @@ def _get_structured(
                     primary_user_name=_primary_user_name(uid),
                 )
             return structured, False
+
+        # A second capture client already carrying this speech (#3244: Omi device
+        # on the phone + macOS microphone in the same room) is folded away here,
+        # before any LLM spend. It takes the same discard exit as a scrap, so the
+        # transcript and audio stay on the row and the primary is recorded in
+        # external_data. Deliberately ahead of the calendar override: the primary
+        # already holds that meeting.
+        duplicate_capture = _detect_duplicate_capture(uid, main_conv)
+        if duplicate_capture is not None:
+            _mark_duplicate_capture(main_conv, duplicate_capture)
+            return Structured(emoji=random.choice(['🧠', '🎉'])), True
 
         # Transcript span, not the wall window: `started_at` is the streaming-session
         # origin, so `finished_at - started_at` read an 8s scrap as 42 minutes (#4056).
