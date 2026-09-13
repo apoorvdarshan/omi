@@ -3256,5 +3256,13 @@
     "speechProfileTopicGoal": "Apakah matlamat jangka panjang anda?",
     "speechToTextUnavailableDesc": "Penukaran pertuturan kepada teks tidak tersedia sekarang. Semak sambungan internet dan tetapan pengecaman pertuturan peranti anda, kemudian cuba lagi.",
     "memoryHistoryPartial": "Sebahagian sejarah ingatan tidak tersedia. Memaparkan sejarah yang telah diterima setakat ini.",
-    "tapPlusToStartRecording": "Ketik + untuk mula merakam"
+    "tapPlusToStartRecording": "Ketik + untuk mula merakam",
+    "renameDevice": "Namakan Semula Peranti",
+    "renameDeviceDescription": "Nama disimpan pada Omi itu sendiri, jadi ia dipaparkan pada mana-mana telefon yang anda pasangkan.",
+    "tapToRename": "Ketik untuk menamakan semula",
+    "deviceNameCannotBeEmpty": "Nama peranti tidak boleh kosong",
+    "deviceNameTooLong": "Nama terlalu panjang (maksimum {maxBytes} aksara; emoji dan aksen dikira lebih)",
+    "deviceNameInvalidCharacters": "Nama mengandungi aksara yang tidak disokong",
+    "deviceRenameFailed": "Nama tidak dapat disimpan ke Omi anda. Pastikan ia disambungkan dan cuba lagi.",
+    "deviceRenamed": "Peranti dinamakan semula kepada {name}"
 }

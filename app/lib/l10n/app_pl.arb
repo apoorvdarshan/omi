@@ -3291,5 +3291,13 @@
     "speechProfileTopicGoal": "Jaki jest twój długoterminowy cel?",
     "speechToTextUnavailableDesc": "Zamiana mowy na tekst jest teraz niedostępna. Sprawdź połączenie internetowe i ustawienia rozpoznawania mowy na urządzeniu, a następnie spróbuj ponownie.",
     "memoryHistoryPartial": "Część historii wspomnień jest niedostępna. Wyświetlana jest dotychczas otrzymana historia.",
-    "tapPlusToStartRecording": "Dotknij +, aby rozpocząć nagrywanie"
+    "tapPlusToStartRecording": "Dotknij +, aby rozpocząć nagrywanie",
+    "renameDevice": "Zmień nazwę urządzenia",
+    "renameDeviceDescription": "Nazwa jest zapisywana w samym Omi, więc pojawia się na każdym telefonie, z którym je sparujesz.",
+    "tapToRename": "Dotknij, aby zmienić nazwę",
+    "deviceNameCannotBeEmpty": "Nazwa urządzenia nie może być pusta",
+    "deviceNameTooLong": "Nazwa jest za długa (maks. {maxBytes} znaków; emoji i znaki diakrytyczne liczą się podwójnie)",
+    "deviceNameInvalidCharacters": "Nazwa zawiera nieobsługiwane znaki",
+    "deviceRenameFailed": "Nie udało się zapisać nazwy w Omi. Sprawdź, czy jest połączone, i spróbuj ponownie.",
+    "deviceRenamed": "Zmieniono nazwę urządzenia na {name}"
 }

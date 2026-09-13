@@ -3256,5 +3256,13 @@
     "speechProfileTopicGoal": "Koks jūsų ilgalaikis tikslas?",
     "speechToTextUnavailableDesc": "Kalbos vertimas tekstu šiuo metu nepasiekiamas. Patikrinkite interneto ryšį ir įrenginio kalbos atpažinimo nustatymus, tada bandykite dar kartą.",
     "memoryHistoryPartial": "Dalis prisiminimų istorijos nepasiekiama. Rodoma iki šiol gauta istorija.",
-    "tapPlusToStartRecording": "Norėdami pradėti įrašymą, palieskite +"
+    "tapPlusToStartRecording": "Norėdami pradėti įrašymą, palieskite +",
+    "renameDevice": "Pervadinti įrenginį",
+    "renameDeviceDescription": "Pavadinimas išsaugomas pačiame Omi, todėl jis rodomas visuose telefonuose, su kuriais jį susiesite.",
+    "tapToRename": "Palieskite, kad pervadintumėte",
+    "deviceNameCannotBeEmpty": "Įrenginio pavadinimas negali būti tuščias",
+    "deviceNameTooLong": "Pavadinimas per ilgas (iki {maxBytes} simbolių; jaustukai ir diakritiniai ženklai užima daugiau)",
+    "deviceNameInvalidCharacters": "Pavadinime yra nepalaikomų simbolių",
+    "deviceRenameFailed": "Nepavyko išsaugoti pavadinimo Omi įrenginyje. Patikrinkite, ar jis prijungtas, ir bandykite dar kartą.",
+    "deviceRenamed": "Įrenginys pervadintas į {name}"
 }

@@ -9988,4 +9988,34 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'A transcrição de voz não está disponível no momento. Verifique sua conexão com a internet e as configurações de reconhecimento de voz do dispositivo e tente novamente.';
+
+  @override
+  String get renameDevice => 'Renomear dispositivo';
+
+  @override
+  String get renameDeviceDescription =>
+      'O nome fica guardado no próprio Omi, por isso aparece em qualquer telemóvel com que o emparelhar.';
+
+  @override
+  String get tapToRename => 'Toque para renomear';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'O nome do dispositivo não pode estar vazio';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'O nome é demasiado longo (até $maxBytes caracteres; emojis e acentos contam mais)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'O nome contém caracteres não suportados';
+
+  @override
+  String get deviceRenameFailed =>
+      'Não foi possível guardar o nome no seu Omi. Verifique se está ligado e tente novamente.';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Dispositivo renomeado para $name';
+  }
 }

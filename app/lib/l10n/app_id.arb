@@ -3298,5 +3298,13 @@
     "speechProfileTopicGoal": "Apa tujuan jangka panjang Anda?",
     "speechToTextUnavailableDesc": "Konversi suara ke teks sedang tidak tersedia. Periksa koneksi internet dan pengaturan pengenalan suara perangkat Anda, lalu coba lagi.",
     "memoryHistoryPartial": "Sebagian riwayat memori tidak tersedia. Menampilkan riwayat yang sudah diterima.",
-    "tapPlusToStartRecording": "Ketuk + untuk mulai merekam"
+    "tapPlusToStartRecording": "Ketuk + untuk mulai merekam",
+    "renameDevice": "Ubah Nama Perangkat",
+    "renameDeviceDescription": "Nama disimpan di Omi itu sendiri, sehingga muncul di ponsel mana pun yang Anda pasangkan.",
+    "tapToRename": "Ketuk untuk mengubah nama",
+    "deviceNameCannotBeEmpty": "Nama perangkat tidak boleh kosong",
+    "deviceNameTooLong": "Nama terlalu panjang (maksimal {maxBytes} karakter; emoji dan aksen dihitung lebih)",
+    "deviceNameInvalidCharacters": "Nama mengandung karakter yang tidak didukung",
+    "deviceRenameFailed": "Nama tidak dapat disimpan ke Omi Anda. Pastikan perangkat terhubung, lalu coba lagi.",
+    "deviceRenamed": "Nama perangkat diubah menjadi {name}"
 }

@@ -3234,5 +3234,13 @@
     "speechProfileTopicGoal": "Jaký je váš dlouhodobý cíl?",
     "speechToTextUnavailableDesc": "Převod řeči na text momentálně není dostupný. Zkontrolujte připojení k internetu a nastavení rozpoznávání řeči v zařízení a zkuste to znovu.",
     "memoryHistoryPartial": "Část historie vzpomínek není dostupná. Zobrazuje se dosud přijatá historie.",
-    "tapPlusToStartRecording": "Klepnutím na + začnete nahrávat"
+    "tapPlusToStartRecording": "Klepnutím na + začnete nahrávat",
+    "renameDevice": "Přejmenovat zařízení",
+    "renameDeviceDescription": "Název se ukládá přímo do Omi, takže se zobrazí na každém telefonu, se kterým ho spárujete.",
+    "tapToRename": "Klepnutím přejmenujete",
+    "deviceNameCannotBeEmpty": "Název zařízení nemůže být prázdný",
+    "deviceNameTooLong": "Název je příliš dlouhý (max. {maxBytes} znaků; emoji a diakritika se počítají víc)",
+    "deviceNameInvalidCharacters": "Název obsahuje nepodporované znaky",
+    "deviceRenameFailed": "Název se nepodařilo uložit do Omi. Zkontrolujte, že je připojeno, a zkuste to znovu.",
+    "deviceRenamed": "Zařízení přejmenováno na {name}"
 }

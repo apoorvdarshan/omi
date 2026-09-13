@@ -3261,5 +3261,13 @@
     "speechProfileTopicGoal": "Mục tiêu dài hạn của bạn là gì?",
     "speechToTextUnavailableDesc": "Hiện không thể chuyển giọng nói thành văn bản. Hãy kiểm tra kết nối internet và cài đặt nhận dạng giọng nói trên thiết bị rồi thử lại.",
     "memoryHistoryPartial": "Một phần lịch sử ký ức không khả dụng. Đang hiển thị lịch sử đã nhận được cho đến nay.",
-    "tapPlusToStartRecording": "Nhấn + để bắt đầu ghi âm"
+    "tapPlusToStartRecording": "Nhấn + để bắt đầu ghi âm",
+    "renameDevice": "Đổi tên thiết bị",
+    "renameDeviceDescription": "Tên được lưu ngay trên Omi, nên sẽ hiển thị trên mọi điện thoại mà bạn ghép nối.",
+    "tapToRename": "Chạm để đổi tên",
+    "deviceNameCannotBeEmpty": "Tên thiết bị không được để trống",
+    "deviceNameTooLong": "Tên quá dài (tối đa {maxBytes} ký tự; emoji và chữ có dấu được tính nhiều hơn)",
+    "deviceNameInvalidCharacters": "Tên chứa ký tự không được hỗ trợ",
+    "deviceRenameFailed": "Không thể lưu tên vào Omi. Hãy kiểm tra thiết bị đã kết nối rồi thử lại.",
+    "deviceRenamed": "Đã đổi tên thiết bị thành {name}"
 }

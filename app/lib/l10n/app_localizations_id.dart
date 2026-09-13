@@ -9989,4 +9989,34 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Konversi suara ke teks sedang tidak tersedia. Periksa koneksi internet dan pengaturan pengenalan suara perangkat Anda, lalu coba lagi.';
+
+  @override
+  String get renameDevice => 'Ubah Nama Perangkat';
+
+  @override
+  String get renameDeviceDescription =>
+      'Nama disimpan di Omi itu sendiri, sehingga muncul di ponsel mana pun yang Anda pasangkan.';
+
+  @override
+  String get tapToRename => 'Ketuk untuk mengubah nama';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Nama perangkat tidak boleh kosong';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Nama terlalu panjang (maksimal $maxBytes karakter; emoji dan aksen dihitung lebih)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'Nama mengandung karakter yang tidak didukung';
+
+  @override
+  String get deviceRenameFailed =>
+      'Nama tidak dapat disimpan ke Omi Anda. Pastikan perangkat terhubung, lalu coba lagi.';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Nama perangkat diubah menjadi $name';
+  }
 }

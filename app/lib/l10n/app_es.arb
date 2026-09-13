@@ -3257,5 +3257,13 @@
     "speechProfileTopicGoal": "¿Cuál es tu objetivo a largo plazo?",
     "speechToTextUnavailableDesc": "La transcripción de voz no está disponible en este momento. Comprueba tu conexión a Internet y los ajustes de reconocimiento de voz de tu dispositivo e inténtalo de nuevo.",
     "memoryHistoryPartial": "Parte del historial de recuerdos no está disponible. Se muestra el historial recibido hasta ahora.",
-    "tapPlusToStartRecording": "Toca + para empezar a grabar"
+    "tapPlusToStartRecording": "Toca + para empezar a grabar",
+    "renameDevice": "Renombrar dispositivo",
+    "renameDeviceDescription": "El nombre se guarda en tu Omi, así que aparece en cualquier teléfono con el que lo emparejes.",
+    "tapToRename": "Toca para renombrar",
+    "deviceNameCannotBeEmpty": "El nombre del dispositivo no puede estar vacío",
+    "deviceNameTooLong": "El nombre es demasiado largo (hasta {maxBytes} caracteres; los emojis y acentos cuentan más)",
+    "deviceNameInvalidCharacters": "El nombre contiene caracteres no compatibles",
+    "deviceRenameFailed": "No se pudo guardar el nombre en tu Omi. Comprueba que esté conectado e inténtalo de nuevo.",
+    "deviceRenamed": "Dispositivo renombrado a {name}"
 }

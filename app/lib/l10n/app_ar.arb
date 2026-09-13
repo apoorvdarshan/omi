@@ -3232,5 +3232,13 @@
     "speechProfileTopicGoal": "ما هدفك على المدى الطويل؟",
     "speechToTextUnavailableDesc": "تحويل الكلام إلى نص غير متاح الآن. تحقق من اتصالك بالإنترنت وإعدادات التعرف على الكلام في جهازك، ثم حاول مرة أخرى.",
     "memoryHistoryPartial": "بعض سجل الذكريات غير متاح. يتم عرض السجل المستلم حتى الآن.",
-    "tapPlusToStartRecording": "اضغط على + لبدء التسجيل"
+    "tapPlusToStartRecording": "اضغط على + لبدء التسجيل",
+    "renameDevice": "إعادة تسمية الجهاز",
+    "renameDeviceDescription": "يُحفظ الاسم على جهاز Omi نفسه، لذا يظهر على أي هاتف تقرنه به.",
+    "tapToRename": "انقر لإعادة التسمية",
+    "deviceNameCannotBeEmpty": "لا يمكن أن يكون اسم الجهاز فارغًا",
+    "deviceNameTooLong": "الاسم طويل جدًا (حتى {maxBytes} حرفًا؛ الرموز التعبيرية وعلامات التشكيل تُحسب أكثر)",
+    "deviceNameInvalidCharacters": "يحتوي الاسم على أحرف غير مدعومة",
+    "deviceRenameFailed": "تعذّر حفظ الاسم على جهاز Omi. تأكد من أنه متصل وحاول مرة أخرى.",
+    "deviceRenamed": "تمت إعادة تسمية الجهاز إلى {name}"
 }

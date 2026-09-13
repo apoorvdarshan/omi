@@ -9969,4 +9969,32 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Speech-to-text isn\'t available right now. Check your internet connection and your device\'s speech recognition settings, then try again.';
+
+  @override
+  String get renameDevice => 'Rename Device';
+
+  @override
+  String get renameDeviceDescription => 'The name is saved on your Omi, so it shows up on any phone you pair with.';
+
+  @override
+  String get tapToRename => 'Tap to rename';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Device name cannot be empty';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Name is too long (up to $maxBytes characters; emoji and accents count extra)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'Name contains unsupported characters';
+
+  @override
+  String get deviceRenameFailed => 'Could not save the name to your Omi. Check that it is connected and try again.';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Device renamed to $name';
+  }
 }

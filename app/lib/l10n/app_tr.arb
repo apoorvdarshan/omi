@@ -3291,5 +3291,13 @@
     "speechProfileTopicGoal": "Uzun vadeli hedefiniz nedir?",
     "speechToTextUnavailableDesc": "Konuşmayı metne dönüştürme şu anda kullanılamıyor. İnternet bağlantınızı ve cihazınızın konuşma tanıma ayarlarını kontrol edip tekrar deneyin.",
     "memoryHistoryPartial": "Anı geçmişinin bir kısmı kullanılamıyor. Şimdiye kadar alınan geçmiş gösteriliyor.",
-    "tapPlusToStartRecording": "Kaydı başlatmak için + simgesine dokunun"
+    "tapPlusToStartRecording": "Kaydı başlatmak için + simgesine dokunun",
+    "renameDevice": "Cihazı Yeniden Adlandır",
+    "renameDeviceDescription": "Ad Omi'nin kendisine kaydedilir, böylece eşleştirdiğiniz her telefonda görünür.",
+    "tapToRename": "Yeniden adlandırmak için dokunun",
+    "deviceNameCannotBeEmpty": "Cihaz adı boş olamaz",
+    "deviceNameTooLong": "Ad çok uzun (en fazla {maxBytes} karakter; emoji ve aksanlı harfler daha fazla sayılır)",
+    "deviceNameInvalidCharacters": "Ad desteklenmeyen karakterler içeriyor",
+    "deviceRenameFailed": "Ad Omi'nize kaydedilemedi. Bağlı olduğunu kontrol edip yeniden deneyin.",
+    "deviceRenamed": "Cihaz adı {name} olarak değiştirildi"
 }

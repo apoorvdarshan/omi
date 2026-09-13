@@ -3256,5 +3256,13 @@
     "speechProfileTopicGoal": "Kāds ir jūsu ilgtermiņa mērķis?",
     "speechToTextUnavailableDesc": "Runas pārvēršana tekstā pašlaik nav pieejama. Pārbaudiet interneta savienojumu un ierīces runas atpazīšanas iestatījumus un mēģiniet vēlreiz.",
     "memoryHistoryPartial": "Daļa atmiņu vēstures nav pieejama. Tiek rādīta līdz šim saņemtā vēsture.",
-    "tapPlusToStartRecording": "Pieskarieties +, lai sāktu ierakstīšanu"
+    "tapPlusToStartRecording": "Pieskarieties +, lai sāktu ierakstīšanu",
+    "renameDevice": "Pārdēvēt ierīci",
+    "renameDeviceDescription": "Nosaukums tiek saglabāts pašā Omi, tāpēc tas parādās jebkurā tālrunī, ar kuru to savienosiet pārī.",
+    "tapToRename": "Pieskarieties, lai pārdēvētu",
+    "deviceNameCannotBeEmpty": "Ierīces nosaukums nevar būt tukšs",
+    "deviceNameTooLong": "Nosaukums ir pārāk garš (līdz {maxBytes} rakstzīmēm; emocijzīmes un diakritiskās zīmes aizņem vairāk)",
+    "deviceNameInvalidCharacters": "Nosaukumā ir neatbalstītas rakstzīmes",
+    "deviceRenameFailed": "Nosaukumu neizdevās saglabāt Omi ierīcē. Pārbaudiet, vai tā ir pievienota, un mēģiniet vēlreiz.",
+    "deviceRenamed": "Ierīce pārdēvēta uz {name}"
 }

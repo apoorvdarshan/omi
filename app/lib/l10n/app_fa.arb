@@ -10822,5 +10822,13 @@
     "speechProfileTopicGoal": "هدف بلندمدت شما چیست؟",
     "speechToTextUnavailableDesc": "تبدیل گفتار به نوشتار در حال حاضر در دسترس نیست. اتصال اینترنت و تنظیمات تشخیص گفتار دستگاه خود را بررسی کنید و دوباره تلاش کنید.",
     "memoryHistoryPartial": "بخشی از تاریخچهٔ خاطرات در دسترس نیست. تاریخچهٔ دریافت‌شده تا این لحظه نمایش داده می‌شود.",
-    "tapPlusToStartRecording": "برای شروع ضبط روی + بزنید"
+    "tapPlusToStartRecording": "برای شروع ضبط روی + بزنید",
+    "renameDevice": "تغییر نام دستگاه",
+    "renameDeviceDescription": "نام روی خودِ Omi ذخیره می‌شود، بنابراین در هر گوشی‌ای که با آن جفت کنید نمایش داده می‌شود.",
+    "tapToRename": "برای تغییر نام ضربه بزنید",
+    "deviceNameCannotBeEmpty": "نام دستگاه نمی‌تواند خالی باشد",
+    "deviceNameTooLong": "نام خیلی طولانی است (حداکثر {maxBytes} نویسه؛ ایموجی و اعراب بیشتر حساب می‌شوند)",
+    "deviceNameInvalidCharacters": "نام شامل نویسه‌های پشتیبانی‌نشده است",
+    "deviceRenameFailed": "ذخیره نام روی Omi ممکن نشد. مطمئن شوید متصل است و دوباره تلاش کنید.",
+    "deviceRenamed": "نام دستگاه به {name} تغییر یافت"
 }

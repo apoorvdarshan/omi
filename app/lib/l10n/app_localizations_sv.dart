@@ -9983,4 +9983,34 @@ class AppLocalizationsSv extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Tal till text är inte tillgängligt just nu. Kontrollera internetanslutningen och enhetens inställningar för taligenkänning och försök igen.';
+
+  @override
+  String get renameDevice => 'Byt namn på enheten';
+
+  @override
+  String get renameDeviceDescription =>
+      'Namnet sparas på själva Omi-enheten, så det visas på alla telefoner du parkopplar den med.';
+
+  @override
+  String get tapToRename => 'Tryck för att byta namn';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Enhetsnamnet får inte vara tomt';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Namnet är för långt (upp till $maxBytes tecken; emoji och accenter räknas extra)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'Namnet innehåller tecken som inte stöds';
+
+  @override
+  String get deviceRenameFailed =>
+      'Namnet kunde inte sparas på din Omi. Kontrollera att den är ansluten och försök igen.';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Enheten har fått namnet $name';
+  }
 }

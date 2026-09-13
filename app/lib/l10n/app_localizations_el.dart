@@ -10049,4 +10049,34 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Η μετατροπή ομιλίας σε κείμενο δεν είναι διαθέσιμη αυτή τη στιγμή. Ελέγξτε τη σύνδεσή σας στο διαδίκτυο και τις ρυθμίσεις αναγνώρισης ομιλίας της συσκευής σας και δοκιμάστε ξανά.';
+
+  @override
+  String get renameDevice => 'Μετονομασία συσκευής';
+
+  @override
+  String get renameDeviceDescription =>
+      'Το όνομα αποθηκεύεται στο ίδιο το Omi, ώστε να εμφανίζεται σε κάθε τηλέφωνο με το οποίο το συζευγνύετε.';
+
+  @override
+  String get tapToRename => 'Πατήστε για μετονομασία';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Το όνομα της συσκευής δεν μπορεί να είναι κενό';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Το όνομα είναι πολύ μεγάλο (έως $maxBytes χαρακτήρες· τα emoji και οι τόνοι μετρούν περισσότερο)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'Το όνομα περιέχει μη υποστηριζόμενους χαρακτήρες';
+
+  @override
+  String get deviceRenameFailed =>
+      'Δεν ήταν δυνατή η αποθήκευση του ονόματος στο Omi. Ελέγξτε ότι είναι συνδεδεμένο και δοκιμάστε ξανά.';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Η συσκευή μετονομάστηκε σε $name';
+  }
 }

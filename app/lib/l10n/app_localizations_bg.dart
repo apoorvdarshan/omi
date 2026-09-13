@@ -10016,4 +10016,33 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Преобразуването на реч в текст не е налично в момента. Проверете интернет връзката и настройките за разпознаване на реч на устройството си, след което опитайте отново.';
+
+  @override
+  String get renameDevice => 'Преименуване на устройството';
+
+  @override
+  String get renameDeviceDescription =>
+      'Името се записва в самото Omi, така че се показва на всеки телефон, с който го сдвоите.';
+
+  @override
+  String get tapToRename => 'Докоснете за преименуване';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Името на устройството не може да е празно';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Името е твърде дълго (до $maxBytes знака; емоджи и ударения се броят за повече)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'Името съдържа неподдържани знаци';
+
+  @override
+  String get deviceRenameFailed => 'Името не можа да бъде записано в Omi. Проверете дали е свързано и опитайте отново.';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Устройството е преименувано на $name';
+  }
 }
