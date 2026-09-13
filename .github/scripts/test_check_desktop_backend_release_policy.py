@@ -596,6 +596,21 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
                     self.assertNotEqual(result.returncode, 0)
                     self.assertIn("expected exactly one desktop-backend-1 container image", result.stderr)
 
+    def test_agent_vm_sha_reuse_guard_rejects_python_repr_boolean(self) -> None:
+        broken = (
+            "resolve_agent_vm_sha_release.py\n"
+            'reuse="$(python3 -c \'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["reuse"])\' '
+            '"$RUNNER_TEMP/agent-vm-sha-release.json")"\n'
+            'if [[ "$reuse" == "true" ]]; then\n'
+        )
+        errors = POLICY.validate_deploy_workflow(broken, production=False)
+        self.assertTrue(any("Python repr" in error for error in errors))
+
+    def test_live_desktop_backend_workflows_do_not_use_python_repr_reuse_extract(self) -> None:
+        broken = 'print(json.load(open(sys.argv[1], encoding="utf-8"))["reuse"])'
+        self.assertNotIn(broken, self.dev)
+        self.assertNotIn(broken, self.prod)
+
 
 if __name__ == "__main__":
     unittest.main()

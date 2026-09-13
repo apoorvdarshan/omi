@@ -181,6 +181,22 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
         if fragment not in text:
             errors.append(f"{workflow}: missing release boundary {fragment!r}")
 
+    broken_reuse_extract = 'print(json.load(open(sys.argv[1], encoding="utf-8"))["reuse"])'
+    if broken_reuse_extract in text:
+        errors.append(
+            f"{workflow}: Agent VM SHA reuse guard must not print a JSON boolean with Python repr "
+            '(use json.dumps or .github/scripts/workflow_json_field_for_shell.py)'
+        )
+    if 'if [[ "$reuse" == "true" ]]' in text and "resolve_agent_vm_sha_release.py" in text:
+        shell_safe_reuse = (
+            'json.dumps(json.load(open(sys.argv[1], encoding="utf-8"))["reuse"])',
+            "workflow_json_field_for_shell.py",
+        )
+        if not any(marker in text for marker in shell_safe_reuse):
+            errors.append(
+                f"{workflow}: reuse branch compares to JSON true but no shell-safe reuse extraction is present"
+            )
+
     # Bound to the step, not to the file. attach_cloud_run_gmp_sidecar.py made
     # --expected-env-state required and only the backend caller was updated;
     # argparse exits before the attach runs, so both desktop deploy paths failed
