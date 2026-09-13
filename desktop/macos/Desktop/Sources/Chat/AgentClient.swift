@@ -674,12 +674,13 @@ enum AgentClient {
       guard let requestedAdapter = AgentRuntimeProcess.adapterId(forHarnessMode: harnessMode) else {
         throw BridgeError.agentError("Unknown AI runtime mode: \(harnessMode)")
       }
-      let chatBridgeMode = UserDefaults.standard.string(forKey: "chatBridgeMode") ?? "piMono"
+      let persistedChatBridgeMode =
+        UserDefaults.standard.string(forKey: "chatBridgeMode") ?? ChatProvider.BridgeMode.piMono.rawValue
       let creationProfile = AgentSessionCreationProfile(
         adapterId: requestedAdapter,
-        modelProfile: model ?? AgentRuntimeRouting.defaultModelProfile(
-          harnessMode: harnessMode,
-          chatBridgeMode: chatBridgeMode
+        modelProfile: model ?? AgentRuntimeRouting.defaultModelProfileForRunHarness(
+          harnessMode,
+          persistedChatBridgeMode: persistedChatBridgeMode
         ),
         workingDirectory: cwd?.isEmpty == false ? cwd! : AgentRuntimeProcess.defaultArtifactsDirectory()
       )

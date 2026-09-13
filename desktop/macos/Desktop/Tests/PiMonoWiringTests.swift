@@ -61,6 +61,13 @@ final class PiMonoWiringTests: XCTestCase {
       ),
       ModelQoS.Claude.chat
     )
+    XCTAssertEqual(
+      AgentRuntimeRouting.defaultModelProfileForRunHarness(
+        AgentHarnessMode.piMono.rawValue,
+        persistedChatBridgeMode: ChatProvider.BridgeMode.hermes.rawValue
+      ),
+      ModelQoS.Claude.chat
+    )
   }
 
   func testLocalAgentProviderDetectorUsesExplicitCommand() {
