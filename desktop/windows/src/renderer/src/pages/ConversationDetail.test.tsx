@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
-import { render, cleanup, waitFor, fireEvent } from '@testing-library/react'
+import { render, cleanup, waitFor, fireEvent, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
 // C3 regression: embedded action items on a conversation never carry an `id`
@@ -135,6 +135,103 @@ describe('ConversationDetail — action item toggle (C3)', () => {
     expect(patchMock).toHaveBeenCalledWith('/v1/action-items/ai_1/completed', null, {
       params: { completed: true }
     })
+  })
+})
+
+// Mobile parity: correcting a transcript segment's text. The backend addresses
+// segments by id (PATCH /v1/conversations/{id}/segments/text, body
+// {segment_id, text}); a segment without an id gets no edit affordance at all.
+const CONVERSATION_WITH_SEGMENTS = {
+  ...CONVERSATION,
+  transcript_segments: [
+    {
+      id: 'seg_1',
+      text: 'We shipped the thing',
+      speaker: 'SPEAKER_00',
+      is_user: false,
+      start: 0,
+      end: 2
+    },
+    { text: 'legacy segment with no id', speaker: 'SPEAKER_01', is_user: false, start: 2, end: 4 }
+  ]
+}
+
+describe('ConversationDetail — edit transcript segment text', () => {
+  const openDrawer = async (): Promise<void> => {
+    fireEvent.click(await screen.findByRole('button', { name: 'View Transcript' }))
+  }
+
+  it('offers Edit only on segments that carry a backend id', async () => {
+    getMock.mockResolvedValue({ data: CONVERSATION_WITH_SEGMENTS })
+    const { findAllByLabelText, findByText } = render(
+      <MemoryRouter>
+        <ConversationDetail conversationId="conv1" />
+      </MemoryRouter>
+    )
+    await findByText('We shipped the thing')
+    await openDrawer()
+    expect(await findAllByLabelText('Edit segment text')).toHaveLength(1)
+  })
+
+  it('saves via PATCH …/segments/text with {segment_id, text} and shows the new text', async () => {
+    getMock.mockResolvedValue({ data: CONVERSATION_WITH_SEGMENTS })
+    const { findByLabelText, findByText, findByRole, queryByText } = render(
+      <MemoryRouter>
+        <ConversationDetail conversationId="conv1" />
+      </MemoryRouter>
+    )
+    await findByText('We shipped the thing')
+    await openDrawer()
+    fireEvent.click(await findByLabelText('Edit segment text'))
+
+    const textarea = (await findByLabelText('Segment text')) as HTMLTextAreaElement
+    expect(textarea.value).toBe('We shipped the thing')
+    fireEvent.change(textarea, { target: { value: '  We shipped the feature  ' } })
+    fireEvent.click(await findByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(patchMock).toHaveBeenCalledTimes(1))
+    expect(patchMock).toHaveBeenCalledWith('/v1/conversations/conv1/segments/text', {
+      segment_id: 'seg_1',
+      text: 'We shipped the feature'
+    })
+    await findByText('We shipped the feature')
+    expect(queryByText('We shipped the thing')).toBeNull()
+  })
+
+  it('keeps Save disabled while the text is empty or unchanged', async () => {
+    getMock.mockResolvedValue({ data: CONVERSATION_WITH_SEGMENTS })
+    const { findByLabelText, findByText, findByRole } = render(
+      <MemoryRouter>
+        <ConversationDetail conversationId="conv1" />
+      </MemoryRouter>
+    )
+    await findByText('We shipped the thing')
+    await openDrawer()
+    fireEvent.click(await findByLabelText('Edit segment text'))
+    const save = (await findByRole('button', { name: 'Save' })) as HTMLButtonElement
+    expect(save.disabled).toBe(true) // unchanged
+    fireEvent.change(await findByLabelText('Segment text'), { target: { value: '   ' } })
+    expect(save.disabled).toBe(true) // empty
+    fireEvent.change(await findByLabelText('Segment text'), { target: { value: 'changed' } })
+    expect(save.disabled).toBe(false)
+  })
+
+  it('reverts the optimistic text when the PATCH is rejected', async () => {
+    getMock.mockResolvedValue({ data: CONVERSATION_WITH_SEGMENTS })
+    patchMock.mockRejectedValueOnce(new Error('404'))
+    const { findByLabelText, findByText, findByRole } = render(
+      <MemoryRouter>
+        <ConversationDetail conversationId="conv1" />
+      </MemoryRouter>
+    )
+    await findByText('We shipped the thing')
+    await openDrawer()
+    fireEvent.click(await findByLabelText('Edit segment text'))
+    fireEvent.change(await findByLabelText('Segment text'), { target: { value: 'nope' } })
+    fireEvent.click(await findByRole('button', { name: 'Save' }))
+
+    await findByText('nope')
+    await findByText('We shipped the thing')
   })
 })
 
