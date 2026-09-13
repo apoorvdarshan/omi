@@ -23,7 +23,7 @@ const FORBIDDEN_PATTERNS = [
 function stripLineComments(source) {
   return source
     .split('\n')
-    .map((line) => line.replace(/\/\/.*$/, ''))
+    .map((line) => line.replace(/(?<!:)\/\/.*$/, ''))
     .join('\n');
 }
 
@@ -66,13 +66,51 @@ describe('app-store hardware product (Fixes #5855 guard)', () => {
       'utf8',
     );
 
-    for (const source of [bannerTypes, metadata, appDetail]) {
-      assert.match(source, /APP_STORE_HARDWARE_PRODUCT/);
+    for (const property of [
+      'APP_STORE_HARDWARE_PRODUCT.name',
+      'APP_STORE_HARDWARE_PRODUCT.displayPrice',
+      'APP_STORE_HARDWARE_PRODUCT.marketplaceOrderUrl',
+      'APP_STORE_HARDWARE_PRODUCT.shipping',
+      'APP_STORE_HARDWARE_PRODUCT.images',
+    ]) {
+      assert.match(
+        bannerTypes,
+        new RegExp(property.replace('.', '\\.')),
+        `product-banner/types.ts must reference ${property}`,
+      );
+    }
+
+    for (const property of [
+      'APP_STORE_HARDWARE_PRODUCT.name',
+      'APP_STORE_HARDWARE_PRODUCT.description',
+      'APP_STORE_HARDWARE_PRODUCT.schemaPrice',
+      'APP_STORE_HARDWARE_PRODUCT.currency',
+      'APP_STORE_HARDWARE_PRODUCT.storeUrl',
+    ]) {
+      assert.match(
+        metadata,
+        new RegExp(property.replace('.', '\\.')),
+        `apps/utils/metadata.ts must reference ${property}`,
+      );
+    }
+
+    for (const property of [
+      'APP_STORE_HARDWARE_PRODUCT.name',
+      'APP_STORE_HARDWARE_PRODUCT.description',
+      'APP_STORE_HARDWARE_PRODUCT.schemaPrice',
+      'APP_STORE_HARDWARE_PRODUCT.currency',
+    ]) {
+      assert.match(
+        appDetail,
+        new RegExp(property.replace('.', '\\.')),
+        `apps/[id]/page.tsx must reference ${property}`,
+      );
     }
   });
 
   it('does not reintroduce discontinued Duo Dev Kit pricing or product slugs on app-store surfaces', () => {
     const surfaces = [
+      constantsPath,
       ...collectSourceFiles(appsDir),
       ...collectSourceFiles(productBannerDir),
     ];
