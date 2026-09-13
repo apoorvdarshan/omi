@@ -17,11 +17,20 @@ def main() -> int:
         print("usage: workflow_json_field_for_shell.py <json-path> <field-name>", file=sys.stderr)
         return 2
     path, field = sys.argv[1], sys.argv[2]
-    document = json.load(open(path, encoding="utf-8"))
+    with open(path, encoding="utf-8") as json_file:
+        document = json.load(json_file)
     if field not in document:
         print(f"missing field {field!r} in {path}", file=sys.stderr)
         return 1
-    print(json.dumps(document[field]))
+    value = document[field]
+    if type(value) not in (bool, int, float, type(None)):
+        print(
+            f"field {field!r} in {path} must be a JSON boolean, number, or null for shell comparison "
+            f"(got {type(value).__name__})",
+            file=sys.stderr,
+        )
+        return 1
+    print(json.dumps(value))
     return 0
 
 

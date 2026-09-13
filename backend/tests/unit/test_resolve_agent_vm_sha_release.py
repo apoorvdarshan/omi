@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -120,6 +121,16 @@ def test_startup_and_manifest_digest_mismatch_fails_closed():
         )
 
 
+def test_object_exists_fails_closed_on_non_not_found_errors():
+    resolve = load_resolve()
+
+    def deny_access(_command: list[str]) -> SimpleNamespace:
+        return SimpleNamespace(returncode=1, stdout='', stderr='PERMISSION_DENIED: access denied')
+
+    with pytest.raises(resolve.ResolveError, match='could not inspect'):
+        resolve.object_exists('gs://bucket/object', runner=deny_access)
+
+
 def test_live_resolve_reuses_existing_objects(tmp_path: Path):
     resolve = load_resolve()
     startup_uri = f'gs://based-hardware-agent/agent-vm/releases/{SOURCE_SHA}/startup.sh'
@@ -156,7 +167,7 @@ HELPER_REUSE_SHELL = 'reuse="$(python3 "$REPO/.github/scripts/workflow_json_fiel
 def _reuse_branch_taken(*, extract_snippet: str, plan_path: Path) -> bool:
     script = f"""
 set -euo pipefail
-PLAN="{plan_path}"
+PLAN={shlex.quote(str(plan_path))}
 {extract_snippet}
 if [[ "$reuse" == "true" ]]; then
   echo reuse-branch

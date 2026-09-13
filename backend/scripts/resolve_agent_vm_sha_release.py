@@ -66,7 +66,14 @@ def _fail(message: str) -> None:
 
 def object_exists(uri: str, *, runner: GcloudRunner | None = None) -> bool:
     result = _run_gcloud(['storage', 'objects', 'describe', uri], runner=runner)
-    return result.returncode == 0
+    if result.returncode == 0:
+        return True
+    detail = (result.stderr or result.stdout or '').strip() or f'exit {result.returncode}'
+    detail_upper = detail.upper()
+    if '404' in detail or 'NOT_FOUND' in detail_upper or 'not found' in detail.lower():
+        return False
+    _fail(f'could not inspect immutable Agent VM object {uri} ({detail}).')
+    return False  # unreachable; keeps type checkers satisfied after _fail
 
 
 def download_text(uri: str, destination: Path, *, runner: GcloudRunner | None = None) -> str:
