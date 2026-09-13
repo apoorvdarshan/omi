@@ -84,3 +84,10 @@ resource "google_project_iam_member" "gke_viewer" {
   role    = "roles/container.viewer"
   member  = "serviceAccount:${google_service_account.deploy.email}"
 }
+
+# Gateway serving gate: addresses.describe + forwarding-rules.list
+resource "google_project_iam_member" "compute_network_viewer" {
+  project = var.project_id
+  role    = "roles/compute.networkViewer"
+  member  = "serviceAccount:${google_service_account.deploy.email}"
+}
