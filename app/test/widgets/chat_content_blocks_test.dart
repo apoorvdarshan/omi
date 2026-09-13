@@ -27,6 +27,8 @@ class _RecordingActionItemsProvider extends ActionItemsProvider {
             String? conversationId,
             DateTime? startDate,
             DateTime? endDate,
+            DateTime? dueStartDate,
+            DateTime? dueEndDate,
           }) async =>
               const wire.GeneratedActionItemsResponse(actionItems: []),
         );

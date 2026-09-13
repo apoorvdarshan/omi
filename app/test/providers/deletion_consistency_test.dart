@@ -272,7 +272,9 @@ void main() {
               bool? completed,
               String? conversationId,
               DateTime? startDate,
-              DateTime? endDate}) async =>
+              DateTime? endDate,
+              DateTime? dueStartDate,
+              DateTime? dueEndDate}) async =>
           const ActionItemsResponse(actionItems: []);
     }
 
@@ -299,7 +301,9 @@ void main() {
                 bool? completed,
                 String? conversationId,
                 DateTime? startDate,
-                DateTime? endDate}) async =>
+                DateTime? endDate,
+                DateTime? dueStartDate,
+                DateTime? dueEndDate}) async =>
             ActionItemsResponse(actionItems: [deleted]),
       );
 
@@ -326,7 +330,9 @@ void main() {
             bool? completed,
             String? conversationId,
             DateTime? startDate,
-            DateTime? endDate}) async {
+            DateTime? endDate,
+            DateTime? dueStartDate,
+            DateTime? dueEndDate}) async {
           // In stale mode the server still returns the deleted item; once
           // cleared, the server response omits it.
           if (staleMode) {
@@ -364,7 +370,9 @@ void main() {
             bool? completed,
             String? conversationId,
             DateTime? startDate,
-            DateTime? endDate}) async {
+            DateTime? endDate,
+            DateTime? dueStartDate,
+            DateTime? dueEndDate}) async {
           if (offset == 0) {
             return ActionItemsResponse(actionItems: [deleted], hasMore: true);
           }
