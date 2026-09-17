@@ -2039,6 +2039,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
 
   @override
+  String get memoryHistory => 'History';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Undo';
 
   @override
@@ -9969,4 +9978,11 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Speech-to-text isn\'t available right now. Check your internet connection and your device\'s speech recognition settings, then try again.';
+
+  @override
+  String get processingTakingLonger => 'Still working — this is taking longer than usual.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'So Omi knows which voice is yours — talk for about 5 seconds about anything.';
 }

@@ -2041,6 +2041,15 @@ class AppLocalizationsFa extends AppLocalizations {
       'بخشی از تاریخچهٔ خاطرات در دسترس نیست. تاریخچهٔ دریافت‌شده تا این لحظه نمایش داده می‌شود.';
 
   @override
+  String get memoryHistory => 'تاریخچه';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'بازگشت';
 
   @override
@@ -9979,4 +9988,11 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'تبدیل گفتار به نوشتار در حال حاضر در دسترس نیست. اتصال اینترنت و تنظیمات تشخیص گفتار دستگاه خود را بررسی کنید و دوباره تلاش کنید.';
+
+  @override
+  String get processingTakingLonger => 'هنوز در حال انجام است — بیشتر از حد معمول طول می‌کشد.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'برای اینکه Omi بداند کدام صدا متعلق به شماست — حدود ۵ ثانیه درباره هر چیزی صحبت کنید.';
 }

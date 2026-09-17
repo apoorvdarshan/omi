@@ -2051,6 +2051,15 @@ class AppLocalizationsIt extends AppLocalizations {
       'Parte della cronologia dei ricordi non è disponibile. Viene mostrata la cronologia ricevuta finora.';
 
   @override
+  String get memoryHistory => 'Cronologia';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Annulla';
 
   @override
@@ -10036,4 +10045,11 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'La trascrizione vocale non è disponibile al momento. Controlla la connessione Internet e le impostazioni di riconoscimento vocale del dispositivo, poi riprova.';
+
+  @override
+  String get processingTakingLonger => 'Ancora in corso: ci sta mettendo più del solito.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Perché Omi sappia qual è la tua voce — parla di qualsiasi cosa per circa 5 secondi.';
 }

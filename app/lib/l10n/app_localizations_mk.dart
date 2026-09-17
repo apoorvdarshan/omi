@@ -2050,6 +2050,15 @@ class AppLocalizationsMk extends AppLocalizations {
       'Дел од историјата на сеќавањата не е достапен. Се прикажува досега примената историја.';
 
   @override
+  String get memoryHistory => 'Историја';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Врати';
 
   @override
@@ -10032,4 +10041,11 @@ class AppLocalizationsMk extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Претворањето говор во текст моментално не е достапно. Проверете ги интернет-врската и поставките за препознавање говор на уредот, па обидете се повторно.';
+
+  @override
+  String get processingTakingLonger => 'Сè уште се обработува — ова трае подолго од вообичаеното.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'За Omi да знае кој глас е вашиот — зборувајте за што било околу 5 секунди.';
 }

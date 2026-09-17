@@ -2057,6 +2057,15 @@ class AppLocalizationsHu extends AppLocalizations {
       'Az emlékek előzményeinek egy része nem érhető el. Az eddig megkapott előzmények láthatók.';
 
   @override
+  String get memoryHistory => 'Előzmények';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Visszavonás';
 
   @override
@@ -10020,4 +10029,11 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'A beszéd szöveggé alakítása jelenleg nem érhető el. Ellenőrizd az internetkapcsolatot és az eszköz beszédfelismerési beállításait, majd próbáld újra.';
+
+  @override
+  String get processingTakingLonger => 'Még folyamatban — ez tovább tart a szokásosnál.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Hogy az Omi tudja, melyik hang a tiéd — beszélj bármiről körülbelül 5 másodpercig.';
 }

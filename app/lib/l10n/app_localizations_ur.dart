@@ -2042,6 +2042,15 @@ class AppLocalizationsUr extends AppLocalizations {
       'یادوں کی تاریخ کا کچھ حصہ دستیاب نہیں ہے۔ اب تک موصول ہونے والی تاریخ دکھائی جا رہی ہے۔';
 
   @override
+  String get memoryHistory => 'تاریخ';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'واپس لیں';
 
   @override
@@ -9991,4 +10000,11 @@ class AppLocalizationsUr extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'اس وقت آواز کو متن میں تبدیل کرنے کی سہولت دستیاب نہیں ہے۔ اپنا انٹرنیٹ کنکشن اور آلے کی آواز پہچاننے کی ترتیبات چیک کریں، پھر دوبارہ کوشش کریں۔';
+
+  @override
+  String get processingTakingLonger => 'ابھی کام جاری ہے — اس میں معمول سے زیادہ وقت لگ رہا ہے۔';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'تاکہ Omi آپ کی آواز پہچان سکے — کسی بھی موضوع پر تقریباً 5 سیکنڈ بات کریں۔';
 }

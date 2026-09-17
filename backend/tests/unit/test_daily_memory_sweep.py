@@ -1,5 +1,7 @@
 from datetime import date, datetime, timedelta, timezone
 from io import StringIO
+import json
+import logging
 import sys
 import threading
 import time
@@ -55,14 +57,26 @@ from utils.memory.daily_memory_sweep import (
     MODEL_INVOCATION_FENCE_COLLECTION,
     MODEL_INVOCATION_SCHEMA_VERSION,
     _invoke_model_once,
+    MODEL_INVOCATION_REPAIR_PATH,
+    repair_daily_sweep_model_invocation,
+    _apply_candidate,
     cleanup_expired_daily_memory_sweep_stages,
     read_daily_memory_sweep_cohort_assignment,
     run_daily_memory_sweep_scheduler,
     produce_completed_day_daily_summary_sources,
     firestore_daily_sweep_source_provider,
 )
-from models.product_memory import normalized_memory_content_key
+from models.product_memory import normalized_memory_content_key, MemorySubjectScope
+from utils.conversations.owner_attribution import OwnerAttributionEvidence
+from models.transcript_segment import TranscriptSegment
 from utils.llm.usage_tracker import get_current_context
+
+
+@pytest.fixture(autouse=True)
+def _stub_owner_profile_name(monkeypatch):
+    """The owner-alias gate reads the profile name; tests must not hit Firebase."""
+
+    monkeypatch.setattr('utils.memory.daily_memory_sweep.get_user_name', lambda *_args, **_kwargs: None)
 
 
 def _candidate(**updates):
@@ -386,6 +400,52 @@ def test_runner_uses_local_completed_days_and_cursor(monkeypatch):
     assert second.status == "not_due"
 
 
+def test_belief_automation_pause_blocks_beta_writes_but_flag_off_still_sweeps(monkeypatch):
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    written = []
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep._apply_candidate",
+        lambda uid, local_date, candidate, **kwargs: (written.append(candidate.candidate_id) or "mem-1", None),
+    )
+    packet = DailySweepInput(
+        uid="user-1",
+        local_date=date(2026, 8, 23),
+        account_generation=control.account_generation,
+        source_generation=control.source_generation,
+        **_packet_kwargs(date(2026, 8, 23)),
+        candidates=(_candidate(),),
+    )
+
+    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
+    monkeypatch.setenv("MEMORY_BELIEF_AUTOMATION_PAUSED", "true")
+    paused = run_daily_memory_sweep(
+        "user-1",
+        "America/New_York",
+        datetime(2026, 8, 24, 12, tzinfo=timezone.utc),
+        {packet.local_date: packet},
+        db_client=db,
+        authority=SweepAuthorityState(enabled=True),
+    )
+    assert paused.status == "disabled"
+    assert paused.telemetry["status"] == "disabled"
+    assert paused.blocked_reason is None
+    assert written == []
+
+    monkeypatch.delenv("MEMORY_BELIEF_MODEL_ENABLED")
+    stable = run_daily_memory_sweep(
+        "user-1",
+        "America/New_York",
+        datetime(2026, 8, 24, 12, tzinfo=timezone.utc),
+        {packet.local_date: packet},
+        db_client=db,
+        authority=SweepAuthorityState(enabled=True),
+    )
+    assert stable.status == "committed"
+    assert written == ["fact-alice-role"]
+
+
 def test_unknown_slot_fails_that_candidate_not_the_day(monkeypatch):
     db = _Db()
     control = _open_control(monkeypatch)
@@ -563,36 +623,62 @@ def test_cohort_reader_distinguishes_false_from_posthog_outage(monkeypatch):
     )
 
 
-def test_scheduler_requeues_posthog_outage_without_calling_source_provider():
+def test_scheduler_runs_without_posthog_cohort_resolution(monkeypatch):
     source_calls = []
+    control = MemoryControlState(
+        uid="user-1",
+        head_commit_id="head0",
+        account_generation=4,
+        source_generation=7,
+        writer_mode=WriterMode.ledger,
+        writer_epoch=1,
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.ensure_canonical_apply_control_state",
+        lambda _uid, db_client: control,
+    )
     summary = run_daily_memory_sweep_scheduler(
-        db_client=object(),
+        db_client=_Db(),
         now=datetime(2026, 8, 24, 12, tzinfo=timezone.utc),
         uid_inventory=("user-1",),
         source_provider=lambda *_args, **_kwargs: source_calls.append(True),
         timezone_resolver=lambda _uid: "UTC",
         authority=SweepAuthorityState(enabled=True),
-        cohort_authority=DailySweepCohortAuthority(enabled=True, cohort_name="memory-sweep"),
-        cohort_authorizer=lambda *_args: DailySweepCohortDecision.unavailable,
+        cohort_authority=DailySweepCohortAuthority(enabled=False, cohort_name=""),
+        cohort_authorizer=None,
     )
-    assert summary.failed_uids == ("user-1",)
-    assert summary.completed_uids == ()
-    assert source_calls == []
+    assert summary.attempted_users == 1
+    assert source_calls == [True]
+    assert all("cohort" not in error for error in summary.errors)
 
 
-def test_scheduler_never_treats_disabled_cohort_as_unrestricted(monkeypatch):
+def test_scheduler_does_not_fail_closed_on_missing_cohort_configuration(monkeypatch):
+    source_calls = []
+    control = MemoryControlState(
+        uid="user-1",
+        head_commit_id="head0",
+        account_generation=4,
+        source_generation=7,
+        writer_mode=WriterMode.ledger,
+        writer_epoch=1,
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.ensure_canonical_apply_control_state",
+        lambda _uid, db_client: control,
+    )
     summary = run_daily_memory_sweep_scheduler(
-        db_client=object(),
+        db_client=_Db(),
         now=datetime(2026, 8, 24, 12, tzinfo=timezone.utc),
         uid_inventory=("user-1",),
-        source_provider=lambda *_args, **_kwargs: None,
+        source_provider=lambda *_args, **_kwargs: source_calls.append(True),
         timezone_resolver=lambda _uid: "UTC",
         authority=SweepAuthorityState(enabled=True),
         cohort_authority=DailySweepCohortAuthority(enabled=False, cohort_name=""),
-        cohort_authorizer=lambda *_args: True,
+        cohort_authorizer=None,
     )
-    assert summary.attempted_users == 0
-    assert summary.errors == ("cohort_disabled",)
+    assert summary.attempted_users == 1
+    assert source_calls == [True]
+    assert summary.errors != ("cohort_disabled",)
 
 
 @pytest.mark.parametrize(
@@ -625,11 +711,22 @@ def test_scheduler_cleanup_runs_even_when_rollout_is_closed(monkeypatch, authori
     assert summary.attempted_users == 0
 
 
-@pytest.mark.parametrize("decision", [DailySweepCohortDecision.disabled, DailySweepCohortDecision.unavailable])
-def test_scheduler_cohort_gate_precedes_timezone_reconciliation_and_all_sweep_writes(decision):
+def test_scheduler_legacy_cohort_arguments_do_not_block_timezone_reconciliation(monkeypatch):
     db = _Db()
     source_calls = []
     reconciliation_calls = []
+    control = MemoryControlState(
+        uid="user-1",
+        head_commit_id="head0",
+        account_generation=4,
+        source_generation=7,
+        writer_mode=WriterMode.ledger,
+        writer_epoch=1,
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.ensure_canonical_apply_control_state",
+        lambda _uid, db_client: control,
+    )
     summary = run_daily_memory_sweep_scheduler(
         db_client=db,
         now=datetime(2026, 8, 24, 12, tzinfo=timezone.utc),
@@ -638,16 +735,14 @@ def test_scheduler_cohort_gate_precedes_timezone_reconciliation_and_all_sweep_wr
         timezone_resolver=lambda _uid: "America/Los_Angeles",
         timezone_reconciler=lambda *_args: reconciliation_calls.append(True),
         authority=SweepAuthorityState(enabled=True),
-        cohort_authority=DailySweepCohortAuthority(enabled=True, cohort_name="memory-sweep"),
-        cohort_authorizer=lambda *_args: decision,
+        cohort_authority=DailySweepCohortAuthority(enabled=False, cohort_name=""),
+        cohort_authorizer=None,
     )
-    assert source_calls == []
+    assert source_calls == [True]
     assert reconciliation_calls == []
     assert db.store == {}
-    if decision is DailySweepCohortDecision.disabled:
-        assert summary.completed_uids == ("user-1",)
-    else:
-        assert summary.failed_uids == ("user-1",)
+    assert summary.attempted_users == 1
+    assert all("cohort" not in error for error in summary.errors)
 
 
 def test_stale_overlapping_cursor_writer_cannot_move_cursor_backward(monkeypatch):
@@ -1303,7 +1398,228 @@ def test_returned_payload_expiry_keeps_content_free_tombstone_and_blocks_replay(
     assert paid_call_count == 1
 
 
+def test_repair_receipt_reopens_exactly_one_bounded_invocation_retry(monkeypatch):
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    invocation_id = "repair-window-a"
+    claim_at = datetime(2026, 9, 15, 5, 0, tzinfo=timezone.utc)
+    paid_calls = []
+
+    def dying_provider():
+        paid_calls.append("first")
+        raise RuntimeError("worker died after the provider call")
+
+    assert (
+        _invoke_model_once(
+            db,
+            "user-1",
+            invocation_id,
+            candidate_builder=dying_provider,
+            account_generation=control.account_generation,
+            source_generation=control.source_generation,
+            sweep_generation=1,
+            window_id="window-a",
+            now=claim_at,
+        )
+        is None
+    )
+    fence_path = f"{MODEL_INVOCATION_FENCE_COLLECTION}/{invocation_id}"
+    assert db.store[fence_path]["state"] == "indeterminate"
+
+    # Before the lease expires an explicit repair must fail closed.
+    with pytest.raises(ValueError, match="expired invocation lease"):
+        repair_daily_sweep_model_invocation(
+            db,
+            uid="user-1",
+            invocation_id=invocation_id,
+            provider_outcome_evidence={
+                "jit_run_id": "qa-sweep-1",
+                "attempts": [{"request_id": "req-1", "outcome": "success", "total_tokens": 2730}],
+            },
+            repair_authority="operator:qa-sweep-1",
+            now=claim_at + timedelta(minutes=2),
+        )
+
+    receipt = repair_daily_sweep_model_invocation(
+        db,
+        uid="user-1",
+        invocation_id=invocation_id,
+        provider_outcome_evidence={
+            "jit_run_id": "qa-sweep-1",
+            "attempts": [{"request_id": "req-1", "outcome": "success", "total_tokens": 2730}],
+        },
+        repair_authority="operator:qa-sweep-1",
+        now=claim_at + timedelta(minutes=16),
+    )
+    assert receipt["prior_state"] == "indeterminate"
+    assert receipt["provider_outcome_summary"] == "success_usage_recorded"
+    assert receipt["consumed"] is False
+    stored = db.store[f"users/user-1/{MODEL_INVOCATION_REPAIR_PATH}/{invocation_id}"]
+    assert stored["window_id"] == "window-a"
+
+    def repaired_provider():
+        paid_calls.append("second")
+        return ({"candidate_id": "repaired"},)
+
+    assert _invoke_model_once(
+        db,
+        "user-1",
+        invocation_id,
+        candidate_builder=repaired_provider,
+        account_generation=control.account_generation,
+        source_generation=control.source_generation,
+        sweep_generation=1,
+        window_id="window-a",
+        now=claim_at + timedelta(minutes=17),
+    ) == ({"candidate_id": "repaired"},)
+    assert db.store[f"users/user-1/{MODEL_INVOCATION_REPAIR_PATH}/{invocation_id}"]["consumed"] is True
+    assert db.store[fence_path]["repaired_from_state"] == "indeterminate"
+
+    # A tombstone that reforms after the repaired retry stays closed forever:
+    # exactly one repair receipt may ever exist per invocation.
+    db.store[fence_path]["state"] = "indeterminate"
+    with pytest.raises(ValueError, match="already has a repair receipt"):
+        repair_daily_sweep_model_invocation(
+            db,
+            uid="user-1",
+            invocation_id=invocation_id,
+            provider_outcome_evidence={"jit_run_id": "qa-sweep-2", "attempts": []},
+            repair_authority="operator:qa-sweep-2",
+            now=claim_at + timedelta(minutes=40),
+        )
+    assert (
+        _invoke_model_once(
+            db,
+            "user-1",
+            invocation_id,
+            candidate_builder=lambda: (_ for _ in ()).throw(AssertionError("charged a third time")),
+            account_generation=control.account_generation,
+            source_generation=control.source_generation,
+            sweep_generation=1,
+            window_id="window-a",
+            now=claim_at + timedelta(minutes=41),
+        )
+        is None
+    )
+    assert paid_calls == ["first", "second"]
+
+
+def test_repair_receipt_requires_accounting_evidence_and_tombstoned_fence(monkeypatch):
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document("users/user-1/memory_state/apply_control").set(control.model_dump(mode="json"))
+    invocation_id = "repair-returned"
+    claim_at = datetime(2026, 9, 15, 5, 0, tzinfo=timezone.utc)
+    assert _invoke_model_once(
+        db,
+        "user-1",
+        invocation_id,
+        candidate_builder=lambda: ({"candidate_id": "returned"},),
+        account_generation=control.account_generation,
+        source_generation=control.source_generation,
+        sweep_generation=1,
+        window_id="window-a",
+        now=claim_at,
+    ) == ({"candidate_id": "returned"},)
+
+    # A returned invocation has a proven provider outcome; nothing to repair.
+    with pytest.raises(ValueError, match="not repairable"):
+        repair_daily_sweep_model_invocation(
+            db,
+            uid="user-1",
+            invocation_id=invocation_id,
+            provider_outcome_evidence={"jit_run_id": "qa-sweep-1", "attempts": []},
+            repair_authority="operator:qa-sweep-1",
+            now=claim_at + timedelta(hours=2),
+        )
+    # Evidence without the owning run id is not a provider proof.
+    db.document(f"{MODEL_INVOCATION_FENCE_COLLECTION}/repair-evidence").set(
+        {
+            "uid": "user-1",
+            "invocation_id": "repair-evidence",
+            "account_generation": control.account_generation,
+            "source_generation": control.source_generation,
+            "sweep_generation": 1,
+            "window_id": "window-b",
+            "state": "payload_expired",
+            "claimed_at": claim_at,
+        }
+    )
+    with pytest.raises(ValueError, match="owning run id"):
+        repair_daily_sweep_model_invocation(
+            db,
+            uid="user-1",
+            invocation_id="repair-evidence",
+            provider_outcome_evidence={"attempts": []},
+            repair_authority="operator:qa-sweep-1",
+            now=claim_at + timedelta(hours=2),
+        )
+    receipt = repair_daily_sweep_model_invocation(
+        db,
+        uid="user-1",
+        invocation_id="repair-evidence",
+        provider_outcome_evidence={"jit_run_id": "qa-sweep-9", "attempts": []},
+        repair_authority="operator:qa-sweep-9",
+        now=claim_at + timedelta(hours=2),
+    )
+    assert receipt["provider_outcome_summary"] == "no_recorded_attempt"
+    # A consumed or identity-mismatched receipt never reopens a claim.
+    db.store[f"users/user-1/{MODEL_INVOCATION_REPAIR_PATH}/repair-evidence"]["consumed"] = True
+    assert (
+        _invoke_model_once(
+            db,
+            "user-1",
+            "repair-evidence",
+            candidate_builder=lambda: (_ for _ in ()).throw(AssertionError("stale receipt reopened")),
+            account_generation=control.account_generation,
+            source_generation=control.source_generation,
+            sweep_generation=1,
+            window_id="window-b",
+            now=claim_at + timedelta(hours=3),
+        )
+        is None
+    )
+
+
+def test_scheduler_names_incomplete_sources_without_raising(monkeypatch):
+    from models.memory_apply import MemoryControlState
+
+    control = MemoryControlState(
+        uid="user-1",
+        head_commit_id="head0",
+        account_generation=4,
+        source_generation=7,
+        writer_mode=WriterMode.ledger,
+        writer_epoch=1,
+    )
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.ensure_canonical_apply_control_state",
+        lambda _uid, db_client: control,
+    )
+    db = _Db()
+    summary = run_daily_memory_sweep_scheduler(
+        db_client=db,
+        now=datetime(2026, 8, 24, 12, tzinfo=timezone.utc),
+        uid_inventory=("user-1",),
+        source_provider=lambda *_args, **_kwargs: DailySweepRuntimeSources.from_iterables(
+            source_status="incomplete",
+            model_dispatch_evidence={"feature": "memories", "requests": [{"request_id": "req-1"}]},
+        ),
+        timezone_resolver=lambda _uid: "UTC",
+        authority=SweepAuthorityState(enabled=True),
+        cohort_authority=DailySweepCohortAuthority(enabled=True, cohort_name="memory-sweep"),
+        cohort_authorizer=lambda *_args: DailySweepCohortDecision.enabled,
+    )
+    assert summary.attempted_users == 1
+    assert summary.blocked_users == 1
+    assert summary.failed_uids == ("user-1",)
+    assert summary.errors == ("uid=user-1:source_incomplete:2026-08-23",)
+    assert summary.model_dispatch_evidence == ({"feature": "memories", "requests": [{"request_id": "req-1"}]},)
+
+
 def test_user_export_includes_both_candidate_stages_and_model_receipts(monkeypatch):
+
     monkeypatch.setattr(data_export, "get_user_profile", lambda _uid: {})
     monkeypatch.setattr(data_export.conversations_db, "iter_all_conversations", lambda *_args, **_kwargs: ())
     monkeypatch.setattr(data_export.conversations_db, "iter_all_conversation_photos", lambda *_args, **_kwargs: ())
@@ -1364,7 +1680,7 @@ def test_onboarding_malformed_stage_fails_closed_without_reextracting(monkeypatc
     )
 
 
-def _day_source(conversation_id, summary, transcript="", needs_folder=False):
+def _day_source(conversation_id, summary, transcript="", needs_folder=False, segments=None):
     from utils.memory.daily_memory_sweep import CompletedDayConversationSource
 
     return CompletedDayConversationSource(
@@ -1372,6 +1688,9 @@ def _day_source(conversation_id, summary, transcript="", needs_folder=False):
         summary_text=summary,
         transcript_text=transcript,
         needs_folder=needs_folder,
+        owner_evidence=OwnerAttributionEvidence.from_segments(
+            segments if segments is not None else [SimpleNamespace(speaker_id=0, is_user=True)]
+        ),
     )
 
 
@@ -1399,7 +1718,11 @@ def test_completed_day_model_candidates_are_staged_before_apply_and_reused(monke
     def agent(_uid, summary_rows, transcript_lookup, **_kwargs):
         calls.append(summary_rows)
         return _agent_output(
-            memories=[SimpleNamespace(content="fact from first pass", conversation_ids=["conversation-1"])]
+            memories=[
+                SimpleNamespace(
+                    about="user", basis="decided", content="fact from first pass", conversation_ids=["conversation-1"]
+                )
+            ]
         )
 
     first = produce_completed_day_daily_summary_sources(
@@ -1457,7 +1780,11 @@ def test_qa_completed_day_rejects_a_stage_from_another_run(monkeypatch):
 
     def agent(_uid, _rows, _lookup, **_kwargs):
         return _agent_output(
-            memories=[SimpleNamespace(content="fact from prior run", conversation_ids=["conversation-1"])]
+            memories=[
+                SimpleNamespace(
+                    about="user", basis="decided", content="fact from prior run", conversation_ids=["conversation-1"]
+                )
+            ]
         )
 
     first = produce_completed_day_daily_summary_sources(
@@ -1529,7 +1856,11 @@ def test_qa_completed_day_uses_tight_real_input_and_provider_envelope(monkeypatc
         seen.update(kwargs)
         seen["usage_context"] = get_current_context()
         return _agent_output(
-            memories=[SimpleNamespace(content="fact from QA pass", conversation_ids=["conversation-1"])]
+            memories=[
+                SimpleNamespace(
+                    about="user", basis="decided", content="fact from QA pass", conversation_ids=["conversation-1"]
+                )
+            ]
         )
 
     result = produce_completed_day_daily_summary_sources(
@@ -1594,7 +1925,14 @@ def test_completed_day_agent_assigns_folders_for_unopened_conversations(monkeypa
     def agent(_uid, _rows, _lookup, **kwargs):
         seen_kwargs.update(kwargs)
         return _agent_output(
-            memories=[SimpleNamespace(content="cross-day fact", conversation_ids=["conversation-1", "conversation-2"])],
+            memories=[
+                SimpleNamespace(
+                    about="user",
+                    basis="decided",
+                    content="cross-day fact",
+                    conversation_ids=["conversation-1", "conversation-2"],
+                )
+            ],
             folder_assignments=[SimpleNamespace(conversation_id="conversation-1", folder_id="folder-1")],
         )
 
@@ -1673,7 +2011,11 @@ def test_completed_day_memory_without_valid_citation_is_dropped(monkeypatch):
 
     def agent(_uid, _rows, _lookup, **_kwargs):
         return _agent_output(
-            memories=[SimpleNamespace(content="fabricated provenance", conversation_ids=["not-in-day"])]
+            memories=[
+                SimpleNamespace(
+                    about="user", basis="decided", content="fabricated provenance", conversation_ids=["not-in-day"]
+                )
+            ]
         )
 
     result = produce_completed_day_daily_summary_sources(
@@ -1706,7 +2048,7 @@ def test_completed_day_malformed_stage_fails_closed_without_reextracting(monkeyp
     )
     ref.set(
         {
-            "schema_version": "daily_memory_sweep_daily_summary_stage.v2",
+            "schema_version": "daily_memory_sweep_daily_summary_stage.v3",
             "uid": "user-1",
             "local_date": local_date.isoformat(),
             "timezone_name": "UTC",
@@ -1827,6 +2169,8 @@ def test_completed_day_agent_slot_reaches_the_candidate(monkeypatch):
         return _agent_output(
             memories=[
                 SimpleNamespace(
+                    about="user",
+                    basis="decided",
                     content="David lives in New York",
                     conversation_ids=["conversation-1"],
                     slot="Current City",
@@ -1964,6 +2308,19 @@ def test_unstructured_fallback_marker_matches_the_prompt_rule():
     assert "NEVER set a slot" in rule
 
 
+def test_daily_sweep_shared_rules_teach_owner_attribution_gates():
+    from utils import prompts
+
+    rules = prompts._DAILY_SWEEP_SHARED_RULES
+    assert "WHO IS WHO: the owner is only the speaker clusters the transcript marks as the owner" in rules
+    assert "When a transcript header says owner identity is untrusted" in rules
+    assert "BYSTANDER: if {user_name} said little or nothing in a conversation" in rules
+    assert "PARTICIPATING IS NOT A FACT" in rules
+    assert "a guest introduces themselves as a marine biologist and {user_name} asks about funding" in rules
+    assert 'NAME WHOSE FACT: every memory names its subject in about ("user"' in rules
+    assert "BASIS: decided only for a commitment or decision on tape by the owner" in rules
+
+
 def _legacy_row_payload(index: int, content: str):
     from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState
     from models.memory_evidence import SourceState
@@ -2069,8 +2426,11 @@ def test_legacy_compatibility_proof_still_fails_closed_above_the_scan_ceiling():
     from utils.memory.daily_memory_sweep import MAX_LEGACY_COMPAT_OCCUPANT_SCAN, SweepAuthoritativeQueryUnavailable
 
     total = MAX_LEGACY_COMPAT_OCCUPANT_SCAN + 1
-    rows = [_legacy_row_payload(index, f"legacy fact {index}") for index in range(total)]
-    db = _PaginatedLegacyDb([_LegacySnapshot(payload, payload["memory_id"]) for payload in rows])
+    # The proof fails on the bounded page count before it validates any row;
+    # keep this fixture payload-free so the duration guard measures the query
+    # ceiling rather than constructing thousands of full MemoryItem-shaped
+    # dictionaries.
+    db = _PaginatedLegacyDb([_LegacySnapshot({}, f"memory-{index:05d}") for index in range(total)])
 
     with pytest.raises(SweepAuthoritativeQueryUnavailable):
         _find_active_slot_or_subject("user-1", _candidate(slot=None), db_client=db)
@@ -2209,7 +2569,7 @@ def _run_sweep_for_plan(monkeypatch, *, suppression_on: bool, allowed: bool, rea
     source_calls = []
     monkeypatch.setattr(
         "utils.memory.daily_memory_sweep.free_tier_memory_suppression_enabled",
-        lambda: suppression_on,
+        lambda uid=None: suppression_on,
     )
     monkeypatch.setattr(
         "utils.memory.daily_memory_sweep.authorize_managed_compute",
@@ -2258,3 +2618,511 @@ def test_flag_off_admits_a_basic_account_exactly_as_today(monkeypatch):
         monkeypatch, suppression_on=False, allowed=False, reason="basic_not_entitled"
     )
     assert source_calls != []
+
+
+# --- free-tier cohort gate, driven through the real scheduler ---------------
+#
+# `_run_sweep_for_plan` stubs `free_tier_memory_suppression_enabled`, so it
+# proves the scheduler honours *a* boolean but never executes the real reader
+# or the cohort gate behind it. These two drive the production reader inside
+# the real scheduler, which is the only place the wiring can be observed.
+# red-proof: revert `free_tier_memory_suppression_enabled(uid)` in the
+# scheduler to a uid-less call and the admitted case stops suppressing.
+
+
+def _run_sweep_with_the_real_cohort_gate(monkeypatch, *, cohort_value: str, uid: str = "user-1"):
+    from utils import free_tier_cohort, free_tier_memory_policy
+    from utils.jit_rollout import TriState
+
+    db = _Db()
+    _ledger_control(monkeypatch)
+    source_calls = []
+    monkeypatch.setattr(free_tier_memory_policy, "FREE_TIER_MEMORY_SUPPRESSION", True)
+    # Hermetic: no PostHog from a unit test, and no ambient kill.
+    monkeypatch.setattr(free_tier_cohort, "_kill_switch_state", lambda _uid: TriState.DISABLED)
+    monkeypatch.delenv(free_tier_cohort.EMERGENCY_STOP_ENV_VAR, raising=False)
+    monkeypatch.setenv(free_tier_cohort.cohort_env_name("FREE_TIER_MEMORY_SUPPRESSION"), cohort_value)
+    free_tier_cohort.reset_kill_switch_cache_for_tests()
+    monkeypatch.setattr(
+        "utils.memory.daily_memory_sweep.authorize_managed_compute",
+        lambda *_args, **_kwargs: _plan_decision(allowed=False, reason="basic_not_entitled"),
+    )
+    summary = run_daily_memory_sweep_scheduler(
+        db_client=db,
+        now=datetime(2026, 8, 24, 12, tzinfo=timezone.utc),
+        uid_inventory=(uid,),
+        source_provider=lambda *_args, **_kwargs: source_calls.append(True),
+        timezone_resolver=lambda _uid: "UTC",
+        timezone_reconciler=lambda *_args: True,
+        authority=SweepAuthorityState(enabled=True),
+        cohort_authority=DailySweepCohortAuthority(enabled=True, cohort_name="memory-sweep"),
+        cohort_authorizer=lambda *_args: DailySweepCohortDecision.enabled,
+    )
+    return summary, source_calls, db
+
+
+def test_real_cohort_gate_suppresses_the_admitted_account_in_the_scheduler(monkeypatch):
+    summary, source_calls, db = _run_sweep_with_the_real_cohort_gate(monkeypatch, cohort_value="uid:user-1")
+    assert source_calls == [], "an admitted basic account must not reach the candidate producer"
+    assert summary.completed_uids == ("user-1",)
+    assert summary.blocked_users == 1
+    assert db.store == {}
+
+
+def test_real_cohort_gate_leaves_a_non_admitted_account_alone_in_the_scheduler(monkeypatch):
+    """A lit flag whose cohort does not name this account is byte-identical to flag-off."""
+    _summary, source_calls, _db = _run_sweep_with_the_real_cohort_gate(monkeypatch, cohort_value="uid:someone-else")
+    assert source_calls != [], "a lit flag alone must not suppress an account outside the cohort"
+
+
+@pytest.mark.parametrize(
+    'owners,about,basis,expected_scope,expected_slot',
+    [
+        ((True, True), 'user', 'decided', None, None),
+        ((False, False), 'user', 'decided', None, None),
+        ((True, False), 'user', 'decided', MemorySubjectScope.primary_user, 'home_city'),
+        ((True, False), 'user', 'observed', MemorySubjectScope.primary_user, None),
+        ((True, False), 'user', 'proposed', None, None),
+        ((True, False), '', 'decided', None, None),
+        ((True, False), 'unknown', 'decided', None, None),
+        ((True, True), 'Sarah', 'observed', MemorySubjectScope.third_party, None),
+    ],
+)
+def test_completed_day_owner_gate_and_basis(monkeypatch, owners, about, basis, expected_scope, expected_slot):
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document('users/user-1/memory_state/apply_control').set(control.model_dump(mode='json'))
+    local_date = date(2026, 8, 23)
+    segments = [
+        TranscriptSegment(text='I will move to Boston.', speaker_id=i, is_user=owner, start=i, end=i + 1)
+        for i, owner in enumerate(owners)
+    ]
+    monkeypatch.setattr(
+        'utils.memory.daily_memory_sweep._read_completed_day_conversation_sources',
+        lambda *_args, **_kwargs: ((_day_source('conversation-1', 'summary', segments=segments),), 'complete'),
+    )
+    result = produce_completed_day_daily_summary_sources(
+        'user-1',
+        local_date,
+        'UTC',
+        control,
+        db_client=db,
+        model_authority=DailySweepModelAuthority(enabled=True, model_name='test', max_candidates=8, max_cost_usd=1.0),
+        agent_runner=lambda *_args, **_kwargs: _agent_output(
+            memories=[
+                SimpleNamespace(
+                    content='Moving to Boston',
+                    conversation_ids=['conversation-1'],
+                    about=about,
+                    basis=basis,
+                    slot='home_city',
+                )
+            ]
+        ),
+        window_override=completed_local_day_window(local_date, 'UTC'),
+    )
+    assert result.source_status == ('complete_zero' if expected_scope is None else 'complete')
+    if expected_scope is None:
+        assert result.daily_summary == ()
+    else:
+        assert len(result.daily_summary) == 1
+        candidate = result.daily_summary[0]
+        assert candidate.subject_scope == expected_scope
+        assert candidate.slot == expected_slot
+        assert candidate.subject_entity_id
+        writes = []
+        monkeypatch.setattr('utils.memory.daily_memory_sweep._target_for_candidate', lambda *_a, **_k: None)
+        monkeypatch.setattr('utils.memory.daily_memory_sweep._find_active_slot_or_subject', lambda *_a, **_k: None)
+        monkeypatch.setattr(
+            'utils.memory.daily_memory_sweep.save_ledger_write',
+            lambda _uid, write, **_kwargs: writes.append(write) or 'written',
+        )
+        assert _apply_candidate('user-1', local_date, candidate, db_client=db) == ('written', None)
+        assert writes[0].slot == expected_slot
+        assert writes[0].subject_scope == expected_scope
+
+
+def test_completed_day_typed_proposal_is_preserved_without_a_standing_slot(monkeypatch):
+    """An explicitly proposed decision is useful context, but never a profile slot."""
+
+    monkeypatch.setenv('MEMORY_BELIEF_MODEL_ENABLED', 'true')
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document('users/user-1/memory_state/apply_control').set(control.model_dump(mode='json'))
+    local_date = date(2026, 8, 23)
+    segments = [TranscriptSegment(text='I may move to Boston.', speaker_id=0, is_user=True, start=0, end=1)]
+    monkeypatch.setattr(
+        'utils.memory.daily_memory_sweep._read_completed_day_conversation_sources',
+        lambda *_args, **_kwargs: ((_day_source('conversation-1', 'summary', segments=segments),), 'complete'),
+    )
+    result = produce_completed_day_daily_summary_sources(
+        'user-1',
+        local_date,
+        'UTC',
+        control,
+        db_client=db,
+        model_authority=DailySweepModelAuthority(enabled=True, model_name='test', max_candidates=8, max_cost_usd=1.0),
+        agent_runner=lambda *_args, **_kwargs: _agent_output(
+            memories=[
+                SimpleNamespace(
+                    content='David proposed moving to Boston',
+                    conversation_ids=['conversation-1'],
+                    about='user',
+                    basis='proposed',
+                    slot='current_city',
+                    arguments={'decision': 'proposed', 'object': 'moving to Boston'},
+                )
+            ]
+        ),
+        window_override=completed_local_day_window(local_date, 'UTC'),
+    )
+
+    assert len(result.daily_summary) == 1
+    candidate = result.daily_summary[0]
+    assert candidate.slot is None
+    assert candidate.arguments == {'decision': 'proposed', 'object': 'moving to Boston'}
+
+
+def test_apply_candidate_add_path_persists_scoped_arguments(monkeypatch):
+    """A new (non-amendment) candidate must persist its scoped qualifiers and
+    decision state, exactly like the amend path."""
+    from utils.memory.daily_memory_sweep import _apply_candidate
+
+    monkeypatch.setenv('MEMORY_BELIEF_MODEL_ENABLED', 'true')
+    db = _Db()
+    writes = []
+    monkeypatch.setattr('utils.memory.daily_memory_sweep._target_for_candidate', lambda *_a, **_k: None)
+    monkeypatch.setattr('utils.memory.daily_memory_sweep._find_active_slot_or_subject', lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        'utils.memory.daily_memory_sweep.save_ledger_write',
+        lambda _uid, write, **_kwargs: writes.append(write) or 'written',
+    )
+    candidate = _candidate(
+        content='David proposed moving to Boston',
+        slot=None,
+        arguments={'decision': 'proposed', 'object': 'moving to Boston'},
+    )
+
+    assert _apply_candidate('user-1', date(2026, 8, 23), candidate, db_client=db) == ('written', None)
+    assert writes[0].arguments == {'decision': 'proposed', 'object': 'moving to Boston'}
+
+
+@pytest.mark.parametrize(
+    'owners,trust', [((True, True), 'multi_owner'), ((False, False), 'no_owner'), ((True, False), 'unique_owner')]
+)
+def test_completed_day_reader_carries_evidence_and_safe_phase_b_transcript(owners, trust):
+    from utils.memory.daily_memory_sweep import _read_completed_day_conversation_sources
+
+    started = datetime(2026, 8, 23, 12, tzinfo=timezone.utc)
+    snapshot = _Snapshot(
+        {
+            'id': 'c',
+            'created_at': started,
+            'started_at': started,
+            'finished_at': started + timedelta(minutes=1),
+            'status': 'completed',
+            'structured': {'title': 'Meeting', 'overview': 'Planning', 'category': 'personal'},
+            'transcript_segments': [
+                {'text': 'I will move to Boston.', 'speaker_id': i, 'is_user': owner, 'start': i, 'end': i + 1}
+                for i, owner in enumerate(owners)
+            ],
+        }
+    )
+    snapshot.id = 'c'
+
+    class Query(_EmptyCollection):
+        def order_by(self, _field):
+            return self
+
+        def stream(self):
+            return [snapshot]
+
+    rows, status = _read_completed_day_conversation_sources(
+        'u',
+        completed_local_day_window(date(2026, 8, 23), 'UTC'),
+        db_client=SimpleNamespace(collection=lambda _path: Query()),
+        max_conversations=8,
+        max_summary_characters=1000,
+    )
+    assert status == 'complete'
+    assert len(rows) == 1
+    assert rows[0].owner_evidence.trust == trust
+    assert ('UNTRUSTED' in rows[0].transcript_text) == (trust != 'unique_owner')
+    if trust != 'unique_owner':
+        assert 'Speaker 0:' in rows[0].transcript_text and 'Speaker 1:' in rows[0].transcript_text
+        assert 'User:' not in rows[0].transcript_text
+
+
+def test_daily_sweep_ledger_searcher_prefixes_active_memory_ids(monkeypatch):
+    from models.product_memory import MemoryItemStatus
+    from utils.memory.daily_memory_sweep import _daily_sweep_ledger_searcher
+
+    monkeypatch.setattr(
+        'utils.memory.atom_keyword_index.keyword_search_ledger_memory_ids',
+        lambda *_args, **_kwargs: ['mem-gym'],
+    )
+    monkeypatch.setattr(
+        'utils.memory.daily_memory_sweep.read_canonical_memory_item',
+        lambda *_args, **_kwargs: SimpleNamespace(
+            memory_id='mem-gym',
+            content='Dave lifts on Tuesdays',
+            status=MemoryItemStatus.active,
+            slot='gym_schedule',
+        ),
+    )
+    search = _daily_sweep_ledger_searcher('user-1', db_client=object())
+    assert search('gym') == ('[mem-gym] Dave lifts on Tuesdays [slot: gym_schedule]',)
+
+
+def test_completed_day_lookup_duplicate_is_skipped_not_staged_as_sibling(monkeypatch):
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document('users/user-1/memory_state/apply_control').set(control.model_dump(mode='json'))
+    local_date = date(2026, 8, 23)
+    segments = [TranscriptSegment(text='I lift on Tuesdays.', speaker_id=0, is_user=True, start=0, end=1)]
+    monkeypatch.setattr(
+        'utils.memory.daily_memory_sweep._read_completed_day_conversation_sources',
+        lambda *_args, **_kwargs: ((_day_source('conversation-1', 'gym', segments=segments),), 'complete'),
+    )
+    result = produce_completed_day_daily_summary_sources(
+        'user-1',
+        local_date,
+        'UTC',
+        control,
+        db_client=db,
+        model_authority=DailySweepModelAuthority(enabled=True, model_name='test', max_candidates=8, max_cost_usd=1.0),
+        agent_runner=lambda *_args, **_kwargs: _agent_output(
+            memories=[
+                SimpleNamespace(
+                    content='Dave lifts on Tuesdays',
+                    conversation_ids=['conversation-1'],
+                    about='user',
+                    basis='observed',
+                    slot='',
+                    duplicate_of='mem-gym',
+                ),
+                SimpleNamespace(
+                    content='Dave now lifts on Fridays too',
+                    conversation_ids=['conversation-1'],
+                    about='user',
+                    basis='decided',
+                    slot='gym_schedule',
+                    duplicate_of='',
+                ),
+            ]
+        ),
+        window_override=completed_local_day_window(local_date, 'UTC'),
+    )
+    assert result.source_status == 'complete'
+    assert len(result.daily_summary) == 1
+    assert result.daily_summary[0].content == 'Dave now lifts on Fridays too'
+    assert result.daily_summary[0].slot == 'gym_schedule'
+
+
+def test_completed_day_gate_emits_decision_path_drop_counters(monkeypatch, caplog):
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document('users/user-1/memory_state/apply_control').set(control.model_dump(mode='json'))
+    local_date = date(2026, 8, 23)
+    trusted = [TranscriptSegment(text='I lift on Tuesdays.', speaker_id=0, is_user=True, start=0, end=1)]
+    untrusted = [
+        TranscriptSegment(text='I will move to Boston.', speaker_id=i, is_user=True, start=i, end=i + 1)
+        for i in range(2)
+    ]
+    monkeypatch.setattr(
+        'utils.memory.daily_memory_sweep._read_completed_day_conversation_sources',
+        lambda *_args, **_kwargs: (
+            (
+                _day_source('conversation-1', 'gym', segments=trusted),
+                _day_source('conversation-2', 'guest', segments=untrusted),
+            ),
+            'complete',
+        ),
+    )
+    with caplog.at_level(logging.INFO):
+        result = produce_completed_day_daily_summary_sources(
+            'user-1',
+            local_date,
+            'UTC',
+            control,
+            db_client=db,
+            model_authority=DailySweepModelAuthority(
+                enabled=True, model_name='test', max_candidates=8, max_cost_usd=1.0
+            ),
+            agent_runner=lambda *_args, **_kwargs: _agent_output(
+                memories=[
+                    SimpleNamespace(
+                        content='subjectless fact',
+                        conversation_ids=['conversation-1'],
+                        about='',
+                        basis='decided',
+                        slot='',
+                        duplicate_of='',
+                    ),
+                    SimpleNamespace(
+                        content='proposed plan',
+                        conversation_ids=['conversation-1'],
+                        about='user',
+                        basis='proposed',
+                        slot='',
+                        duplicate_of='',
+                    ),
+                    SimpleNamespace(
+                        content='already in ledger',
+                        conversation_ids=['conversation-1'],
+                        about='user',
+                        basis='observed',
+                        slot='',
+                        duplicate_of='mem-gym',
+                    ),
+                    SimpleNamespace(
+                        content='untrusted owner claim',
+                        conversation_ids=['conversation-2'],
+                        about='user',
+                        basis='decided',
+                        slot='home_city',
+                        duplicate_of='',
+                    ),
+                    SimpleNamespace(
+                        content='Dave lifts on Fridays',
+                        conversation_ids=['conversation-1'],
+                        about='user',
+                        basis='decided',
+                        slot='gym_schedule',
+                        duplicate_of='',
+                    ),
+                ]
+            ),
+            window_override=completed_local_day_window(local_date, 'UTC'),
+        )
+    assert result.source_status == 'complete'
+    assert [candidate.content for candidate in result.daily_summary] == ['Dave lifts on Fridays']
+    messages = [
+        record.getMessage() for record in caplog.records if 'canonical_memory_decision_path.v1' in record.getMessage()
+    ]
+    assert len(messages) == 1
+    event = json.loads(messages[0].split('canonical_memory_decision_path.v1 ', 1)[1])
+    assert event == {
+        'stage': 'sweep',
+        'uid': 'user-1',
+        'local_date': '2026-08-23',
+        'dropped_subjectless': 1,
+        'dropped_basis_proposed': 1,
+        'demoted_owner_untrusted': 1,
+        'skipped_duplicate_lookup': 1,
+    }
+    assert 'subjectless fact' not in caplog.text
+    assert 'I lift on Tuesdays' not in caplog.text
+
+
+def test_completed_day_omitted_about_is_dropped_subjectless_not_a_parse_failure(monkeypatch, caplog):
+    from utils.llm.memories import DailySweepAgentMemory
+
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document('users/user-1/memory_state/apply_control').set(control.model_dump(mode='json'))
+    local_date = date(2026, 8, 23)
+    trusted = [TranscriptSegment(text='I lift on Tuesdays.', speaker_id=0, is_user=True, start=0, end=1)]
+    monkeypatch.setattr(
+        'utils.memory.daily_memory_sweep._read_completed_day_conversation_sources',
+        lambda *_args, **_kwargs: ((_day_source('conversation-1', 'gym', segments=trusted),), 'complete'),
+    )
+    with caplog.at_level(logging.INFO):
+        result = produce_completed_day_daily_summary_sources(
+            'user-1',
+            local_date,
+            'UTC',
+            control,
+            db_client=db,
+            model_authority=DailySweepModelAuthority(
+                enabled=True, model_name='test', max_candidates=8, max_cost_usd=1.0
+            ),
+            agent_runner=lambda *_args, **_kwargs: _agent_output(
+                memories=[
+                    DailySweepAgentMemory(
+                        content='omitted about should drop',
+                        conversation_ids=['conversation-1'],
+                        basis='decided',
+                    ),
+                    SimpleNamespace(
+                        content='Dave lifts on Fridays',
+                        conversation_ids=['conversation-1'],
+                        about='user',
+                        basis='decided',
+                        slot='gym_schedule',
+                        duplicate_of='',
+                    ),
+                ]
+            ),
+            window_override=completed_local_day_window(local_date, 'UTC'),
+        )
+    assert result.source_status == 'complete'
+    assert [candidate.content for candidate in result.daily_summary] == ['Dave lifts on Fridays']
+    messages = [
+        record.getMessage() for record in caplog.records if 'canonical_memory_decision_path.v1' in record.getMessage()
+    ]
+    event = json.loads(messages[0].split('canonical_memory_decision_path.v1 ', 1)[1])
+    assert event['dropped_subjectless'] == 1
+
+
+def test_completed_day_owner_name_in_about_still_hits_the_owner_gate(monkeypatch, caplog):
+    db = _Db()
+    control = _open_control(monkeypatch)
+    db.document('users/user-1/memory_state/apply_control').set(control.model_dump(mode='json'))
+    local_date = date(2026, 8, 23)
+    monkeypatch.setattr('utils.memory.daily_memory_sweep.get_user_name', lambda *_args, **_kwargs: 'Dave')
+    trusted = [TranscriptSegment(text='I lift on Tuesdays.', speaker_id=0, is_user=True, start=0, end=1)]
+    untrusted = [
+        TranscriptSegment(text='I will move to Boston.', speaker_id=i, is_user=True, start=i, end=i + 1)
+        for i in range(2)
+    ]
+    monkeypatch.setattr(
+        'utils.memory.daily_memory_sweep._read_completed_day_conversation_sources',
+        lambda *_args, **_kwargs: (
+            (
+                _day_source('conversation-1', 'gym', segments=trusted),
+                _day_source('conversation-2', 'guest', segments=untrusted),
+            ),
+            'complete',
+        ),
+    )
+    with caplog.at_level(logging.INFO):
+        result = produce_completed_day_daily_summary_sources(
+            'user-1',
+            local_date,
+            'UTC',
+            control,
+            db_client=db,
+            model_authority=DailySweepModelAuthority(
+                enabled=True, model_name='test', max_candidates=8, max_cost_usd=1.0
+            ),
+            agent_runner=lambda *_args, **_kwargs: _agent_output(
+                memories=[
+                    SimpleNamespace(
+                        content='untrusted owner claim under the profile name',
+                        conversation_ids=['conversation-2'],
+                        about='Dave',
+                        basis='decided',
+                        slot='home_city',
+                        duplicate_of='',
+                    ),
+                    SimpleNamespace(
+                        content='Dave lifts on Fridays',
+                        conversation_ids=['conversation-1'],
+                        about='Dave',
+                        basis='decided',
+                        slot='gym_schedule',
+                        duplicate_of='',
+                    ),
+                ]
+            ),
+            window_override=completed_local_day_window(local_date, 'UTC'),
+        )
+    assert result.source_status == 'complete'
+    assert [candidate.content for candidate in result.daily_summary] == ['Dave lifts on Fridays']
+    assert result.daily_summary[0].subject_scope == MemorySubjectScope.primary_user
+    messages = [
+        record.getMessage() for record in caplog.records if 'canonical_memory_decision_path.v1' in record.getMessage()
+    ]
+    event = json.loads(messages[0].split('canonical_memory_decision_path.v1 ', 1)[1])
+    assert event['demoted_owner_untrusted'] == 1

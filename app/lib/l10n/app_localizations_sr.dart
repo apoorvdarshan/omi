@@ -2041,6 +2041,15 @@ class AppLocalizationsSr extends AppLocalizations {
   String get memoryHistoryPartial => 'Део историје сећања није доступан. Приказује се до сада примљена историја.';
 
   @override
+  String get memoryHistory => 'Историја';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Врати';
 
   @override
@@ -9994,4 +10003,10 @@ class AppLocalizationsSr extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Претварање говора у текст тренутно није доступно. Проверите интернет везу и подешавања препознавања говора на уређају, па покушајте поново.';
+
+  @override
+  String get processingTakingLonger => 'Još traje — ovo traje duže nego inače.';
+
+  @override
+  String get speechProfileEnrollmentPrompt => 'Да би Omi знао који је глас ваш — причајте о било чему око 5 секунди.';
 }

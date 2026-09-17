@@ -2041,6 +2041,15 @@ class AppLocalizationsFi extends AppLocalizations {
       'Osa muistojen historiasta ei ole saatavilla. Näytetään tähän mennessä saatu historia.';
 
   @override
+  String get memoryHistory => 'Historia';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Kumoa';
 
   @override
@@ -9980,4 +9989,11 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Puheen muuntaminen tekstiksi ei ole juuri nyt käytettävissä. Tarkista internetyhteytesi ja laitteesi puheentunnistusasetukset ja yritä uudelleen.';
+
+  @override
+  String get processingTakingLonger => 'Vielä käynnissä — tämä kestää tavallista kauemmin.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Jotta Omi tietää, mikä ääni on sinun — puhu mistä tahansa noin 5 sekuntia.';
 }

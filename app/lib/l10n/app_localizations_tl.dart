@@ -2055,6 +2055,15 @@ class AppLocalizationsTl extends AppLocalizations {
       'Hindi available ang ilang bahagi ng kasaysayan ng mga alaala. Ipinapakita ang kasaysayang natanggap sa ngayon.';
 
   @override
+  String get memoryHistory => 'Kasaysayan';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Undo';
 
   @override
@@ -10070,4 +10079,11 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Hindi available ang pag-convert ng boses sa teksto sa ngayon. Suriin ang iyong koneksyon sa internet at ang mga setting ng pagkilala sa boses ng iyong device, pagkatapos ay subukan muli.';
+
+  @override
+  String get processingTakingLonger => 'Ginagawa pa — mas matagal ito kaysa karaniwan.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Para malaman ng Omi kung alin ang boses mo — magsalita tungkol sa kahit ano nang mga 5 segundo.';
 }

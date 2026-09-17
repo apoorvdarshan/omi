@@ -2050,6 +2050,15 @@ class AppLocalizationsMs extends AppLocalizations {
       'Sebahagian sejarah ingatan tidak tersedia. Memaparkan sejarah yang telah diterima setakat ini.';
 
   @override
+  String get memoryHistory => 'Sejarah';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Buat Asal';
 
   @override
@@ -10005,4 +10014,11 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Penukaran pertuturan kepada teks tidak tersedia sekarang. Semak sambungan internet dan tetapan pengecaman pertuturan peranti anda, kemudian cuba lagi.';
+
+  @override
+  String get processingTakingLonger => 'Masih diproses — ini mengambil masa lebih lama daripada biasa.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Supaya Omi tahu suara yang mana milik anda — bercakap tentang apa sahaja selama kira-kira 5 saat.';
 }

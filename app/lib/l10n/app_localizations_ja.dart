@@ -2004,6 +2004,15 @@ class AppLocalizationsJa extends AppLocalizations {
   String get memoryHistoryPartial => '記憶の履歴の一部を取得できません。これまでに取得した履歴を表示しています。';
 
   @override
+  String get memoryHistory => '履歴';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => '元に戻す';
 
   @override
@@ -9808,4 +9817,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get speechToTextUnavailableDesc => '現在、音声をテキストに変換できません。インターネット接続とデバイスの音声認識設定を確認してから、もう一度お試しください。';
+
+  @override
+  String get processingTakingLonger => 'まだ処理中です。通常より時間がかかっています。';
+
+  @override
+  String get speechProfileEnrollmentPrompt => 'Omiがあなたの声を識別できるように、好きなことを5秒ほど話してください。';
 }

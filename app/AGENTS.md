@@ -75,9 +75,9 @@ On-device speech deadlines and cleanup: [contract](../.github/agent-docs/on-devi
 | Calendar | READ/WRITE_CALENDAR | NSCalendarsUsageDescription | Calendar integration |
 | Camera | — | NSCameraUsageDescription | QR/photo features |
 | Notifications | POST_NOTIFICATIONS | (automatic) | Push notifications |
-| Background | FOREGROUND_SERVICE_* (4 types) | UIBackgroundModes (7 modes) | Continuous capture |
+| Background | FOREGROUND_SERVICE_* (5 types) | UIBackgroundModes (7 modes) | Continuous capture |
 
-Android: 26 permissions in AndroidManifest.xml; iOS: 11 background modes + 10 consent strings.
+Android: 27 permissions in AndroidManifest.xml; iOS: 11 background modes + 10 consent strings.
 
 ## Test Strategy
 
@@ -148,7 +148,7 @@ All API requests include: X-Request-Start-Time, X-App-Platform, X-Device-Id-Hash
 
 ## App Flows & E2E
 
-- See `e2e/SKILL.md` for navigation architecture, screen map, widget patterns, and 34 reference flows
+- Flows: `e2e/SKILL.md`. Own-voice enrollment: [guide](../.github/agent-docs/mobile-voice-enrollment.md).
 - See `e2e/flows/*.yaml` for individual flow definitions
 
 ## Verifying UI Changes (agent-flutter)

@@ -2048,6 +2048,15 @@ class AppLocalizationsId extends AppLocalizations {
   String get memoryHistoryPartial => 'Sebagian riwayat memori tidak tersedia. Menampilkan riwayat yang sudah diterima.';
 
   @override
+  String get memoryHistory => 'Riwayat';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Batalkan';
 
   @override
@@ -9989,4 +9998,11 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Konversi suara ke teks sedang tidak tersedia. Periksa koneksi internet dan pengaturan pengenalan suara perangkat Anda, lalu coba lagi.';
+
+  @override
+  String get processingTakingLonger => 'Masih diproses — ini memakan waktu lebih lama dari biasanya.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Agar Omi tahu suara mana yang milikmu — bicarakan apa saja selama sekitar 5 detik.';
 }

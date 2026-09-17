@@ -2048,6 +2048,15 @@ class AppLocalizationsKn extends AppLocalizations {
       'ನೆನಪುಗಳ ಇತಿಹಾಸದ ಕೆಲವು ಭಾಗಗಳು ಲಭ್ಯವಿಲ್ಲ. ಇದುವರೆಗೆ ಸ್ವೀಕರಿಸಿದ ಇತಿಹಾಸವನ್ನು ತೋರಿಸಲಾಗುತ್ತಿದೆ.';
 
   @override
+  String get memoryHistory => 'ಇತಿಹಾಸ';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'ರದ್ದುಗೊಳಿಸಿ';
 
   @override
@@ -10011,4 +10020,11 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'ಮಾತನ್ನು ಪಠ್ಯಕ್ಕೆ ಪರಿವರ್ತಿಸುವ ಸೌಲಭ್ಯ ಸದ್ಯ ಲಭ್ಯವಿಲ್ಲ. ನಿಮ್ಮ ಇಂಟರ್ನೆಟ್ ಸಂಪರ್ಕ ಮತ್ತು ಸಾಧನದ ಧ್ವನಿ ಗುರುತಿಸುವಿಕೆ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಪರಿಶೀಲಿಸಿ, ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get processingTakingLonger => 'ಇನ್ನೂ ಕೆಲಸ ನಡೆಯುತ್ತಿದೆ — ಇದು ಸಾಮಾನ್ಯಕ್ಕಿಂತ ಹೆಚ್ಚು ಸಮಯ ತೆಗೆದುಕೊಳ್ಳುತ್ತಿದೆ.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Omi ನಿಮ್ಮ ಧ್ವನಿಯನ್ನು ಗುರುತಿಸಲು — ಯಾವುದೇ ವಿಷಯದ ಬಗ್ಗೆ ಸುಮಾರು 5 ಸೆಕೆಂಡುಗಳ ಕಾಲ ಮಾತನಾಡಿ.';
 }

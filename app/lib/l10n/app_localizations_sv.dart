@@ -2045,6 +2045,15 @@ class AppLocalizationsSv extends AppLocalizations {
       'En del av minneshistoriken är inte tillgänglig. Visar historiken som har tagits emot hittills.';
 
   @override
+  String get memoryHistory => 'Historik';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Ångra';
 
   @override
@@ -9983,4 +9992,11 @@ class AppLocalizationsSv extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Tal till text är inte tillgängligt just nu. Kontrollera internetanslutningen och enhetens inställningar för taligenkänning och försök igen.';
+
+  @override
+  String get processingTakingLonger => 'Fortfarande igång — det tar längre tid än vanligt.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Så att Omi vet vilken röst som är din — prata om vad som helst i ungefär 5 sekunder.';
 }

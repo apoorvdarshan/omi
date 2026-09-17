@@ -2046,6 +2046,15 @@ class AppLocalizationsUk extends AppLocalizations {
   String get memoryHistoryPartial => 'Частина історії спогадів недоступна. Показано історію, отриману на цей момент.';
 
   @override
+  String get memoryHistory => 'Історія';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Скасувати';
 
   @override
@@ -10000,4 +10009,10 @@ class AppLocalizationsUk extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Перетворення мовлення на текст зараз недоступне. Перевірте підключення до інтернету та налаштування розпізнавання мовлення на пристрої й спробуйте ще раз.';
+
+  @override
+  String get processingTakingLonger => 'Ще обробляється — це триває довше, ніж зазвичай.';
+
+  @override
+  String get speechProfileEnrollmentPrompt => 'Щоб Omi знав, який голос ваш, говоріть про будь-що приблизно 5 секунд.';
 }

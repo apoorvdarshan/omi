@@ -78,6 +78,31 @@ requires a separately reviewed workflow and budget receipt. A deployment-only
 dispatch performs no model work. Execution artifacts contain resource and
 execution identities only, never customer content.
 
+## Tombstoned sweep model invocations and the sweep-repair operator
+
+A QA sweep model invocation that ends `pending`, `indeterminate`, or
+`payload_expired` is closed forever by design: its provider outcome cannot be
+proven, so an implicit retry could charge the same logical invocation twice.
+The manual operator's `sweep-repair` operation
+(`jit_qa_manual_operator.yml`, confirmation `SWEEP_REPAIR_QA`) is the one
+sanctioned repair path. `backend/scripts/jit_qa_sweep_repair.py` reads the
+tombstoned invocation and its top-level fence, joins the claim window to the
+durable `llm_gateway_attempts` accounting rows for the QA UID and the
+`memories` feature, and writes a single content-free repair receipt under
+`users/{uid}/daily_memory_sweep_model_invocation_repairs/{invocation_id}`.
+The next sweep claim consumes that receipt transactionally and rewrites the
+fence as a fresh `pending` claim, so exactly one further bounded attempt
+becomes possible. At most one repair receipt may ever exist per invocation;
+the repair refuses an unexpired lease, a `returned` fence, a missing
+accounting join to the owning sweep run, and any environment outside the QA
+fence. Repair performs no model calls and no scheduler mutation; the
+`sweep-verify` operation remains the only execution path.
+
+An incomplete sweep source is a named blocked outcome, not an opaque failure:
+the scheduler records `uid=<uid>:source_incomplete:<local-date>` and leaves
+the cursor untouched, and the run receipt retains the dispatch evidence of any
+admitted gateway request even when its output never staged.
+
 Verification reads each deployed Cloud Run resource and checks the immutable
 image digest, exact environment and secret bindings, runtime identity, fixed
 QA names, and the actual v1/v2 container paths. It probes the gateway and both
@@ -95,6 +120,23 @@ or real Firebase identity path is serving.
 The QA HTTP services advertise `jit-cloud-qa-v1`; the dedicated gateway enforces
 that same provider-attempt budget. This capability is confined to these named
 QA services. It does not alter rollout enrollment or open either maintenance job.
+
+For an installed desktop startup observation, launch the exact QA bundle with
+the one-off environment override (alongside the caller's usual QA environment
+and automation setup as needed):
+
+```bash
+/usr/bin/open -n --env OMI_JIT_QA_DISABLE_REALTIME=1 /Applications/omi-jit-qa.app
+```
+
+The desktop applies this switch only when the bundle identifier is
+`com.omi.omi-jit-qa` and the value is exactly `1`; it returns before `ensureWarm`
+can mint a Live token or open a realtime socket. Stable, Beta, and other
+development bundles retain their normal realtime warmup behavior, and any other
+value leaves the QA bundle unchanged. This is a startup cost-isolation control
+for QA observation, not a product rollout flag or evidence of a completed
+realtime acceptance turn. Voice/PTT acceptance cannot be evaluated with this
+override enabled.
 
 The shared reserved QA target selector pins
 `OMI_FORCE_BUCKET_CANDIDATES=0` and `OMI_FORCE_BUCKET_WORKSTREAMS=0`;

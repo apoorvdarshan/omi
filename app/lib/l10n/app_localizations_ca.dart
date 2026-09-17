@@ -2056,6 +2056,15 @@ class AppLocalizationsCa extends AppLocalizations {
       'Una part de l\'historial de records no està disponible. Es mostra l\'historial rebut fins ara.';
 
   @override
+  String get memoryHistory => 'Historial';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
+
+  @override
   String get undo => 'Desfer';
 
   @override
@@ -10036,4 +10045,11 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'La transcripció de veu no està disponible ara mateix. Comprova la connexió a Internet i la configuració del reconeixement de veu del dispositiu i torna-ho a provar.';
+
+  @override
+  String get processingTakingLonger => 'Encara en curs: això està trigant més del normal.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Perquè Omi sàpiga quina veu és la teva — parla de qualsevol cosa durant uns 5 segons.';
 }
