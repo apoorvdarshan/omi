@@ -84,6 +84,22 @@
     "@reprocessConversation": {
         "description": "Menu item to reprocess a conversation"
     },
+    "reprocessTranscription": "Перапрацаваць транскрыпцыю",
+    "@reprocessTranscription": {
+        "description": "Menu item to re-run speech-to-text on stored conversation audio"
+    },
+    "retranscribingConversation": "Паўторная транскрыпцыя размовы...\nГэта можа заняць некалькі секунд",
+    "@retranscribingConversation": {
+        "description": "Loading message shown while transcription is being reprocessed"
+    },
+    "errorReprocessingTranscription": "Памылка пры паўторнай апрацоўцы транскрыпцыі. Паспрабуйце пазней.",
+    "@errorReprocessingTranscription": {
+        "description": "Error message when transcription reprocess fails"
+    },
+    "errorNoStoredAudio": "Для гэтай размовы няма захаванага аўдыё.",
+    "@errorNoStoredAudio": {
+        "description": "Error message when a conversation has no stored audio to retranscribe"
+    },
     "deleteConversation": "Выдаліць размову",
     "@deleteConversation": {
         "description": "Menu item to delete a conversation"
@@ -10822,5 +10838,11 @@
     "speechProfileTopicGoal": "Якая ваша доўгатэрміновая мэта?",
     "speechToTextUnavailableDesc": "Пераўтварэнне маўлення ў тэкст зараз недаступнае. Праверце падключэнне да інтэрнэту і налады распазнавання маўлення на прыладзе, затым паспрабуйце яшчэ раз.",
     "memoryHistoryPartial": "Частка гісторыі ўспамінаў недаступная. Паказана гісторыя, атрыманая дагэтуль.",
-    "tapPlusToStartRecording": "Націсніце +, каб пачаць запіс"
+    "memoryHistory": "Гісторыя",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
+    "tapPlusToStartRecording": "Націсніце +, каб пачаць запіс",
+    "processingTakingLonger": "Яшчэ апрацоўваецца — гэта доўжыцца даўжэй, чым звычайна.",
+    "speechProfileEnrollmentPrompt": "Каб Omi ведаў, які голас ваш, гаварыце пра што заўгодна каля 5 секунд."
 }

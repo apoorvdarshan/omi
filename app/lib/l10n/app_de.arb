@@ -23,6 +23,10 @@
     "conversationIdCopied": "Konversations-ID in Zwischenablage kopiert",
     "testPrompt": "Prompt testen",
     "reprocessConversation": "Unterhaltung neu verarbeiten",
+    "reprocessTranscription": "Transkription neu verarbeiten",
+    "retranscribingConversation": "Unterhaltung wird neu transkribiert...\nDas kann ein paar Sekunden dauern",
+    "errorReprocessingTranscription": "Fehler beim erneuten Verarbeiten der Transkription. Bitte später erneut versuchen.",
+    "errorNoStoredAudio": "Für diese Unterhaltung ist keine gespeicherte Audioaufnahme vorhanden.",
     "deleteConversation": "Gespräch löschen",
     "contentCopied": "Inhalt in die Zwischenablage kopiert",
     "failedToUpdateStarred": "Favoriten-Status konnte nicht aktualisiert werden.",
@@ -3233,5 +3237,11 @@
     "speechProfileTopicGoal": "Was ist dein langfristiges Ziel?",
     "speechToTextUnavailableDesc": "Die Spracherkennung ist derzeit nicht verfügbar. Prüfe deine Internetverbindung und die Einstellungen zur Spracherkennung auf deinem Gerät und versuche es erneut.",
     "memoryHistoryPartial": "Ein Teil des Erinnerungsverlaufs ist nicht verfügbar. Der bisher empfangene Verlauf wird angezeigt.",
-    "tapPlusToStartRecording": "Tippe auf +, um die Aufnahme zu starten"
+    "memoryHistory": "Verlauf",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
+    "tapPlusToStartRecording": "Tippe auf +, um die Aufnahme zu starten",
+    "processingTakingLonger": "Arbeitet noch — das dauert länger als üblich.",
+    "speechProfileEnrollmentPrompt": "Damit Omi weiß, welche Stimme deine ist — sprich etwa 5 Sekunden über irgendetwas."
 }

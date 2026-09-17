@@ -79,6 +79,18 @@ class AppLocalizationsRo extends AppLocalizations {
   String get reprocessConversation => 'Reprocesează conversația';
 
   @override
+  String get reprocessTranscription => 'Reprocesează transcrierea';
+
+  @override
+  String get retranscribingConversation => 'Retranscriere conversație...\nAceasta poate dura câteva secunde';
+
+  @override
+  String get errorReprocessingTranscription => 'Eroare la reprocesarea transcrierii. Încearcă din nou mai târziu.';
+
+  @override
+  String get errorNoStoredAudio => 'Nu există audio stocat pentru această conversație.';
+
+  @override
   String get deleteConversation => 'Șterge conversația';
 
   @override
@@ -2050,6 +2062,15 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get memoryHistoryPartial =>
       'O parte din istoricul amintirilor nu este disponibilă. Se afișează istoricul primit până acum.';
+
+  @override
+  String get memoryHistory => 'Istoric';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
 
   @override
   String get undo => 'Anulează';
@@ -10026,4 +10047,11 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Conversia vorbirii în text nu este disponibilă momentan. Verifică conexiunea la internet și setările de recunoaștere vocală ale dispozitivului, apoi încearcă din nou.';
+
+  @override
+  String get processingTakingLonger => 'Încă se procesează — durează mai mult decât de obicei.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Pentru ca Omi să știe care este vocea ta — vorbește despre orice timp de aproximativ 5 secunde.';
 }

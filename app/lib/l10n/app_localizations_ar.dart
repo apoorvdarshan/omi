@@ -79,6 +79,18 @@ class AppLocalizationsAr extends AppLocalizations {
   String get reprocessConversation => 'إعادة معالجة المحادثة';
 
   @override
+  String get reprocessTranscription => 'إعادة معالجة التفريغ النصي';
+
+  @override
+  String get retranscribingConversation => 'جارٍ إعادة تفريغ المحادثة...\nقد يستغرق هذا بضع ثوانٍ';
+
+  @override
+  String get errorReprocessingTranscription => 'حدث خطأ أثناء إعادة معالجة التفريغ النصي. يرجى المحاولة لاحقًا.';
+
+  @override
+  String get errorNoStoredAudio => 'لا يوجد صوت محفوظ لهذه المحادثة.';
+
+  @override
   String get deleteConversation => 'حذف المحادثة';
 
   @override
@@ -2024,6 +2036,15 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get memoryHistoryPartial => 'بعض سجل الذكريات غير متاح. يتم عرض السجل المستلم حتى الآن.';
+
+  @override
+  String get memoryHistory => 'السجل';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
 
   @override
   String get undo => 'تراجع';
@@ -9920,4 +9941,10 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'تحويل الكلام إلى نص غير متاح الآن. تحقق من اتصالك بالإنترنت وإعدادات التعرف على الكلام في جهازك، ثم حاول مرة أخرى.';
+
+  @override
+  String get processingTakingLonger => 'ما زال قيد العمل — يستغرق وقتًا أطول من المعتاد.';
+
+  @override
+  String get speechProfileEnrollmentPrompt => 'لكي يعرف Omi أي صوت هو صوتك — تحدث عن أي شيء لمدة 5 ثوانٍ تقريبًا.';
 }

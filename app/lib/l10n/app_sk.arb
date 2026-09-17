@@ -23,6 +23,10 @@
     "conversationIdCopied": "ID konverzácie skopírované do schránky",
     "testPrompt": "Otestovať výzvu",
     "reprocessConversation": "Znovu spracovať konverzáciu",
+    "reprocessTranscription": "Znovu spracovať prepis",
+    "retranscribingConversation": "Prepisovanie konverzácie...\nMôže to trvať niekoľko sekúnd",
+    "errorReprocessingTranscription": "Chyba pri opätovnom spracovaní prepisu. Skúste to neskôr.",
+    "errorNoStoredAudio": "Pre túto konverzáciu nie je k dispozícii uložený zvuk.",
     "deleteConversation": "Odstrániť konverzáciu",
     "contentCopied": "Obsah bol skopírovaný do schránky",
     "failedToUpdateStarred": "Nepodarilo sa aktualizovať stav obľúbenej.",
@@ -3261,5 +3265,11 @@
     "speechProfileTopicGoal": "Aký je váš dlhodobý cieľ?",
     "speechToTextUnavailableDesc": "Prevod reči na text momentálne nie je dostupný. Skontrolujte internetové pripojenie a nastavenia rozpoznávania reči v zariadení a skúste to znova.",
     "memoryHistoryPartial": "Časť histórie spomienok nie je dostupná. Zobrazuje sa doteraz prijatá história.",
-    "tapPlusToStartRecording": "Ťuknutím na + spustíte nahrávanie"
+    "memoryHistory": "História",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
+    "tapPlusToStartRecording": "Ťuknutím na + spustíte nahrávanie",
+    "processingTakingLonger": "Stále prebieha — trvá to dlhšie ako zvyčajne.",
+    "speechProfileEnrollmentPrompt": "Aby Omi vedel, ktorý hlas je váš — hovorte asi 5 sekúnd o čomkoľvek."
 }

@@ -23,6 +23,10 @@
     "conversationIdCopied": "Keskustelun tunnus kopioitu leikepöydälle",
     "testPrompt": "Testaa kehotetta",
     "reprocessConversation": "Käsittele keskustelu uudelleen",
+    "reprocessTranscription": "Käsittele litterointi uudelleen",
+    "retranscribingConversation": "Keskustelua litteroidaan uudelleen...\nTämä voi kestää muutaman sekunnin",
+    "errorReprocessingTranscription": "Virhe litteroinnin uudelleenkäsittelyssä. Yritä myöhemmin uudelleen.",
+    "errorNoStoredAudio": "Tälle keskustelulle ei ole tallennettua ääntä.",
     "deleteConversation": "Poista keskustelu",
     "contentCopied": "Sisältö kopioitu leikepöydälle",
     "failedToUpdateStarred": "Tähtimerkkauksen päivitys epäonnistui.",
@@ -3256,5 +3260,11 @@
     "speechProfileTopicGoal": "Mikä on pitkän aikavälin tavoitteesi?",
     "speechToTextUnavailableDesc": "Puheen muuntaminen tekstiksi ei ole juuri nyt käytettävissä. Tarkista internetyhteytesi ja laitteesi puheentunnistusasetukset ja yritä uudelleen.",
     "memoryHistoryPartial": "Osa muistojen historiasta ei ole saatavilla. Näytetään tähän mennessä saatu historia.",
-    "tapPlusToStartRecording": "Aloita tallennus napauttamalla +"
+    "memoryHistory": "Historia",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
+    "tapPlusToStartRecording": "Aloita tallennus napauttamalla +",
+    "processingTakingLonger": "Vielä käynnissä — tämä kestää tavallista kauemmin.",
+    "speechProfileEnrollmentPrompt": "Jotta Omi tietää, mikä ääni on sinun — puhu mistä tahansa noin 5 sekuntia."
 }

@@ -79,6 +79,20 @@ class AppLocalizationsHi extends AppLocalizations {
   String get reprocessConversation => 'बातचीत को पुनः संसाधित करें';
 
   @override
+  String get reprocessTranscription => 'ट्रांसक्रिप्शन पुनः संसाधित करें';
+
+  @override
+  String get retranscribingConversation =>
+      'बातचीत को फिर से ट्रांसक्राइब किया जा रहा है...\nइसमें कुछ सेकंड लग सकते हैं';
+
+  @override
+  String get errorReprocessingTranscription =>
+      'ट्रांसक्रिप्शन पुनः संसाधित करते समय त्रुटि हुई। बाद में पुनः प्रयास करें।';
+
+  @override
+  String get errorNoStoredAudio => 'इस बातचीत के लिए कोई संग्रहीत ऑडियो उपलब्ध नहीं है।';
+
+  @override
   String get deleteConversation => 'बातचीत हटाएं';
 
   @override
@@ -2016,6 +2030,15 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String get memoryHistoryPartial =>
       'यादों के इतिहास का कुछ हिस्सा उपलब्ध नहीं है। अब तक प्राप्त इतिहास दिखाया जा रहा है।';
+
+  @override
+  String get memoryHistory => 'इतिहास';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
 
   @override
   String get undo => 'पूर्ववत करें';
@@ -9958,4 +9981,10 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'अभी बोली को टेक्स्ट में बदलना उपलब्ध नहीं है। अपना इंटरनेट कनेक्शन और डिवाइस की वाक् पहचान सेटिंग जाँचें, फिर दोबारा कोशिश करें।';
+
+  @override
+  String get processingTakingLonger => 'अभी भी काम हो रहा है — इसमें सामान्य से ज़्यादा समय लग रहा है।';
+
+  @override
+  String get speechProfileEnrollmentPrompt => 'ताकि Omi आपकी आवाज़ पहचान सके — किसी भी विषय पर लगभग 5 सेकंड बोलें।';
 }

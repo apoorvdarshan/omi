@@ -67,12 +67,19 @@ from utils.conversations.process_conversation import (
     run_first_open_derived_work,
     retrieve_in_progress_conversation,
 )
+from utils.conversations.reprocess_transcription import (
+    StoredAudioEmptyTranscriptError,
+    StoredAudioTranscriptionFailedError,
+    StoredAudioUnavailableError,
+    transcribe_stored_conversation_audio,
+)
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations import share_email
 from utils.conversations.meeting_receipt import record_and_persist_finalized_meeting_receipt
 from utils.integration_telemetry import emit_posthog_event
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
+from utils.metrics import record_lazy_desktop_deferral
 from utils.memory.retraction_scope import retraction_can_be_skipped
 from utils.memory.canonical_memory_adapter import ConversationReplacementConflictError
 from utils import byok
@@ -180,13 +187,21 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
         reacquired = lifecycle_service.reacquire_deferred_processing(uid, conversation_id)
     except Exception as e:
         logger.error(f"lazy enrich reacquire failed uid={uid} conv={conversation_id}: {e}")
+        # A reacquire that RAISED is a broken dependency, not a lost fence.
+        # `deferred=True` doubles as the concurrency fence and clients poll
+        # during enrichment, so a merged label would bury this in benign polls.
+        record_lazy_desktop_deferral(event='enrich_reacquire_error')
         return conversation
     if not reacquired:
         # The row was terminalized or discarded before reacquisition. A stale
         # processor must not persist derived side effects after ownership loss.
+        record_lazy_desktop_deferral(event='enrich_lost_ownership')
         return conversation
 
     def _run_enrichment():
+        # Counted here, not before the submit: a rejected submit (shut-down
+        # pool during a deploy) would otherwise leave a start with no terminal.
+        record_lazy_desktop_deferral(event='enrich_started')
         try:
             conv_obj = deserialize_conversation(conversation)
             conv_obj.deferred = False
@@ -199,15 +214,23 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
                     is_reprocess=False,
                     app_usage_attribution=AppUsageAttribution.NON_USER_REPROCESS,
                 )
+            # The enrichment itself succeeded here; count it now so a receipt
+            # publish failure below is not misattributed to enrichment and does
+            # not skew the stored-vs-enrich_complete reconciliation.
+            record_lazy_desktop_deferral(event='enrich_complete')
             # Deferred desktop meetings must publish their exact Chat receipt
             # at the same terminal transition as ordinary finalization. The
             # initial lazy row deliberately skipped this adapter, so doing it
             # here closes the gap without waking Chat for processing rows.
             if enriched is not None:
-                record_and_persist_finalized_meeting_receipt(uid, enriched)
+                try:
+                    record_and_persist_finalized_meeting_receipt(uid, enriched)
+                except Exception:
+                    logger.exception('lazy enrich receipt publish failed uid=%s conv=%s', uid, conversation_id)
             logger.info(f"lazy enrich complete uid={uid} conv={conversation_id}")
         except Exception as e:
             logger.error(f"lazy enrich failed uid={uid} conv={conversation_id}: {e}")
+            record_lazy_desktop_deferral(event='enrich_failed')
             try:
                 recovered = lifecycle_service.recover_deferred_processing_failure(uid, conversation_id)
                 if not recovered:
@@ -738,6 +761,54 @@ def reprocess_conversation(
     )
 
     return processed_conversation
+
+
+@router.post(
+    '/v1/conversations/{conversation_id}/reprocess-transcription',
+    response_model=Conversation,
+    responses={
+        400: {'description': 'No stored audio is available, or STT produced no speech'},
+        404: {'description': 'The conversation does not exist'},
+        502: {'description': 'The transcription provider failed'},
+    },
+    tags=['conversations'],
+)
+def reprocess_conversation_transcription(
+    conversation_id: str,
+    language_code: Optional[str] = None,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:reprocess")),
+):
+    """Re-run prerecorded STT on stored audio, then the existing enrichment pipeline.
+
+    Unlike ``POST .../reprocess``, which only regenerates the summary from the
+    current transcript, this replaces transcript segments from stored audio and
+    then calls ``process_conversation`` with the same reprocess flags.
+    """
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    if conversations_db.is_soft_deleted(conversation):
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    conversation = deserialize_conversation(conversation)
+    if not language_code:
+        language_code = conversation.language or 'en'
+
+    try:
+        conversation.transcript_segments = transcribe_stored_conversation_audio(uid, conversation, language_code)
+    except StoredAudioUnavailableError:
+        raise HTTPException(status_code=400, detail='No stored audio available to retranscribe')
+    except StoredAudioEmptyTranscriptError:
+        raise HTTPException(status_code=400, detail='Transcription produced no speech')
+    except StoredAudioTranscriptionFailedError:
+        raise HTTPException(status_code=502, detail='Transcription provider failed')
+
+    return process_conversation(
+        uid,
+        language_code,
+        conversation,
+        force_process=True,
+        is_reprocess=True,
+        bypass_jit_first_open=True,
+        app_usage_attribution=AppUsageAttribution.NON_USER_REPROCESS,
+    )
 
 
 def _validate_reprocess_app_selection(uid: str, app_id: str) -> App:

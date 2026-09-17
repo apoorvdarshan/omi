@@ -79,6 +79,18 @@ class AppLocalizationsSl extends AppLocalizations {
   String get reprocessConversation => 'Ponovno obdelaj pogovor';
 
   @override
+  String get reprocessTranscription => 'Ponovno obdelaj prepis';
+
+  @override
+  String get retranscribingConversation => 'Ponovno prepisovanje pogovora...\nTo lahko traja nekaj sekund';
+
+  @override
+  String get errorReprocessingTranscription => 'Napaka pri ponovni obdelavi prepisa. Poskusite znova pozneje.';
+
+  @override
+  String get errorNoStoredAudio => 'Za ta pogovor ni shranjenega zvoka.';
+
+  @override
   String get deleteConversation => 'Izbriši pogovor';
 
   @override
@@ -2040,6 +2052,15 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get memoryHistoryPartial => 'Del zgodovine spominov ni na voljo. Prikazana je doslej prejeta zgodovina.';
+
+  @override
+  String get memoryHistory => 'Zgodovina';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
 
   @override
   String get undo => 'Razveljavi';
@@ -10009,4 +10030,11 @@ class AppLocalizationsSl extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Pretvorba govora v besedilo trenutno ni na voljo. Preverite internetno povezavo in nastavitve prepoznavanja govora v napravi ter poskusite znova.';
+
+  @override
+  String get processingTakingLonger => 'Še poteka — traja dlje kot običajno.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Da bo Omi vedel, kateri glas je vaš — govorite o čemer koli približno 5 sekund.';
 }

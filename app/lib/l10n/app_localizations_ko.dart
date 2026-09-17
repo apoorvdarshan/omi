@@ -78,6 +78,18 @@ class AppLocalizationsKo extends AppLocalizations {
   String get reprocessConversation => '대화 재처리';
 
   @override
+  String get reprocessTranscription => '전사 다시 처리';
+
+  @override
+  String get retranscribingConversation => '대화를 다시 전사하는 중...\n몇 초가 걸릴 수 있습니다';
+
+  @override
+  String get errorReprocessingTranscription => '전사를 다시 처리하는 중 오류가 발생했습니다. 나중에 다시 시도하세요.';
+
+  @override
+  String get errorNoStoredAudio => '이 대화에 저장된 오디오가 없습니다.';
+
+  @override
   String get deleteConversation => '대화 삭제';
 
   @override
@@ -2002,6 +2014,15 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get memoryHistoryPartial => '기억 기록의 일부를 불러올 수 없습니다. 지금까지 받은 기록을 표시합니다.';
+
+  @override
+  String get memoryHistory => '기록';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
 
   @override
   String get undo => '실행 취소';
@@ -9811,4 +9832,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get speechToTextUnavailableDesc => '지금은 음성을 텍스트로 변환할 수 없습니다. 인터넷 연결과 기기의 음성 인식 설정을 확인한 후 다시 시도해주세요.';
+
+  @override
+  String get processingTakingLonger => '아직 처리 중입니다. 평소보다 더 오래 걸리고 있어요.';
+
+  @override
+  String get speechProfileEnrollmentPrompt => 'Omi가 내 목소리를 구별할 수 있도록 아무 주제로나 약 5초 동안 말해 주세요.';
 }

@@ -79,6 +79,20 @@ class AppLocalizationsMk extends AppLocalizations {
   String get reprocessConversation => 'Прерапди разговор';
 
   @override
+  String get reprocessTranscription => 'Преработи транскрипција';
+
+  @override
+  String get retranscribingConversation =>
+      'Повторно транскрибирање на разговорот...\nОва може да потрае неколку секунди';
+
+  @override
+  String get errorReprocessingTranscription =>
+      'Грешка при повторна обработка на транскрипцијата. Обидете се повторно подоцна.';
+
+  @override
+  String get errorNoStoredAudio => 'Нема зачувано аудио за овој разговор.';
+
+  @override
   String get deleteConversation => 'Избриши разговор';
 
   @override
@@ -2048,6 +2062,15 @@ class AppLocalizationsMk extends AppLocalizations {
   @override
   String get memoryHistoryPartial =>
       'Дел од историјата на сеќавањата не е достапен. Се прикажува досега примената историја.';
+
+  @override
+  String get memoryHistory => 'Историја';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
 
   @override
   String get undo => 'Врати';
@@ -10032,4 +10055,11 @@ class AppLocalizationsMk extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Претворањето говор во текст моментално не е достапно. Проверете ги интернет-врската и поставките за препознавање говор на уредот, па обидете се повторно.';
+
+  @override
+  String get processingTakingLonger => 'Сè уште се обработува — ова трае подолго од вообичаеното.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'За Omi да знае кој глас е вашиот — зборувајте за што било околу 5 секунди.';
 }

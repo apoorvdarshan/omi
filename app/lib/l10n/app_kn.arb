@@ -84,6 +84,22 @@
     "@reprocessConversation": {
         "description": "Menu item to reprocess a conversation"
     },
+    "reprocessTranscription": "ಲಿಪ್ಯಂತರವನ್ನು ಮರುಪ್ರಕ್ರಿಯೆಗೊಳಿಸಿ",
+    "@reprocessTranscription": {
+        "description": "Menu item to re-run speech-to-text on stored conversation audio"
+    },
+    "retranscribingConversation": "ಸಂವಾದವನ್ನು ಮತ್ತೆ ಲಿಪ್ಯಂತರಿಸಲಾಗುತ್ತಿದೆ...\nಇದಕ್ಕೆ ಕೆಲವು ಸೆಕೆಂಡುಗಳು ಬೇಕಾಗಬಹುದು",
+    "@retranscribingConversation": {
+        "description": "Loading message shown while transcription is being reprocessed"
+    },
+    "errorReprocessingTranscription": "ಲಿಪ್ಯಂತರವನ್ನು ಮರುಪ್ರಕ್ರಿಯೆಗೊಳಿಸುವಾಗ ದೋಷ. ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "@errorReprocessingTranscription": {
+        "description": "Error message when transcription reprocess fails"
+    },
+    "errorNoStoredAudio": "ಈ ಸಂವಾದಕ್ಕೆ ಸಂಗ್ರಹಿತ ಆಡಿಯೋ ಇಲ್ಲ.",
+    "@errorNoStoredAudio": {
+        "description": "Error message when a conversation has no stored audio to retranscribe"
+    },
     "deleteConversation": "ಸಂವಾದ ಅಳಿಸಿ",
     "@deleteConversation": {
         "description": "Menu item to delete a conversation"
@@ -10822,5 +10838,11 @@
     "speechProfileTopicGoal": "ನಿಮ್ಮ ದೀರ್ಘಾವಧಿಯ ಗುರಿ ಏನು?",
     "speechToTextUnavailableDesc": "ಮಾತನ್ನು ಪಠ್ಯಕ್ಕೆ ಪರಿವರ್ತಿಸುವ ಸೌಲಭ್ಯ ಸದ್ಯ ಲಭ್ಯವಿಲ್ಲ. ನಿಮ್ಮ ಇಂಟರ್ನೆಟ್ ಸಂಪರ್ಕ ಮತ್ತು ಸಾಧನದ ಧ್ವನಿ ಗುರುತಿಸುವಿಕೆ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಪರಿಶೀಲಿಸಿ, ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
     "memoryHistoryPartial": "ನೆನಪುಗಳ ಇತಿಹಾಸದ ಕೆಲವು ಭಾಗಗಳು ಲಭ್ಯವಿಲ್ಲ. ಇದುವರೆಗೆ ಸ್ವೀಕರಿಸಿದ ಇತಿಹಾಸವನ್ನು ತೋರಿಸಲಾಗುತ್ತಿದೆ.",
-    "tapPlusToStartRecording": "ರೆಕಾರ್ಡಿಂಗ್ ಪ್ರಾರಂಭಿಸಲು + ಟ್ಯಾಪ್ ಮಾಡಿ"
+    "memoryHistory": "ಇತಿಹಾಸ",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
+    "tapPlusToStartRecording": "ರೆಕಾರ್ಡಿಂಗ್ ಪ್ರಾರಂಭಿಸಲು + ಟ್ಯಾಪ್ ಮಾಡಿ",
+    "processingTakingLonger": "ಇನ್ನೂ ಕೆಲಸ ನಡೆಯುತ್ತಿದೆ — ಇದು ಸಾಮಾನ್ಯಕ್ಕಿಂತ ಹೆಚ್ಚು ಸಮಯ ತೆಗೆದುಕೊಳ್ಳುತ್ತಿದೆ.",
+    "speechProfileEnrollmentPrompt": "Omi ನಿಮ್ಮ ಧ್ವನಿಯನ್ನು ಗುರುತಿಸಲು — ಯಾವುದೇ ವಿಷಯದ ಬಗ್ಗೆ ಸುಮಾರು 5 ಸೆಕೆಂಡುಗಳ ಕಾಲ ಮಾತನಾಡಿ."
 }

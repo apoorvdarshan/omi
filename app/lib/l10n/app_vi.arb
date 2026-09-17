@@ -23,6 +23,10 @@
     "conversationIdCopied": "Đã sao chép ID cuộc trò chuyện vào clipboard",
     "testPrompt": "Thử nghiệm",
     "reprocessConversation": "Xử lý lại cuộc trò chuyện",
+    "reprocessTranscription": "Xử lý lại bản ghi",
+    "retranscribingConversation": "Đang phiên âm lại cuộc trò chuyện...\nViệc này có thể mất vài giây",
+    "errorReprocessingTranscription": "Lỗi khi xử lý lại bản ghi. Vui lòng thử lại sau.",
+    "errorNoStoredAudio": "Không có âm thanh đã lưu cho cuộc trò chuyện này.",
     "deleteConversation": "Xóa cuộc trò chuyện",
     "contentCopied": "Đã sao chép nội dung vào clipboard",
     "failedToUpdateStarred": "Không thể cập nhật trạng thái gắn sao.",
@@ -3261,5 +3265,11 @@
     "speechProfileTopicGoal": "Mục tiêu dài hạn của bạn là gì?",
     "speechToTextUnavailableDesc": "Hiện không thể chuyển giọng nói thành văn bản. Hãy kiểm tra kết nối internet và cài đặt nhận dạng giọng nói trên thiết bị rồi thử lại.",
     "memoryHistoryPartial": "Một phần lịch sử ký ức không khả dụng. Đang hiển thị lịch sử đã nhận được cho đến nay.",
-    "tapPlusToStartRecording": "Nhấn + để bắt đầu ghi âm"
+    "memoryHistory": "Lịch sử",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
+    "tapPlusToStartRecording": "Nhấn + để bắt đầu ghi âm",
+    "processingTakingLonger": "Vẫn đang xử lý — mất nhiều thời gian hơn bình thường.",
+    "speechProfileEnrollmentPrompt": "Để Omi biết đâu là giọng của bạn — hãy nói về bất cứ điều gì trong khoảng 5 giây."
 }

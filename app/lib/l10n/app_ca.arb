@@ -23,6 +23,10 @@
     "conversationIdCopied": "ID de la conversa copiat al porta-retalls",
     "testPrompt": "Provar indicació",
     "reprocessConversation": "Reprocessar conversa",
+    "reprocessTranscription": "Reprocessar la transcripció",
+    "retranscribingConversation": "S'està retranscrivint la conversa...\nAixò pot trigar uns segons",
+    "errorReprocessingTranscription": "Error en reprocessar la transcripció. Torna-ho a provar més tard.",
+    "errorNoStoredAudio": "No hi ha àudio desat per a aquesta conversa.",
     "deleteConversation": "Suprimir conversa",
     "contentCopied": "Contingut copiat al porta-retalls",
     "failedToUpdateStarred": "No s'ha pogut actualitzar l'estat de destacat.",
@@ -3234,5 +3238,11 @@
     "speechProfileTopicGoal": "Quin és el teu objectiu a llarg termini?",
     "speechToTextUnavailableDesc": "La transcripció de veu no està disponible ara mateix. Comprova la connexió a Internet i la configuració del reconeixement de veu del dispositiu i torna-ho a provar.",
     "memoryHistoryPartial": "Una part de l'historial de records no està disponible. Es mostra l'historial rebut fins ara.",
-    "tapPlusToStartRecording": "Toca + per començar a gravar"
+    "memoryHistory": "Historial",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
+    "tapPlusToStartRecording": "Toca + per començar a gravar",
+    "processingTakingLonger": "Encara en curs: això està trigant més del normal.",
+    "speechProfileEnrollmentPrompt": "Perquè Omi sàpiga quina veu és la teva — parla de qualsevol cosa durant uns 5 segons."
 }

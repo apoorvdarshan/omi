@@ -79,6 +79,19 @@ class AppLocalizationsBn extends AppLocalizations {
   String get reprocessConversation => 'কথোপকথন পুনরায় প্রক্রিয়া করুন';
 
   @override
+  String get reprocessTranscription => 'ট্রান্সক্রিপশন পুনরায় প্রক্রিয়া করুন';
+
+  @override
+  String get retranscribingConversation => 'কথোপকথন পুনরায় ট্রান্সক্রাইব করা হচ্ছে...\nএতে কয়েক সেকেন্ড লাগতে পারে';
+
+  @override
+  String get errorReprocessingTranscription =>
+      'ট্রান্সক্রিপশন পুনরায় প্রক্রিয়া করতে ত্রুটি হয়েছে। পরে আবার চেষ্টা করুন।';
+
+  @override
+  String get errorNoStoredAudio => 'এই কথোপকথনের জন্য কোনো সংরক্ষিত অডিও নেই।';
+
+  @override
   String get deleteConversation => 'কথোপকথন মুছুন';
 
   @override
@@ -2039,6 +2052,15 @@ class AppLocalizationsBn extends AppLocalizations {
   @override
   String get memoryHistoryPartial =>
       'স্মৃতির ইতিহাসের কিছু অংশ পাওয়া যাচ্ছে না। এখন পর্যন্ত পাওয়া ইতিহাস দেখানো হচ্ছে।';
+
+  @override
+  String get memoryHistory => 'ইতিহাস';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
 
   @override
   String get undo => 'পূর্বাবস্থা';
@@ -9984,4 +10006,11 @@ class AppLocalizationsBn extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'এই মুহূর্তে কথাকে লেখায় রূপান্তর করা যাচ্ছে না। আপনার ইন্টারনেট সংযোগ এবং ডিভাইসের কথোপকথন শনাক্তকরণের সেটিংস পরীক্ষা করে আবার চেষ্টা করুন।';
+
+  @override
+  String get processingTakingLonger => 'এখনও কাজ চলছে — এটি স্বাভাবিকের চেয়ে বেশি সময় নিচ্ছে।';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Omi যেন আপনার কণ্ঠ চিনতে পারে — যেকোনো বিষয়ে প্রায় ৫ সেকেন্ড কথা বলুন।';
 }

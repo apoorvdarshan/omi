@@ -23,6 +23,10 @@
     "conversationIdCopied": "Samtale-ID kopiert til utklippstavle",
     "testPrompt": "Test prompt",
     "reprocessConversation": "Behandle samtale på nytt",
+    "reprocessTranscription": "Behandle transkripsjon på nytt",
+    "retranscribingConversation": "Transkriberer samtalen på nytt...\nDette kan ta noen sekunder",
+    "errorReprocessingTranscription": "Feil under ny behandling av transkripsjonen. Prøv igjen senere.",
+    "errorNoStoredAudio": "Ingen lagret lyd tilgjengelig for denne samtalen.",
     "deleteConversation": "Slett samtale",
     "contentCopied": "Innhold kopiert til utklippstavlen",
     "failedToUpdateStarred": "Kunne ikke oppdatere favoritt-status.",
@@ -3256,5 +3260,11 @@
     "speechProfileTopicGoal": "Hva er ditt langsiktige mål?",
     "speechToTextUnavailableDesc": "Tale til tekst er ikke tilgjengelig akkurat nå. Kontroller internettforbindelsen og enhetens innstillinger for talegjenkjenning, og prøv igjen.",
     "memoryHistoryPartial": "Deler av minnehistorikken er ikke tilgjengelig. Viser historikken som er mottatt så langt.",
-    "tapPlusToStartRecording": "Trykk på + for å starte opptaket"
+    "memoryHistory": "Historikk",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
+    "tapPlusToStartRecording": "Trykk på + for å starte opptaket",
+    "processingTakingLonger": "Jobber fortsatt — dette tar lengre tid enn vanlig.",
+    "speechProfileEnrollmentPrompt": "Så Omi vet hvilken stemme som er din — snakk om hva som helst i omtrent 5 sekunder."
 }

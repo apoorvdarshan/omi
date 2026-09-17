@@ -79,6 +79,18 @@ class AppLocalizationsUr extends AppLocalizations {
   String get reprocessConversation => 'بات چیت دوبارہ پروسیس کریں';
 
   @override
+  String get reprocessTranscription => 'نقل کو دوبارہ پروسیس کریں';
+
+  @override
+  String get retranscribingConversation => 'بات چیت دوبارہ نقل کی جا رہی ہے...\nاس میں چند سیکنڈ لگ سکتے ہیں';
+
+  @override
+  String get errorReprocessingTranscription => 'نقل کو دوبارہ پروسیس کرتے وقت خرابی۔ بعد میں دوبارہ کوشش کریں۔';
+
+  @override
+  String get errorNoStoredAudio => 'اس بات چیت کے لیے کوئی محفوظ آڈیو دستیاب نہیں۔';
+
+  @override
   String get deleteConversation => 'بات چیت حذف کریں';
 
   @override
@@ -2040,6 +2052,15 @@ class AppLocalizationsUr extends AppLocalizations {
   @override
   String get memoryHistoryPartial =>
       'یادوں کی تاریخ کا کچھ حصہ دستیاب نہیں ہے۔ اب تک موصول ہونے والی تاریخ دکھائی جا رہی ہے۔';
+
+  @override
+  String get memoryHistory => 'تاریخ';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
 
   @override
   String get undo => 'واپس لیں';
@@ -9991,4 +10012,11 @@ class AppLocalizationsUr extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'اس وقت آواز کو متن میں تبدیل کرنے کی سہولت دستیاب نہیں ہے۔ اپنا انٹرنیٹ کنکشن اور آلے کی آواز پہچاننے کی ترتیبات چیک کریں، پھر دوبارہ کوشش کریں۔';
+
+  @override
+  String get processingTakingLonger => 'ابھی کام جاری ہے — اس میں معمول سے زیادہ وقت لگ رہا ہے۔';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'تاکہ Omi آپ کی آواز پہچان سکے — کسی بھی موضوع پر تقریباً 5 سیکنڈ بات کریں۔';
 }

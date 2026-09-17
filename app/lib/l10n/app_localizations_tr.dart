@@ -79,6 +79,19 @@ class AppLocalizationsTr extends AppLocalizations {
   String get reprocessConversation => 'Konuşmayı Yeniden İşle';
 
   @override
+  String get reprocessTranscription => 'Transkripsiyonu Yeniden İşle';
+
+  @override
+  String get retranscribingConversation => 'Konuşma yeniden yazıya dökülüyor...\nBu birkaç saniye sürebilir';
+
+  @override
+  String get errorReprocessingTranscription =>
+      'Transkripsiyon yeniden işlenirken hata oluştu. Lütfen daha sonra tekrar dene.';
+
+  @override
+  String get errorNoStoredAudio => 'Bu konuşma için kayıtlı ses yok.';
+
+  @override
   String get deleteConversation => 'Sohbeti Sil';
 
   @override
@@ -2046,6 +2059,15 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get memoryHistoryPartial =>
       'Anı geçmişinin bir kısmı kullanılamıyor. Şimdiye kadar alınan geçmiş gösteriliyor.';
+
+  @override
+  String get memoryHistory => 'Geçmiş';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
 
   @override
   String get undo => 'Geri Al';
@@ -9991,4 +10013,11 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Konuşmayı metne dönüştürme şu anda kullanılamıyor. İnternet bağlantınızı ve cihazınızın konuşma tanıma ayarlarını kontrol edip tekrar deneyin.';
+
+  @override
+  String get processingTakingLonger => 'Hâlâ devam ediyor — bu her zamankinden daha uzun sürüyor.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Omi\'nin hangi sesin size ait olduğunu bilmesi için yaklaşık 5 saniye boyunca istediğiniz bir konuda konuşun.';
 }

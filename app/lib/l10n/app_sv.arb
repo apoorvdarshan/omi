@@ -23,6 +23,10 @@
     "conversationIdCopied": "Konversations-ID kopierat till urklipp",
     "testPrompt": "Testa prompt",
     "reprocessConversation": "Bearbeta konversation igen",
+    "reprocessTranscription": "Bearbeta transkription igen",
+    "retranscribingConversation": "Transkriberar konversationen igen...\nDetta kan ta några sekunder",
+    "errorReprocessingTranscription": "Fel vid ominbearbetning av transkriptionen. Försök igen senare.",
+    "errorNoStoredAudio": "Ingen sparad ljudfil finns för den här konversationen.",
     "deleteConversation": "Radera konversation",
     "contentCopied": "Innehåll kopierat till urklipp",
     "failedToUpdateStarred": "Det gick inte att uppdatera stjärnstatus.",
@@ -3256,5 +3260,11 @@
     "speechProfileTopicGoal": "Vad är ditt långsiktiga mål?",
     "speechToTextUnavailableDesc": "Tal till text är inte tillgängligt just nu. Kontrollera internetanslutningen och enhetens inställningar för taligenkänning och försök igen.",
     "memoryHistoryPartial": "En del av minneshistoriken är inte tillgänglig. Visar historiken som har tagits emot hittills.",
-    "tapPlusToStartRecording": "Tryck på + för att börja spela in"
+    "memoryHistory": "Historik",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
+    "tapPlusToStartRecording": "Tryck på + för att börja spela in",
+    "processingTakingLonger": "Fortfarande igång — det tar längre tid än vanligt.",
+    "speechProfileEnrollmentPrompt": "Så att Omi vet vilken röst som är din — prata om vad som helst i ungefär 5 sekunder."
 }

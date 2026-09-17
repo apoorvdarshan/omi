@@ -79,6 +79,18 @@ class AppLocalizationsLt extends AppLocalizations {
   String get reprocessConversation => 'Perdoroti pokalbį';
 
   @override
+  String get reprocessTranscription => 'Iš naujo apdoroti transkripciją';
+
+  @override
+  String get retranscribingConversation => 'Pokalbis transkribuojamas iš naujo...\nTai gali užtrukti kelias sekundes';
+
+  @override
+  String get errorReprocessingTranscription => 'Klaida iš naujo apdorojant transkripciją. Bandykite vėliau.';
+
+  @override
+  String get errorNoStoredAudio => 'Šiam pokalbiui nėra išsaugoto garso.';
+
+  @override
   String get deleteConversation => 'Ištrinti pokalbį';
 
   @override
@@ -2040,6 +2052,15 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get memoryHistoryPartial => 'Dalis prisiminimų istorijos nepasiekiama. Rodoma iki šiol gauta istorija.';
+
+  @override
+  String get memoryHistory => 'Istorija';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
 
   @override
   String get undo => 'Atšaukti';
@@ -9998,4 +10019,11 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Kalbos vertimas tekstu šiuo metu nepasiekiamas. Patikrinkite interneto ryšį ir įrenginio kalbos atpažinimo nustatymus, tada bandykite dar kartą.';
+
+  @override
+  String get processingTakingLonger => 'Vis dar vyksta — tai užtrunka ilgiau nei įprasta.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Kad Omi žinotų, kuris balsas yra jūsų — kalbėkite apie bet ką maždaug 5 sekundes.';
 }

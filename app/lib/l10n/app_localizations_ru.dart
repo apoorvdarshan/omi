@@ -79,6 +79,18 @@ class AppLocalizationsRu extends AppLocalizations {
   String get reprocessConversation => 'Переобработать разговор';
 
   @override
+  String get reprocessTranscription => 'Переобработать транскрипцию';
+
+  @override
+  String get retranscribingConversation => 'Повторная транскрипция разговора...\nЭто может занять несколько секунд';
+
+  @override
+  String get errorReprocessingTranscription => 'Ошибка при повторной обработке транскрипции. Попробуйте позже.';
+
+  @override
+  String get errorNoStoredAudio => 'Для этого разговора нет сохранённого аудио.';
+
+  @override
   String get deleteConversation => 'Удалить разговор';
 
   @override
@@ -2048,6 +2060,15 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get memoryHistoryPartial =>
       'Часть истории воспоминаний недоступна. Показана история, полученная на данный момент.';
+
+  @override
+  String get memoryHistory => 'История';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
 
   @override
   String get undo => 'Отменить';
@@ -10016,4 +10037,11 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Преобразование речи в текст сейчас недоступно. Проверьте подключение к интернету и настройки распознавания речи на устройстве, затем попробуйте ещё раз.';
+
+  @override
+  String get processingTakingLonger => 'Ещё обрабатывается — это занимает больше обычного.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Чтобы Omi знал, какой голос ваш, говорите о чём угодно примерно 5 секунд.';
 }

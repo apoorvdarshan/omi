@@ -23,6 +23,10 @@
     "conversationIdCopied": "ID на разговора е копирано в клипборда",
     "testPrompt": "Тествай подсказка",
     "reprocessConversation": "Преработи разговор",
+    "reprocessTranscription": "Преработи транскрипцията",
+    "retranscribingConversation": "Повторно транскрибиране на разговора...\nТова може да отнеме няколко секунди",
+    "errorReprocessingTranscription": "Грешка при повторна обработка на транскрипцията. Опитайте отново по-късно.",
+    "errorNoStoredAudio": "Няма запазено аудио за този разговор.",
     "deleteConversation": "Изтриване на разговор",
     "contentCopied": "Съдържанието е копирано в клипборда",
     "failedToUpdateStarred": "Неуспешна актуализация на статуса с отметка.",
@@ -3234,5 +3238,11 @@
     "speechProfileTopicGoal": "Каква е дългосрочната ви цел?",
     "speechToTextUnavailableDesc": "Преобразуването на реч в текст не е налично в момента. Проверете интернет връзката и настройките за разпознаване на реч на устройството си, след което опитайте отново.",
     "memoryHistoryPartial": "Част от историята на спомените не е налична. Показва се получената досега история.",
-    "tapPlusToStartRecording": "Докоснете +, за да започнете запис"
+    "memoryHistory": "История",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
+    "tapPlusToStartRecording": "Докоснете +, за да започнете запис",
+    "processingTakingLonger": "Все още работи — отнема повече време от обичайното.",
+    "speechProfileEnrollmentPrompt": "За да знае Omi кой глас е вашият — говорете за каквото искате около 5 секунди."
 }

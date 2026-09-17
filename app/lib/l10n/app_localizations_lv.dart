@@ -79,6 +79,18 @@ class AppLocalizationsLv extends AppLocalizations {
   String get reprocessConversation => 'Pārstrādāt sarunu';
 
   @override
+  String get reprocessTranscription => 'Atkārtoti apstrādāt transkripciju';
+
+  @override
+  String get retranscribingConversation => 'Saruna tiek transkribēta no jauna...\nTas var aizņemt dažas sekundes';
+
+  @override
+  String get errorReprocessingTranscription => 'Kļūda, atkārtoti apstrādājot transkripciju. Mēģiniet vēlāk.';
+
+  @override
+  String get errorNoStoredAudio => 'Šai sarunai nav saglabāta audioieraksta.';
+
+  @override
   String get deleteConversation => 'Dzēst sarunu';
 
   @override
@@ -2045,6 +2057,15 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get memoryHistoryPartial => 'Daļa atmiņu vēstures nav pieejama. Tiek rādīta līdz šim saņemtā vēsture.';
+
+  @override
+  String get memoryHistory => 'Vēsture';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
 
   @override
   String get undo => 'Atsaukt';
@@ -10002,4 +10023,11 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Runas pārvēršana tekstā pašlaik nav pieejama. Pārbaudiet interneta savienojumu un ierīces runas atpazīšanas iestatījumus un mēģiniet vēlreiz.';
+
+  @override
+  String get processingTakingLonger => 'Joprojām notiek — tas aizņem ilgāk nekā parasti.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Lai Omi zinātu, kura balss ir jūsu — runājiet par jebko aptuveni 5 sekundes.';
 }

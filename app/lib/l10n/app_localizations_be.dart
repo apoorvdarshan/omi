@@ -79,6 +79,18 @@ class AppLocalizationsBe extends AppLocalizations {
   String get reprocessConversation => 'Перапрацаваць размову';
 
   @override
+  String get reprocessTranscription => 'Перапрацаваць транскрыпцыю';
+
+  @override
+  String get retranscribingConversation => 'Паўторная транскрыпцыя размовы...\nГэта можа заняць некалькі секунд';
+
+  @override
+  String get errorReprocessingTranscription => 'Памылка пры паўторнай апрацоўцы транскрыпцыі. Паспрабуйце пазней.';
+
+  @override
+  String get errorNoStoredAudio => 'Для гэтай размовы няма захаванага аўдыё.';
+
+  @override
   String get deleteConversation => 'Выдаліць размову';
 
   @override
@@ -2042,6 +2054,15 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get memoryHistoryPartial => 'Частка гісторыі ўспамінаў недаступная. Паказана гісторыя, атрыманая дагэтуль.';
+
+  @override
+  String get memoryHistory => 'Гісторыя';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
 
   @override
   String get undo => 'Адмяніць';
@@ -10010,4 +10031,10 @@ class AppLocalizationsBe extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Пераўтварэнне маўлення ў тэкст зараз недаступнае. Праверце падключэнне да інтэрнэту і налады распазнавання маўлення на прыладзе, затым паспрабуйце яшчэ раз.';
+
+  @override
+  String get processingTakingLonger => 'Яшчэ апрацоўваецца — гэта доўжыцца даўжэй, чым звычайна.';
+
+  @override
+  String get speechProfileEnrollmentPrompt => 'Каб Omi ведаў, які голас ваш, гаварыце пра што заўгодна каля 5 секунд.';
 }

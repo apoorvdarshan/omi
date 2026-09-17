@@ -79,6 +79,18 @@ class AppLocalizationsHe extends AppLocalizations {
   String get reprocessConversation => 'עבד מחדש שיחה';
 
   @override
+  String get reprocessTranscription => 'עבד מחדש תמלול';
+
+  @override
+  String get retranscribingConversation => 'מתמלל את השיחה מחדש...\nזה עשוי לקחת כמה שניות';
+
+  @override
+  String get errorReprocessingTranscription => 'שגיאה בעיבוד מחדש של התמלול. נסה שוב מאוחר יותר.';
+
+  @override
+  String get errorNoStoredAudio => 'אין שמע שמור לשיחה זו.';
+
+  @override
   String get deleteConversation => 'מחק שיחה';
 
   @override
@@ -2023,6 +2035,15 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get memoryHistoryPartial => 'חלק מהיסטוריית הזיכרונות אינו זמין. מוצגת ההיסטוריה שהתקבלה עד כה.';
+
+  @override
+  String get memoryHistory => 'היסטוריה';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
 
   @override
   String get undo => 'בטל';
@@ -9899,4 +9920,10 @@ class AppLocalizationsHe extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'המרת דיבור לטקסט אינה זמינה כרגע. בדקו את החיבור לאינטרנט ואת הגדרות זיהוי הדיבור במכשיר, ואז נסו שוב.';
+
+  @override
+  String get processingTakingLonger => 'עדיין בעבודה — זה לוקח יותר זמן מהרגיל.';
+
+  @override
+  String get speechProfileEnrollmentPrompt => 'כדי ש-Omi יידע איזה קול הוא שלך — יש לדבר על כל נושא במשך כ-5 שניות.';
 }

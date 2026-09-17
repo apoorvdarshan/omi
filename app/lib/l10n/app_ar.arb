@@ -23,6 +23,10 @@
     "conversationIdCopied": "تم نسخ معرّف المحادثة إلى الحافظة",
     "testPrompt": "اختبار الأمر",
     "reprocessConversation": "إعادة معالجة المحادثة",
+    "reprocessTranscription": "إعادة معالجة التفريغ النصي",
+    "retranscribingConversation": "جارٍ إعادة تفريغ المحادثة...\nقد يستغرق هذا بضع ثوانٍ",
+    "errorReprocessingTranscription": "حدث خطأ أثناء إعادة معالجة التفريغ النصي. يرجى المحاولة لاحقًا.",
+    "errorNoStoredAudio": "لا يوجد صوت محفوظ لهذه المحادثة.",
     "deleteConversation": "حذف المحادثة",
     "contentCopied": "تم نسخ المحتوى إلى الحافظة",
     "failedToUpdateStarred": "فشل تحديث حالة التمييز بنجمة.",
@@ -3232,5 +3236,11 @@
     "speechProfileTopicGoal": "ما هدفك على المدى الطويل؟",
     "speechToTextUnavailableDesc": "تحويل الكلام إلى نص غير متاح الآن. تحقق من اتصالك بالإنترنت وإعدادات التعرف على الكلام في جهازك، ثم حاول مرة أخرى.",
     "memoryHistoryPartial": "بعض سجل الذكريات غير متاح. يتم عرض السجل المستلم حتى الآن.",
-    "tapPlusToStartRecording": "اضغط على + لبدء التسجيل"
+    "memoryHistory": "السجل",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
+    "tapPlusToStartRecording": "اضغط على + لبدء التسجيل",
+    "processingTakingLonger": "ما زال قيد العمل — يستغرق وقتًا أطول من المعتاد.",
+    "speechProfileEnrollmentPrompt": "لكي يعرف Omi أي صوت هو صوتك — تحدث عن أي شيء لمدة 5 ثوانٍ تقريبًا."
 }

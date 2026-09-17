@@ -78,6 +78,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reprocessConversation => '重新处理对话';
 
   @override
+  String get reprocessTranscription => '重新处理转写';
+
+  @override
+  String get retranscribingConversation => '正在重新转写对话...\n这可能需要几秒钟';
+
+  @override
+  String get errorReprocessingTranscription => '重新处理转写时出错。请稍后再试。';
+
+  @override
+  String get errorNoStoredAudio => '此对话没有已存储的音频。';
+
+  @override
   String get deleteConversation => '删除对话';
 
   @override
@@ -1998,6 +2010,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get memoryHistoryPartial => '部分记忆历史暂不可用。正在显示目前已获取的历史记录。';
+
+  @override
+  String get memoryHistory => '历史';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
 
   @override
   String get undo => '撤销';
@@ -9789,4 +9810,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get speechToTextUnavailableDesc => '目前无法将语音转换为文字。请检查网络连接和设备的语音识别设置，然后重试。';
+
+  @override
+  String get processingTakingLonger => '仍在处理中——比平时耗时更长。';
+
+  @override
+  String get speechProfileEnrollmentPrompt => '让 Omi 知道哪个声音是你的——随便聊点什么，说大约 5 秒就好。';
 }

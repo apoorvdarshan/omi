@@ -23,6 +23,10 @@
     "conversationIdCopied": "ID-ul conversației a fost copiat în clipboard",
     "testPrompt": "Testează promptul",
     "reprocessConversation": "Reprocesează conversația",
+    "reprocessTranscription": "Reprocesează transcrierea",
+    "retranscribingConversation": "Retranscriere conversație...\nAceasta poate dura câteva secunde",
+    "errorReprocessingTranscription": "Eroare la reprocesarea transcrierii. Încearcă din nou mai târziu.",
+    "errorNoStoredAudio": "Nu există audio stocat pentru această conversație.",
     "deleteConversation": "Șterge conversația",
     "contentCopied": "Conținut copiat în clipboard",
     "failedToUpdateStarred": "Nu s-a putut actualiza starea de favorit.",
@@ -3256,5 +3260,11 @@
     "speechProfileTopicGoal": "Care este obiectivul tău pe termen lung?",
     "speechToTextUnavailableDesc": "Conversia vorbirii în text nu este disponibilă momentan. Verifică conexiunea la internet și setările de recunoaștere vocală ale dispozitivului, apoi încearcă din nou.",
     "memoryHistoryPartial": "O parte din istoricul amintirilor nu este disponibilă. Se afișează istoricul primit până acum.",
-    "tapPlusToStartRecording": "Atinge + pentru a începe înregistrarea"
+    "memoryHistory": "Istoric",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
+    "tapPlusToStartRecording": "Atinge + pentru a începe înregistrarea",
+    "processingTakingLonger": "Încă se procesează — durează mai mult decât de obicei.",
+    "speechProfileEnrollmentPrompt": "Pentru ca Omi să știe care este vocea ta — vorbește despre orice timp de aproximativ 5 secunde."
 }

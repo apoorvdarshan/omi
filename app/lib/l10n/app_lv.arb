@@ -23,6 +23,10 @@
     "conversationIdCopied": "Sarakstes ID nokopēts starpliktuvē",
     "testPrompt": "Testēt uzvedni",
     "reprocessConversation": "Pārstrādāt sarunu",
+    "reprocessTranscription": "Atkārtoti apstrādāt transkripciju",
+    "retranscribingConversation": "Saruna tiek transkribēta no jauna...\nTas var aizņemt dažas sekundes",
+    "errorReprocessingTranscription": "Kļūda, atkārtoti apstrādājot transkripciju. Mēģiniet vēlāk.",
+    "errorNoStoredAudio": "Šai sarunai nav saglabāta audioieraksta.",
     "deleteConversation": "Dzēst sarunu",
     "contentCopied": "Saturs nokopēts starpliktuvē",
     "failedToUpdateStarred": "Neizdevās atjaunināt zvaigznītes statusu.",
@@ -3256,5 +3260,11 @@
     "speechProfileTopicGoal": "Kāds ir jūsu ilgtermiņa mērķis?",
     "speechToTextUnavailableDesc": "Runas pārvēršana tekstā pašlaik nav pieejama. Pārbaudiet interneta savienojumu un ierīces runas atpazīšanas iestatījumus un mēģiniet vēlreiz.",
     "memoryHistoryPartial": "Daļa atmiņu vēstures nav pieejama. Tiek rādīta līdz šim saņemtā vēsture.",
-    "tapPlusToStartRecording": "Pieskarieties +, lai sāktu ierakstīšanu"
+    "memoryHistory": "Vēsture",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
+    "tapPlusToStartRecording": "Pieskarieties +, lai sāktu ierakstīšanu",
+    "processingTakingLonger": "Joprojām notiek — tas aizņem ilgāk nekā parasti.",
+    "speechProfileEnrollmentPrompt": "Lai Omi zinātu, kura balss ir jūsu — runājiet par jebko aptuveni 5 sekundes."
 }

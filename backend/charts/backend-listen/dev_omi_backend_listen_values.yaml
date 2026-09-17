@@ -207,6 +207,8 @@ env:
     value: "on"
   - name: MEMORY_BELIEF_MODEL_ENABLED
     value: "true"
+  - name: MEMORY_BELIEF_AUTOMATION_PAUSED
+    value: "false"
   - name: MEMORY_CANONICAL_MAINTENANCE_ENABLED
     value: "false"
   - name: LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS
@@ -342,12 +344,6 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: ENCRYPTION_SECRET
-  - name: BASIC_TIER_MINUTES_LIMIT_PER_MONTH
-    value: "1000000"
-  - name: BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
-    value: "0"
-  - name: BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
-    value: "0"
   - name: STRIPE_UNLIMITED_MONTHLY_PRICE_ID
     value: "price_1RrxXL1F8wnoWYvwIddzR902"
   - name: STRIPE_UNLIMITED_ANNUAL_PRICE_ID

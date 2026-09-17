@@ -79,6 +79,19 @@ class AppLocalizationsMs extends AppLocalizations {
   String get reprocessConversation => 'Proses Semula Perbualan';
 
   @override
+  String get reprocessTranscription => 'Proses Semula Transkripsi';
+
+  @override
+  String get retranscribingConversation =>
+      'Mentranskripsi semula perbualan...\nIni mungkin mengambil masa beberapa saat';
+
+  @override
+  String get errorReprocessingTranscription => 'Ralat semasa memproses semula transkripsi. Cuba lagi kemudian.';
+
+  @override
+  String get errorNoStoredAudio => 'Tiada audio disimpan untuk perbualan ini.';
+
+  @override
   String get deleteConversation => 'Padam Perbualan';
 
   @override
@@ -2048,6 +2061,15 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get memoryHistoryPartial =>
       'Sebahagian sejarah ingatan tidak tersedia. Memaparkan sejarah yang telah diterima setakat ini.';
+
+  @override
+  String get memoryHistory => 'Sejarah';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
 
   @override
   String get undo => 'Buat Asal';
@@ -10005,4 +10027,11 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Penukaran pertuturan kepada teks tidak tersedia sekarang. Semak sambungan internet dan tetapan pengecaman pertuturan peranti anda, kemudian cuba lagi.';
+
+  @override
+  String get processingTakingLonger => 'Masih diproses — ini mengambil masa lebih lama daripada biasa.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Supaya Omi tahu suara yang mana milik anda — bercakap tentang apa sahaja selama kira-kira 5 saat.';
 }

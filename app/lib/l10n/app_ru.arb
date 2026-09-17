@@ -23,6 +23,10 @@
     "conversationIdCopied": "ID разговора скопирован в буфер обмена",
     "testPrompt": "Тестовый запрос",
     "reprocessConversation": "Переобработать разговор",
+    "reprocessTranscription": "Переобработать транскрипцию",
+    "retranscribingConversation": "Повторная транскрипция разговора...\nЭто может занять несколько секунд",
+    "errorReprocessingTranscription": "Ошибка при повторной обработке транскрипции. Попробуйте позже.",
+    "errorNoStoredAudio": "Для этого разговора нет сохранённого аудио.",
     "deleteConversation": "Удалить разговор",
     "contentCopied": "Содержимое скопировано в буфер обмена",
     "failedToUpdateStarred": "Не удалось обновить статус избранного.",
@@ -3291,5 +3295,11 @@
     "speechProfileTopicGoal": "Какова ваша долгосрочная цель?",
     "speechToTextUnavailableDesc": "Преобразование речи в текст сейчас недоступно. Проверьте подключение к интернету и настройки распознавания речи на устройстве, затем попробуйте ещё раз.",
     "memoryHistoryPartial": "Часть истории воспоминаний недоступна. Показана история, полученная на данный момент.",
-    "tapPlusToStartRecording": "Нажмите +, чтобы начать запись"
+    "memoryHistory": "История",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
+    "tapPlusToStartRecording": "Нажмите +, чтобы начать запись",
+    "processingTakingLonger": "Ещё обрабатывается — это занимает больше обычного.",
+    "speechProfileEnrollmentPrompt": "Чтобы Omi знал, какой голос ваш, говорите о чём угодно примерно 5 секунд."
 }

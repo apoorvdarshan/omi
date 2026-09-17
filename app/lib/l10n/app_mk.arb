@@ -84,6 +84,22 @@
     "@reprocessConversation": {
         "description": "Menu item to reprocess a conversation"
     },
+    "reprocessTranscription": "Преработи транскрипција",
+    "@reprocessTranscription": {
+        "description": "Menu item to re-run speech-to-text on stored conversation audio"
+    },
+    "retranscribingConversation": "Повторно транскрибирање на разговорот...\nОва може да потрае неколку секунди",
+    "@retranscribingConversation": {
+        "description": "Loading message shown while transcription is being reprocessed"
+    },
+    "errorReprocessingTranscription": "Грешка при повторна обработка на транскрипцијата. Обидете се повторно подоцна.",
+    "@errorReprocessingTranscription": {
+        "description": "Error message when transcription reprocess fails"
+    },
+    "errorNoStoredAudio": "Нема зачувано аудио за овој разговор.",
+    "@errorNoStoredAudio": {
+        "description": "Error message when a conversation has no stored audio to retranscribe"
+    },
     "deleteConversation": "Избриши разговор",
     "@deleteConversation": {
         "description": "Menu item to delete a conversation"
@@ -10822,5 +10838,11 @@
     "speechProfileTopicGoal": "Која е вашата долгорочна цел?",
     "speechToTextUnavailableDesc": "Претворањето говор во текст моментално не е достапно. Проверете ги интернет-врската и поставките за препознавање говор на уредот, па обидете се повторно.",
     "memoryHistoryPartial": "Дел од историјата на сеќавањата не е достапен. Се прикажува досега примената историја.",
-    "tapPlusToStartRecording": "Допрете + за да започнете со снимање"
+    "memoryHistory": "Историја",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
+    "tapPlusToStartRecording": "Допрете + за да започнете со снимање",
+    "processingTakingLonger": "Сè уште се обработува — ова трае подолго од вообичаеното.",
+    "speechProfileEnrollmentPrompt": "За Omi да знае кој глас е вашиот — зборувајте за што било околу 5 секунди."
 }

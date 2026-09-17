@@ -79,6 +79,20 @@ class AppLocalizationsTe extends AppLocalizations {
   String get reprocessConversation => 'సంభాషణను తిరిగి ప్రక్రియ చేయండి';
 
   @override
+  String get reprocessTranscription => 'ట్రాన్స్‌క్రిప్షన్‌ను తిరిగి ప్రక్రియ చేయండి';
+
+  @override
+  String get retranscribingConversation =>
+      'సంభాషణను తిరిగి ట్రాన్స్‌క్రైబ్ చేస్తున్నాం...\nఇది కొన్ని సెకన్లు తీసుకోవచ్చు';
+
+  @override
+  String get errorReprocessingTranscription =>
+      'ట్రాన్స్‌క్రిప్షన్‌ను తిరిగి ప్రక్రియ చేసేటప్పుడు త్రుటి. దయచేసి తరువాత మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get errorNoStoredAudio => 'ఈ సంభాషణకు నిల్వ చేసిన ఆడియో లేదు.';
+
+  @override
   String get deleteConversation => 'సంభాషణను తొలగించు';
 
   @override
@@ -2050,6 +2064,15 @@ class AppLocalizationsTe extends AppLocalizations {
   @override
   String get memoryHistoryPartial =>
       'జ్ఞాపకాల చరిత్రలో కొంత భాగం అందుబాటులో లేదు. ఇప్పటివరకు అందిన చరిత్ర చూపబడుతోంది.';
+
+  @override
+  String get memoryHistory => 'చరిత్ర';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
 
   @override
   String get undo => 'మరలుచేయండి';
@@ -10028,4 +10051,11 @@ class AppLocalizationsTe extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'ప్రస్తుతం మాటలను వచనంగా మార్చే సదుపాయం అందుబాటులో లేదు. మీ ఇంటర్నెట్ కనెక్షన్ మరియు పరికరంలోని వాయిస్ గుర్తింపు సెట్టింగ్‌లను తనిఖీ చేసి, మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get processingTakingLonger => 'ఇంకా పని జరుగుతోంది — ఇది సాధారణం కంటే ఎక్కువ సమయం తీసుకుంటోంది.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Omi మీ గొంతును గుర్తించడానికి — ఏదైనా విషయం గురించి సుమారు 5 సెకన్లు మాట్లాడండి.';
 }

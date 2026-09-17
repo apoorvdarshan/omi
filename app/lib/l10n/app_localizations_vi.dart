@@ -79,6 +79,18 @@ class AppLocalizationsVi extends AppLocalizations {
   String get reprocessConversation => 'Xử lý lại cuộc trò chuyện';
 
   @override
+  String get reprocessTranscription => 'Xử lý lại bản ghi';
+
+  @override
+  String get retranscribingConversation => 'Đang phiên âm lại cuộc trò chuyện...\nViệc này có thể mất vài giây';
+
+  @override
+  String get errorReprocessingTranscription => 'Lỗi khi xử lý lại bản ghi. Vui lòng thử lại sau.';
+
+  @override
+  String get errorNoStoredAudio => 'Không có âm thanh đã lưu cho cuộc trò chuyện này.';
+
+  @override
   String get deleteConversation => 'Xóa cuộc trò chuyện';
 
   @override
@@ -2044,6 +2056,15 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get memoryHistoryPartial =>
       'Một phần lịch sử ký ức không khả dụng. Đang hiển thị lịch sử đã nhận được cho đến nay.';
+
+  @override
+  String get memoryHistory => 'Lịch sử';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
 
   @override
   String get undo => 'Hoàn tác';
@@ -9974,4 +9995,11 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Hiện không thể chuyển giọng nói thành văn bản. Hãy kiểm tra kết nối internet và cài đặt nhận dạng giọng nói trên thiết bị rồi thử lại.';
+
+  @override
+  String get processingTakingLonger => 'Vẫn đang xử lý — mất nhiều thời gian hơn bình thường.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Để Omi biết đâu là giọng của bạn — hãy nói về bất cứ điều gì trong khoảng 5 giây.';
 }

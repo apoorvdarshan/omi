@@ -23,6 +23,10 @@
     "conversationIdCopied": "ID da conversa copiado para a área de transferência",
     "testPrompt": "Testar prompt",
     "reprocessConversation": "Reprocessar conversa",
+    "reprocessTranscription": "Reprocessar transcrição",
+    "retranscribingConversation": "Retranscrevendo conversa...\nIsto pode levar alguns segundos",
+    "errorReprocessingTranscription": "Erro ao reprocessar a transcrição. Tente novamente mais tarde.",
+    "errorNoStoredAudio": "Não há áudio guardado para esta conversa.",
     "deleteConversation": "Excluir Conversa",
     "contentCopied": "Conteúdo copiado para a área de transferência",
     "failedToUpdateStarred": "Falha ao atualizar favorito.",
@@ -3292,5 +3296,11 @@
     "speechProfileTopicGoal": "Qual é seu objetivo de longo prazo?",
     "speechToTextUnavailableDesc": "A transcrição de voz não está disponível no momento. Verifique sua conexão com a internet e as configurações de reconhecimento de voz do dispositivo e tente novamente.",
     "memoryHistoryPartial": "Parte do histórico de memórias não está disponível. Exibindo o histórico recebido até agora.",
-    "tapPlusToStartRecording": "Toque em + para começar a gravar"
+    "memoryHistory": "Histórico",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
+    "tapPlusToStartRecording": "Toque em + para começar a gravar",
+    "processingTakingLonger": "Ainda a trabalhar — isto está a demorar mais do que o habitual.",
+    "speechProfileEnrollmentPrompt": "Para que o Omi saiba qual é a sua voz — fale sobre qualquer coisa por cerca de 5 segundos."
 }

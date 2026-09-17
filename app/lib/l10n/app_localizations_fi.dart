@@ -79,6 +79,18 @@ class AppLocalizationsFi extends AppLocalizations {
   String get reprocessConversation => 'Käsittele keskustelu uudelleen';
 
   @override
+  String get reprocessTranscription => 'Käsittele litterointi uudelleen';
+
+  @override
+  String get retranscribingConversation => 'Keskustelua litteroidaan uudelleen...\nTämä voi kestää muutaman sekunnin';
+
+  @override
+  String get errorReprocessingTranscription => 'Virhe litteroinnin uudelleenkäsittelyssä. Yritä myöhemmin uudelleen.';
+
+  @override
+  String get errorNoStoredAudio => 'Tälle keskustelulle ei ole tallennettua ääntä.';
+
+  @override
   String get deleteConversation => 'Poista keskustelu';
 
   @override
@@ -2039,6 +2051,15 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get memoryHistoryPartial =>
       'Osa muistojen historiasta ei ole saatavilla. Näytetään tähän mennessä saatu historia.';
+
+  @override
+  String get memoryHistory => 'Historia';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
 
   @override
   String get undo => 'Kumoa';
@@ -9980,4 +10001,11 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Puheen muuntaminen tekstiksi ei ole juuri nyt käytettävissä. Tarkista internetyhteytesi ja laitteesi puheentunnistusasetukset ja yritä uudelleen.';
+
+  @override
+  String get processingTakingLonger => 'Vielä käynnissä — tämä kestää tavallista kauemmin.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Jotta Omi tietää, mikä ääni on sinun — puhu mistä tahansa noin 5 sekuntia.';
 }

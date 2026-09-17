@@ -79,6 +79,19 @@ class AppLocalizationsTa extends AppLocalizations {
   String get reprocessConversation => 'உரையாடலை மீண்டும் செயல்படுத்தவும்';
 
   @override
+  String get reprocessTranscription => 'படியெடுப்பை மீண்டும் செயல்படுத்தவும்';
+
+  @override
+  String get retranscribingConversation => 'உரையாடல் மீண்டும் படியெடுக்கப்படுகிறது...\nஇதற்கு சில விநாடிகள் ஆகலாம்';
+
+  @override
+  String get errorReprocessingTranscription =>
+      'படியெடுப்பை மீண்டும் செயல்படுத்தும்போது பிழை. பின்னர் மீண்டும் முயலவும்.';
+
+  @override
+  String get errorNoStoredAudio => 'இந்த உரையாடலுக்கு சேமிக்கப்பட்ட ஆடியோ இல்லை.';
+
+  @override
   String get deleteConversation => 'உரையாடலை நீக்கவும்';
 
   @override
@@ -2053,6 +2066,15 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get memoryHistoryPartial =>
       'நினைவுகளின் வரலாற்றில் சில பகுதிகள் கிடைக்கவில்லை. இதுவரை பெறப்பட்ட வரலாறு காட்டப்படுகிறது.';
+
+  @override
+  String get memoryHistory => 'வரலாறு';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
 
   @override
   String get undo => 'மறுசெய்க';
@@ -10049,4 +10071,11 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'பேச்சை உரையாக மாற்றும் வசதி தற்போது கிடைக்கவில்லை. உங்கள் இணைய இணைப்பையும் சாதனத்தின் பேச்சு அறிதல் அமைப்புகளையும் சரிபார்த்து, மீண்டும் முயற்சிக்கவும்.';
+
+  @override
+  String get processingTakingLonger => 'இன்னும் செயல்படுகிறது — இது வழக்கத்தை விட அதிக நேரம் எடுக்கிறது.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Omi உங்கள் குரலை அடையாளம் காண — எதைப் பற்றியாவது சுமார் 5 வினாடிகள் பேசுங்கள்.';
 }

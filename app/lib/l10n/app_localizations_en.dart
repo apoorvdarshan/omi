@@ -79,6 +79,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reprocessConversation => 'Reprocess Conversation';
 
   @override
+  String get reprocessTranscription => 'Reprocess Transcription';
+
+  @override
+  String get retranscribingConversation => 'Retranscribing conversation...\nThis may take a few seconds';
+
+  @override
+  String get errorReprocessingTranscription => 'Error while reprocessing transcription. Please try again later.';
+
+  @override
+  String get errorNoStoredAudio => 'No stored audio available for this conversation.';
+
+  @override
   String get deleteConversation => 'Delete Conversation';
 
   @override
@@ -2037,6 +2049,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get memoryHistoryPartial => 'Some memory history is unavailable. Showing the history received so far.';
+
+  @override
+  String get memoryHistory => 'History';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
 
   @override
   String get undo => 'Undo';
@@ -9969,4 +9990,11 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Speech-to-text isn\'t available right now. Check your internet connection and your device\'s speech recognition settings, then try again.';
+
+  @override
+  String get processingTakingLonger => 'Still working — this is taking longer than usual.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'So Omi knows which voice is yours — talk for about 5 seconds about anything.';
 }

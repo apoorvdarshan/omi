@@ -79,6 +79,18 @@ class AppLocalizationsSk extends AppLocalizations {
   String get reprocessConversation => 'Znovu spracovať konverzáciu';
 
   @override
+  String get reprocessTranscription => 'Znovu spracovať prepis';
+
+  @override
+  String get retranscribingConversation => 'Prepisovanie konverzácie...\nMôže to trvať niekoľko sekúnd';
+
+  @override
+  String get errorReprocessingTranscription => 'Chyba pri opätovnom spracovaní prepisu. Skúste to neskôr.';
+
+  @override
+  String get errorNoStoredAudio => 'Pre túto konverzáciu nie je k dispozícii uložený zvuk.';
+
+  @override
   String get deleteConversation => 'Odstrániť konverzáciu';
 
   @override
@@ -2045,6 +2057,15 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get memoryHistoryPartial => 'Časť histórie spomienok nie je dostupná. Zobrazuje sa doteraz prijatá história.';
+
+  @override
+  String get memoryHistory => 'História';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
 
   @override
   String get undo => 'Vrátiť späť';
@@ -9971,4 +9992,10 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Prevod reči na text momentálne nie je dostupný. Skontrolujte internetové pripojenie a nastavenia rozpoznávania reči v zariadení a skúste to znova.';
+
+  @override
+  String get processingTakingLonger => 'Stále prebieha — trvá to dlhšie ako zvyčajne.';
+
+  @override
+  String get speechProfileEnrollmentPrompt => 'Aby Omi vedel, ktorý hlas je váš — hovorte asi 5 sekúnd o čomkoľvek.';
 }

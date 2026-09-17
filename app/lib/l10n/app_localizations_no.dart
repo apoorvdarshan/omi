@@ -79,6 +79,18 @@ class AppLocalizationsNo extends AppLocalizations {
   String get reprocessConversation => 'Behandle samtale på nytt';
 
   @override
+  String get reprocessTranscription => 'Behandle transkripsjon på nytt';
+
+  @override
+  String get retranscribingConversation => 'Transkriberer samtalen på nytt...\nDette kan ta noen sekunder';
+
+  @override
+  String get errorReprocessingTranscription => 'Feil under ny behandling av transkripsjonen. Prøv igjen senere.';
+
+  @override
+  String get errorNoStoredAudio => 'Ingen lagret lyd tilgjengelig for denne samtalen.';
+
+  @override
   String get deleteConversation => 'Slett samtale';
 
   @override
@@ -2039,6 +2051,15 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String get memoryHistoryPartial =>
       'Deler av minnehistorikken er ikke tilgjengelig. Viser historikken som er mottatt så langt.';
+
+  @override
+  String get memoryHistory => 'Historikk';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
 
   @override
   String get undo => 'Angre';
@@ -9977,4 +9998,11 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Tale til tekst er ikke tilgjengelig akkurat nå. Kontroller internettforbindelsen og enhetens innstillinger for talegjenkjenning, og prøv igjen.';
+
+  @override
+  String get processingTakingLonger => 'Jobber fortsatt — dette tar lengre tid enn vanlig.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Så Omi vet hvilken stemme som er din — snakk om hva som helst i omtrent 5 sekunder.';
 }

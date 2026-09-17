@@ -79,6 +79,19 @@ class AppLocalizationsIt extends AppLocalizations {
   String get reprocessConversation => 'Rielabora Conversazione';
 
   @override
+  String get reprocessTranscription => 'Rielabora trascrizione';
+
+  @override
+  String get retranscribingConversation => 'Ritrascrizione della conversazione...\nPotrebbero volerci alcuni secondi';
+
+  @override
+  String get errorReprocessingTranscription =>
+      'Errore durante la rielaborazione della trascrizione. Riprova più tardi.';
+
+  @override
+  String get errorNoStoredAudio => 'Nessun audio salvato disponibile per questa conversazione.';
+
+  @override
   String get deleteConversation => 'Elimina conversazione';
 
   @override
@@ -2049,6 +2062,15 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get memoryHistoryPartial =>
       'Parte della cronologia dei ricordi non è disponibile. Viene mostrata la cronologia ricevuta finora.';
+
+  @override
+  String get memoryHistory => 'Cronologia';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
 
   @override
   String get undo => 'Annulla';
@@ -10036,4 +10058,11 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'La trascrizione vocale non è disponibile al momento. Controlla la connessione Internet e le impostazioni di riconoscimento vocale del dispositivo, poi riprova.';
+
+  @override
+  String get processingTakingLonger => 'Ancora in corso: ci sta mettendo più del solito.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Perché Omi sappia qual è la tua voce — parla di qualsiasi cosa per circa 5 secondi.';
 }

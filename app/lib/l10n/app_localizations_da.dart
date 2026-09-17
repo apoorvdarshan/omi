@@ -79,6 +79,18 @@ class AppLocalizationsDa extends AppLocalizations {
   String get reprocessConversation => 'Genbehandl samtale';
 
   @override
+  String get reprocessTranscription => 'Genbehandl transskription';
+
+  @override
+  String get retranscribingConversation => 'Genudskriver samtale...\nDette kan tage et par sekunder';
+
+  @override
+  String get errorReprocessingTranscription => 'Fejl under genbehandling af transskription. Prøv igen senere.';
+
+  @override
+  String get errorNoStoredAudio => 'Ingen gemt lyd tilgængelig for denne samtale.';
+
+  @override
   String get deleteConversation => 'Slet samtale';
 
   @override
@@ -2024,6 +2036,15 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get memoryHistoryPartial =>
       'Noget af mindehistorikken er ikke tilgængeligt. Viser den historik, der er modtaget indtil nu.';
+
+  @override
+  String get memoryHistory => 'Historik';
+
+  @override
+  String get memoryAllowUse => 'Allow use';
+
+  @override
+  String get memoryDontUse => 'Don\'t use';
 
   @override
   String get undo => 'Fortryd';
@@ -9963,4 +9984,11 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get speechToTextUnavailableDesc =>
       'Tale til tekst er ikke tilgængelig lige nu. Kontrollér din internetforbindelse og enhedens indstillinger for talegenkendelse, og prøv igen.';
+
+  @override
+  String get processingTakingLonger => 'Arbejder stadig — det tager længere end normalt.';
+
+  @override
+  String get speechProfileEnrollmentPrompt =>
+      'Så Omi ved, hvilken stemme der er din — tal om hvad som helst i cirka 5 sekunder.';
 }
