@@ -27,6 +27,7 @@ import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/capture_metrics_tracker.dart';
+import 'package:omi/services/capture/device_mute_sync.dart';
 import 'package:omi/services/capture/conversation_source_for_device.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
 import 'package:omi/utils/audio/foreground.dart';
@@ -42,6 +43,7 @@ import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/audio_sources/ble_device_source.dart';
 import 'package:omi/services/devices/connectors/limitless_connection.dart';
+import 'package:omi/services/devices/connectors/omi_connection.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/audio_sources/phone_mic_source.dart';
 import 'package:omi/services/wals.dart';
@@ -86,6 +88,8 @@ class CaptureController extends ChangeNotifier
   late final NativeBatchGeolocationPreferenceFence _phoneBatchGeolocationPreference =
       NativeBatchGeolocationPreferenceFence(writer: _writePhoneBatchGeolocationPreference);
   final RecordingLifecycleTelemetry _recordingTelemetry;
+  final Future<bool?> Function(String deviceId)? _deviceMuteReader;
+  final Future<void> Function(String deviceId, bool muted)? _deviceMuteWriter;
 
   CaptureExternalActions externalActions;
   DeviceOnboardingProvider? deviceOnboardingProvider;
@@ -206,6 +210,8 @@ class CaptureController extends ChangeNotifier
     Future<bool> Function()? microphonePermissionRequester,
     IMicRecorderService? phoneMicBatchRecorder,
     RecordingLifecycleTelemetry? recordingTelemetry,
+    Future<bool?> Function(String deviceId)? deviceMuteReader,
+    Future<void> Function(String deviceId, bool muted)? deviceMuteWriter,
   })  : externalActions = externalActions ?? const NoopCaptureExternalActions(),
         _conversationLocationCapture = conversationLocationCapture ??
             ConversationLocationCapture(onNewlyGranted: _startAndroidLocationForegroundTask),
@@ -213,10 +219,12 @@ class CaptureController extends ChangeNotifier
         _audioCodecLoader = audioCodecLoader,
         _microphonePermissionRequester = microphonePermissionRequester,
         _phoneMicBatchRecorder = phoneMicBatchRecorder,
-        _recordingTelemetry = recordingTelemetry ?? RecordingLifecycleTelemetry() {
+        _recordingTelemetry = recordingTelemetry ?? RecordingLifecycleTelemetry(),
+        _deviceMuteReader = deviceMuteReader,
+        _deviceMuteWriter = deviceMuteWriter {
     // Restore a persisted device mute so it survives an app kill/restart. When
-    // the device reconnects, streamDeviceRecording() reads _isPaused as
-    // `wasPaused` and re-applies the mute instead of silently resuming.
+    // the device reconnects, streamDeviceRecording() reads device mute over BLE
+    // (pendant wins) and falls back to this local bit for old firmware.
     _isPaused = SharedPreferencesUtil().deviceMuted;
     _connectionStateListener = ConnectivityService().onConnectionChange.listen((bool isConnected) {
       onConnectionStateChanged(isConnected);
@@ -1861,7 +1869,7 @@ class CaptureController extends ChangeNotifier
       _recordingTelemetry.prepare(source: SharedPreferencesUtil().batchModeEnabled ? 'pendant_batch' : 'pendant_live');
     }
 
-    bool wasPaused = _isPaused;
+    bool wasPaused = applyReconnectMute(deviceMuted: await _readDeviceMute());
 
     // Product: recording is the tap; location is metadata. Do not block
     // device connect/start on the OS location dialog. Location still PATCHes
@@ -2630,9 +2638,58 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
   }
 
+  Future<bool?> _readDeviceMute() async {
+    final device = _recordingDevice;
+    if (device == null) return null;
+    try {
+      if (_deviceMuteReader != null) {
+        return await _deviceMuteReader!(device.id);
+      }
+      final connection = await ServiceManager.instance().device.ensureConnection(device.id);
+      if (connection is OmiDeviceConnection) {
+        return connection.getCaptureMuted();
+      }
+    } catch (e) {
+      Logger.debug('Failed to read device mute: $e');
+    }
+    return null;
+  }
+
+  Future<void> _writeDeviceMute(bool muted) async {
+    final device = _recordingDevice;
+    if (device == null) return;
+    try {
+      if (_deviceMuteWriter != null) {
+        await _deviceMuteWriter!(device.id, muted);
+        return;
+      }
+      final connection = await ServiceManager.instance().device.ensureConnection(device.id);
+      if (connection is OmiDeviceConnection) {
+        await connection.setCaptureMuted(muted);
+      }
+    } catch (e) {
+      Logger.debug('Failed to write device mute: $e');
+    }
+  }
+
+  /// Apply the device-reported mute (or local fallback) as the reconnect
+  /// pause bit. Device state wins when present (issue #5054).
+  @visibleForTesting
+  bool applyReconnectMute({required bool? deviceMuted}) {
+    final paused = DeviceMuteSync.resolveReconnectPaused(
+      deviceMuted: deviceMuted,
+      localMuted: _isPaused || SharedPreferencesUtil().deviceMuted,
+    );
+    _isPaused = paused;
+    SharedPreferencesUtil().deviceMuted = paused;
+    return paused;
+  }
+
   Future<void> pauseDeviceRecording() async {
     if (_recordingDevice == null) return;
 
+    // Write mute to the pendant first so disconnect cannot resume capture.
+    await _writeDeviceMute(true);
     // Write mute state first — before BLE cancel which may fire other events
     await BatteryWidgetService().updateMuteState(true);
     // Pause the BLE stream but keep the device connection
@@ -2653,6 +2710,7 @@ class CaptureController extends ChangeNotifier
     _isPaused = false;
     // Clear the persisted mute so we don't re-mute on the next restart.
     SharedPreferencesUtil().deviceMuted = false;
+    await _writeDeviceMute(false);
     // Update widget immediately — don't wait for streaming setup
     BatteryWidgetService().updateMuteState(false);
     // Resume streaming from the device
