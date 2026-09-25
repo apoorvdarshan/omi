@@ -48,10 +48,11 @@ from utils.metrics import BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.onboarding import OnboardingHandler
 from utils.observability.journeys import ClientJourneyAttempt
-from utils.observability.transcription import LiveSTTAttempt
+from utils.observability.transcription import LiveSTTAttempt, record_live_stt_audio_seconds
 from utils.pusher import PusherCircuitBreakerOpen
 from utils.product_telemetry import emit_product_event
 from utils.stt.streaming import get_stt_service_for_language
+from utils.stt.live_rollout import managed_chain_enabled, window_selection_kwargs
 from utils.subscription import get_remaining_transcription_seconds, is_trial_paywalled
 from utils.transcribe_decisions import (
     effective_conversation_timeout,
@@ -80,7 +81,7 @@ from .registry import unregister as unregister_listen_session
 from .speakers import SpeakerMatcher
 from .transcripts import TranscriptProcessor
 from utils.listen_audio import build_channel_config
-from utils.observability.transcription import record_listen_session_accepted
+from utils.observability.transcription import record_listen_no_audio_teardown, record_listen_session_accepted
 
 logger = logging.getLogger(__name__)
 
@@ -373,6 +374,7 @@ class ListenSessionRuntime:
             self.language,
             multi_lang_enabled=self.multi_lang_enabled,
             preferred_service=request.stt_service,
+            **window_selection_kwargs(self, request.uid),
         )
         # The provider the serving policy chose, captured before `_create_stt_socket`
         # can walk the fallback chain. Only the *selected* value is safe to hold onto:
@@ -417,7 +419,19 @@ class ListenSessionRuntime:
             is_multi_channel=self.is_multi_channel,
             include_speech_profile=include_profile,
         ):
-            self.has_speech_profile = await self.persistence.call(get_user_has_speech_profile, request.uid)
+            # A Firestore voiceprint is sufficient for matching even if its GCS
+            # audio cache has disappeared. Only probe audio for legacy profiles
+            # whose embedding still needs to be extracted.
+            try:
+                embedding = await self.persistence.call(user_db.get_user_speaker_embedding, request.uid)
+            except Exception as error:
+                logger.error('Speaker ID user embedding availability failed type=%s', type(error).__name__)
+                embedding = None
+            self.has_speech_profile = bool(embedding) or await self.persistence.call(
+                get_user_has_speech_profile, request.uid
+            )
+            if not self.has_speech_profile:
+                logger.info('Speaker ID owner profile skipped reason=no_embedding_or_audio')
         self.state.speaker_id_enabled = should_enable_speaker_identification(
             use_custom_stt=self.use_custom_stt,
             private_cloud_sync_enabled=self.private_cloud_sync_enabled,
@@ -600,13 +614,21 @@ class ListenSessionRuntime:
             await self.persistence.call(record_dg_usage_ms, self.request.uid, self.state.dg_usage_ms_pending)
             self.state.dg_usage_ms_pending = 0
         if self.use_custom_stt:
-            # Exempt from transcription billing and live caps, but the speech
-            # still drives Omi-paid LLM post-processing — meter it in its own
-            # isolated fair-use lane so the spend is visible (#7690).
-            if FAIR_USE_ENABLED and self.receiver.vad_gate is not None:
+            # Exempt from transcription billing and live STT caps. Speech still
+            # drives Omi-paid LLM post-processing: meter the isolated fair-use
+            # lane and record speech_seconds (never transcription_seconds) so
+            # the processing budget can cap enrichment (#7690).
+            custom_speech_ms = 0
+            if self.receiver.vad_gate is not None:
                 custom_speech_ms = self.receiver.vad_gate.consume_speech_ms_delta()
-                if custom_speech_ms:
+                if FAIR_USE_ENABLED and custom_speech_ms:
                     await self.persistence.call(record_speech_ms, self.request.uid, custom_speech_ms, 'custom_stt')
+            if custom_speech_ms:
+                await self.persistence.call(
+                    record_usage,
+                    self.request.uid,
+                    speech_seconds=custom_speech_ms // 1000,
+                )
             return 0
         if not self.state.last_usage_record_timestamp:
             return 0
@@ -614,11 +636,29 @@ class ListenSessionRuntime:
         if self.receiver.vad_gate is not None:
             speech_ms = self.receiver.vad_gate.consume_speech_ms_delta()
             speech_seconds = speech_ms // 1000
+            if speech_ms and not managed_chain_enabled(self):
+                # Live provider minutes: VAD speech seconds actually sent for
+                # STT (not wall-clock, not fair-use transcription_seconds),
+                # attributed to the provider serving at flush time — failover
+                # can switch it mid-session, same read-at-use rule as
+                # _serving_provider(). The consumed delta makes each
+                # millisecond reach this counter exactly once. Custom-STT
+                # sessions returned above: their audio runs on the user's own
+                # STT and is not a provider's minutes.
+                provider = getattr(self, 'stt_service', None)
+                record_live_stt_audio_seconds(
+                    provider=getattr(provider, 'value', provider),
+                    platform=getattr(getattr(self, 'client_device_context', None), 'platform', None),
+                    seconds=speech_ms / 1000,
+                )
             if FAIR_USE_ENABLED and speech_ms:
                 await self.persistence.call(record_speech_ms, self.request.uid, speech_ms)
         now = time.time()
         seconds = billable_transcription_seconds(
-            self.state.last_usage_record_timestamp, self.state.last_audio_received_time, now
+            self.state.last_usage_record_timestamp,
+            self.state.last_audio_received_time,
+            now,
+            getattr(self.state, 'last_audio_resume_time', None),
         )
         words = self.state.words_transcribed_since_last_record
         self.state.words_transcribed_since_last_record = 0
@@ -898,4 +938,13 @@ class ListenSessionRuntime:
 
 
 async def run_listen_session(request: ListenRequest) -> None:
-    await ListenSessionRuntime(request).run()
+    runtime: Optional[ListenSessionRuntime] = None
+    try:
+        runtime = ListenSessionRuntime(request)
+        await runtime.run()
+    finally:
+        if runtime is not None and runtime.state.first_audio_byte_timestamp is None:
+            record_listen_no_audio_teardown(
+                source=request.source,
+                platform=runtime.client_device_context.platform,
+            )

@@ -1,3 +1,4 @@
+# slice-2 impersonated-mint bake trigger (2026-09-18)
 import asyncio
 import json
 import logging
@@ -36,6 +37,7 @@ from routers import (
     auto_model,
     notifications,
     speech_profile,
+    speaker_tag_prompts,
     agents,
     users,
     trends,
@@ -46,6 +48,7 @@ from routers import (
     conversations,
     conversation_mutations,
     memories,
+    memory_use,
     api_key_management,
     mcp,
     mcp_sse,
@@ -107,6 +110,7 @@ from routers import (
     csat,
     jit_rollout,
     email_preferences,
+    mobile_feedback,
 )
 from routers.listen.registry import proactive_message_dispatcher
 
@@ -115,6 +119,7 @@ from utils.observability import log_langsmith_status
 from utils.subscription import validate_stripe_price_ids
 from utils.http_client import close_all_clients
 from utils.jit_rollout import close_posthog_control_plane
+from utils.free_tier_cohort import close_free_tier_control_plane
 from utils.metrics import start_metrics_sidecar_server, stop_metrics_sidecar_server
 from utils.executors import (
     drain_background_tasks,
@@ -124,6 +129,7 @@ from utils.executors import (
 )
 from utils.executors import start_background_task
 from utils.cloud_tasks import validate_account_deletion_dispatch_configuration
+from utils.stt.streaming import validate_streaming_stt_env
 from utils.llm.managed_spend_ledger import shutdown_managed_spend_ledger
 from services.conversation_finalization import reconcile_abandoned_byok_finalization_jobs
 from services.conversation_finalization import reconcile_listen_finalization_jobs
@@ -180,6 +186,17 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=['*'],
     allow_headers=['*'],
+    expose_headers=[
+        'X-Next-Cursor',
+        'X-Scan-Truncated',
+        'X-Omi-Memory-As-Of',
+        'X-Omi-Memory-Belief-Enabled',
+        'X-Omi-Memory-Canonical-Lifecycle-Exposed',
+        'X-Omi-Memory-Default-Delete-Supported',
+        'X-Omi-Memory-Device-Scope-Supported',
+        'X-Omi-Memory-Next-Cursor',
+        'X-Omi-List-Truncated',
+    ],
 )
 
 app.include_router(transcribe.router)
@@ -205,8 +222,10 @@ app.include_router(task_integrations.router)
 app.include_router(integrations.router)
 app.include_router(x_connector.router)
 app.include_router(memories.router)
+app.include_router(memory_use.router)
 app.include_router(chat.router)
 app.include_router(speech_profile.router)
+app.include_router(speaker_tag_prompts.router)
 app.include_router(notifications.router)
 app.include_router(integration.router)
 app.include_router(agents.router)
@@ -215,6 +234,7 @@ app.include_router(referrals.router)
 app.include_router(csat.router)
 app.include_router(feedback_admin.router)
 app.include_router(email_preferences.router)
+app.include_router(mobile_feedback.router)
 app.include_router(desktop_prompts.router)
 app.include_router(conversation_finalization.router)
 app.include_router(trends.router)
@@ -304,12 +324,17 @@ from utils.byok import BYOKMiddleware
 
 app.add_middleware(BYOKMiddleware)
 
+from database.firestore_tier_context import FirestoreTierMiddleware
+
+app.add_middleware(FirestoreTierMiddleware)
+
 
 @app.on_event("startup")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def startup_event():
     start_metrics_sidecar_server()
     validate_account_deletion_dispatch_configuration()
-    asyncio.create_task(log_executor_health())
+    validate_streaming_stt_env()
+    start_background_task(log_executor_health(), name='executor_health')
     # Drain account-deletion wipes orphaned by a previous deploy/restart. Offloaded
     # to db_executor so the blocking Firestore queries don't stall event-loop startup.
     start_background_task(
@@ -459,6 +484,7 @@ async def shutdown_event():
     await shutdown_managed_spend_ledger()
     await close_all_clients()
     close_posthog_control_plane()
+    close_free_tier_control_plane()
     stop_metrics_sidecar_server()
 
 

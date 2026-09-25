@@ -82,8 +82,10 @@ APP_CLIENT_PREFIXES = (
     '/v1/paypal',
     '/v1/persons',
     '/v1/phone',
+    '/v1/mobile',
     '/v1/screen-activity',
     '/v1/screen-frame-egress',
+    '/v1/speaker-tag-prompts',
     '/v1/stripe',
     '/v1/sync',
     '/v1/task-integrations',
@@ -248,6 +250,10 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
         '/v1/conversations/{conversation_id}/finalization',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
     (
+        'POST',
+        '/v1/conversations/{conversation_id}/capture-group/separate',
+    ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
+    (
         'PATCH',
         '/v1/conversations/{conversation_id}/events',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
@@ -298,6 +304,10 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     (
         'POST',
         '/v1/conversations/{conversation_id}/reprocess',
+    ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
+    (
+        'POST',
+        '/v1/conversations/{conversation_id}/reprocess-transcription',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
     (
         'POST',
