@@ -7,9 +7,5 @@
 GOOGLE_REVERSE_CLIENT_ID=com.googleusercontent.apps.1031333818730-dusn243nct6i5rgfpfkj5mchuj1qnmde
 
 ASSET_PREFIX=prod
-BUNDLE_NAME=Omi Debug
-BUNDLE_DISPLAY_NAME=Omi Debug
-
-// Personal iPhone debug build: separate identity and callback from the App Store app.
-APP_BUNDLE_IDENTIFIER=com.friend-app-with-wearable.ios12.development
-AUTH_CALLBACK_SCHEME=omi-beta
+BUNDLE_NAME=Omi
+BUNDLE_DISPLAY_NAME=Omi

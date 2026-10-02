@@ -1,4 +1,4 @@
 {
   "kind": "none",
-  "reason": "Personal iPhone debug-install branch only; no public release behavior change."
+  "reason": "Personal iPhone install configuration only: restore production shared storage and replace Omi Debug with an untethered Release build; no public release change."
 }
