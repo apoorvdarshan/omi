@@ -639,13 +639,9 @@ Future<http.StreamedResponse> _sendMultipartWithProgress(
     cancelOnError: true,
   );
 
-  try {
-    return await HttpPoolManager.instance.sendStreaming(streamedRequest);
-  } finally {
-    // Keep cleanup on the caller's future so a handled send failure does not
-    // also escape through an unobserved whenComplete future.
-    await subscription.cancel();
-  }
+  final future = HttpPoolManager.instance.sendStreaming(streamedRequest);
+  future.whenComplete(subscription.cancel).ignore();
+  return future;
 }
 
 Future<http.MultipartRequest> _buildMultipartRequest({
