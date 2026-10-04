@@ -460,6 +460,10 @@ class OmiBleForegroundService : Service() {
      */
     fun onConnectRequest(address: String, requiresBond: Boolean, source: String) {
         val addr = address.uppercase()
+        if (source != "Dart" && bleManager.cccdReconnectPolicy.isExhausted(addr)) {
+            reportCccdRecovery(addr, "restored", exhausted = true)
+            return
+        }
         when (routeConnectRequest(serviceRunning = true, peripheralConnected = bleManager.isPeripheralConnected(addr))) {
             ConnectRequestAction.ResyncReady -> {
                 Log.i(TAG, "onConnectRequest($source): $addr already connected, re-emitting ready")
@@ -551,7 +555,13 @@ class OmiBleForegroundService : Service() {
 
         val addr = address.uppercase()
 
-        val error = BleDisconnectReason.connectionErrorFromStatus(status)
+        val cccdTimeout = status == OmiBleManager.CCCD_TIMEOUT_STATUS
+        val retrying = handleRetryLogic(addr, status)
+        val error = when {
+            cccdTimeout && !retrying -> "cccd_timeout_exhausted"
+            cccdTimeout -> "cccd_timeout"
+            else -> BleDisconnectReason.connectionErrorFromStatus(status)
+        }
 
         val managed = managedDevices[addr]
         if (managed != null && !managed.hasEverConnected && status != -1) {
@@ -570,13 +580,14 @@ class OmiBleForegroundService : Service() {
         }
 
         bleManager.mainHandler.post {
+            if (cccdTimeout) reportCccdRecovery(addr, gattHash.toString(), exhausted = !retrying)
             bleManager.flutterApi?.onPeripheralDisconnected(addr, error) {}
         }
 
         // #3328: only claim "Reconnecting..." when a retry is actually scheduled.
         // Pairing-lost (137), BT off, teardown, or status -1 never retry — an
         // honest "Disconnected" is better than a stuck reconnect nag.
-        if (handleRetryLogic(addr, status)) {
+        if (retrying) {
             updateNotification("Reconnecting...")
         } else if (!isDestroying) {
             updateNotification("Disconnected")
@@ -589,16 +600,33 @@ class OmiBleForegroundService : Service() {
 
         if (isDestroying || status == -1 || status == 137 || !isBluetoothEnabled) return false
 
+        val delayMs = bleManager.cccdReconnectPolicy.reconnectDelay(
+            addr, status == OmiBleManager.CCCD_TIMEOUT_STATUS, RECONNECT_DELAY_MS,
+        ) ?: return false
         managed.retryCount++
-        Log.i(TAG, "Retry #${managed.retryCount} for $addr in ${RECONNECT_DELAY_MS}ms (status=$status)")
+        Log.i(TAG, "Retry #${managed.retryCount} for $addr in ${delayMs}ms (status=$status)")
 
         val runnable = Runnable {
             managed.pendingReconnect = null
             connectToDevice(addr, "retry_${managed.retryCount}")
         }
         managed.pendingReconnect = runnable
-        handler.postDelayed(runnable, RECONNECT_DELAY_MS)
+        handler.postDelayed(runnable, delayMs)
         return true
+    }
+
+    private fun reportCccdRecovery(address: String, generation: String, exhausted: Boolean) {
+        val snapshot = JSONObject()
+            .put("phase", if (exhausted) "actionRequired" else "recovering")
+            .put("generation", generation)
+            .put("reason", "cccd_timeout_recovery")
+            .put("valid_until_ms", 0)
+            .put("subscription_confirmed", false)
+            .put("unverified_since_ms", System.currentTimeMillis())
+            .put("recovery_outcome", if (exhausted) "failed" else "none")
+            .put("recovery_spent", exhausted)
+            .put("reconnect_spent", exhausted)
+        bleManager.flutterApi?.onCaptureHealth(address, snapshot.toString()) {}
     }
 
     // ── Stability timer ──
@@ -776,14 +804,26 @@ class OmiBleForegroundService : Service() {
         val requiresBond = intent?.getBooleanExtra("requires_bond", false) ?: false
 
         if (address != null) {
-            manageDevice(address, requiresBond)
+            if (intent?.getStringExtra("caller") != "Dart" && bleManager.cccdReconnectPolicy.isExhausted(address)) {
+                managedDevices[address.uppercase()] = ManagedDevice(address.uppercase(), requiresBond)
+                reportCccdRecovery(address, "restored", exhausted = true)
+                updateNotification("Disconnected")
+            } else {
+                manageDevice(address, requiresBond)
+            }
         } else if (persistentMode) {
             // Restart after process death (sticky): restore the device we were managing.
             val saved = getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString(PREFS_KEY, null)
             val parts = saved?.split("|")
             if (parts?.size == 2) {
                 Log.i(TAG, "onStartCommand: restoring saved device ${parts[0]}")
-                manageDevice(parts[0], parts[1].toBoolean())
+                if (bleManager.cccdReconnectPolicy.isExhausted(parts[0])) {
+                    managedDevices[parts[0].uppercase()] = ManagedDevice(parts[0], parts[1].toBoolean())
+                    reportCccdRecovery(parts[0], "restored", exhausted = true)
+                    updateNotification("Disconnected")
+                } else {
+                    manageDevice(parts[0], parts[1].toBoolean())
+                }
             } else {
                 Log.i(TAG, "onStartCommand: no device address or saved device, stopping")
                 stopSelf()
