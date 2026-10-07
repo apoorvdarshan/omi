@@ -5,6 +5,14 @@ import org.junit.Test
 import org.json.JSONArray
 
 class DeviceDiagnosticsContractTest {
+    @Test fun `CCCD timeout retains retry and exhausted recovery reasons`() {
+        val status = OmiBleManager.CCCD_TIMEOUT_STATUS
+        assertEquals("cccd_timeout", BleDisconnectReason.connectionErrorFromStatus(status, true))
+        assertEquals("cccd_timeout_exhausted", BleDisconnectReason.connectionErrorFromStatus(status, false))
+        assertEquals("cccd_ack_timeout", BleDisconnectReason.fromStatus(status))
+        assertEquals("gatt_status_22", BleDisconnectReason.connectionErrorFromStatus(0x16, false))
+    }
+
     @Test fun `local host termination during readiness keeps its status without a pairing claim`() {
         assertEquals("gatt_status_22", BleDisconnectReason.connectionErrorFromStatus(0x16))
     }

@@ -574,11 +574,8 @@ class OmiBleForegroundService : Service() {
 
         val cccdTimeout = status == OmiBleManager.CCCD_TIMEOUT_STATUS
         val retrying = handleRetryLogic(addr, status)
-        val error = when {
-            cccdTimeout && !retrying -> "cccd_timeout_exhausted"
-            cccdTimeout -> "cccd_timeout"
-            else -> BleDisconnectReason.connectionErrorFromStatus(status)
-        }
+        val error = BleDisconnectReason.connectionErrorFromStatus(status, retrying)
+
 
         val managed = managedDevices[addr]
         if (managed != null && !managed.hasEverConnected && status != -1) {
@@ -900,6 +897,7 @@ class OmiBleForegroundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     // ── Diagnostics persistence ──
+
 
     private fun historyKey(address: String) = "${KEY_DISCONNECT_HISTORY}_${address.uppercase()}"
     private fun reconnectKey(address: String) = "${KEY_RECONNECT_COUNT}_${address.uppercase()}"

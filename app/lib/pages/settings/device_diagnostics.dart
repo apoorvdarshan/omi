@@ -106,7 +106,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
   DiagnosticsSummary get _summary => summarizeDiagnostics(
         _diagnostics?.disconnectHistory ?? const [],
         nowMs: clock.now().millisecondsSinceEpoch,
-        sinceMs: _countersSinceMs,
+        sinceMs: _countersSinceMs == null ? null : _recentWindowStart(_countersSinceMs!),
       );
 
   Future<void> _loadBatteryHistory() async {
@@ -145,6 +145,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     final disconnects = (extended['disconnect_history_v2'] as List? ?? []).whereType<Map>().toList();
     final since = extended['counters_since'] as num?;
     final sinceMs = since?.toInt() ?? DateTime.now().millisecondsSinceEpoch;
+    final windowStart = _recentWindowStart(sinceMs);
     return {
       'schema_version': 2,
       'device_id': widget.deviceId,
@@ -165,12 +166,10 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
       'fail_to_connect_count': diagnostics.failToConnectCount,
       'counters_since': {'reconnection_count': sinceMs, 'fail_to_connect_count': sinceMs},
       'reconnection_count_window': disconnects
-          .where((e) =>
-              (e['timestamp'] as num? ?? 0) >= _recentWindowStart(sinceMs) && (e['timeToReconnectMs'] as num? ?? 0) > 0)
+          .where((e) => (e['timestamp'] as num? ?? 0) >= windowStart && (e['timeToReconnectMs'] as num? ?? 0) > 0)
           .length,
       'fail_to_connect_count_window': disconnects
-          .where((e) =>
-              (e['timestamp'] as num? ?? 0) >= _recentWindowStart(sinceMs) && e['eventType'] == 'fail_to_connect')
+          .where((e) => (e['timestamp'] as num? ?? 0) >= windowStart && e['eventType'] == 'fail_to_connect')
           .length,
       'rssi_samples': extended['rssi_samples'] ?? [],
       'battery_history': extended['battery_history_v2'] ??
@@ -1142,9 +1141,7 @@ class DiagnosticsSummary {
 DiagnosticsSummary summarizeDiagnostics(List<BleDisconnectEvent> history, {required int nowMs, int? sinceMs}) {
   const hourMs = 3600 * 1000;
   const weekMs = 7 * 24 * hourMs;
-  final cutoff = nowMs - weekMs;
-  final start = sinceMs != null && sinceMs > cutoff ? sinceMs : cutoff;
-  final window = history.where((e) => e.timestamp >= start).toList();
+  final window = sinceMs == null ? history : history.where((e) => e.timestamp >= sinceMs).toList();
   final gaps = [
     for (final e in window)
       if (e.timeToReconnectMs > 0) e.timeToReconnectMs,
