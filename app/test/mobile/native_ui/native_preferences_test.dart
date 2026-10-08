@@ -17,7 +17,9 @@ import 'package:omi/gen/siri_pigeon.g.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/mobile/native_ui/ios_native_home.dart';
 import 'package:omi/models/stt_provider.dart';
+import 'package:omi/pages/onboarding/guided_voice_controller.dart';
 import 'package:omi/pages/settings/conversation_timeout_dialog.dart';
+import 'package:omi/pages/settings/settings_destinations.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/transcription/json_editor_page.dart';
 import 'package:omi/pages/settings/transcription/transcription_dialogs.dart';
@@ -32,6 +34,7 @@ import 'package:omi/services/siri_integration.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
+import '../../providers/guided_voice_controller_test.dart' show FakeVoiceIO;
 import 'native_test_host.dart';
 
 const _config = MethodChannel('com.omi.native_ui/config');
@@ -459,19 +462,36 @@ void main() {
       await tester.pump();
       expect(find.byType(templates.YearInNumbersShareTemplate), findsNothing, reason: 'the template is cleared');
 
-      expect(await _send(host, 'wrapped_share:phrases'), isNull);
-      await tester.pump();
-      expect(find.byType(templates.TopPhrasesShareTemplate), findsOneWidget);
-      for (var step = 0; step < 20 && shared.length < 2; step++) {
-        await tester.pump(const Duration(milliseconds: 100));
-        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      // Every other card shares its own template, under its own file name.
+      const files = {
+        'categories': 'omi_wrapped_categories',
+        'actions': 'omi_wrapped_actions',
+        'days': 'omi_wrapped_days',
+        'moments': 'omi_wrapped_moments',
+        'buddies': 'omi_wrapped_buddies',
+        'obsessions': 'omi_wrapped_obsessions',
+        'movies': 'omi_wrapped_movies',
+        'struggle': 'omi_wrapped_struggle',
+        'win': 'omi_wrapped_win',
+        'phrases': 'omi_wrapped_phrases',
+        'collage': 'omi_wrapped_2025',
+      };
+      for (final MapEntry(key: card, value: file) in files.entries) {
+        final before = shared.length;
+        expect(await _send(host, 'wrapped_share:$card'), isNull);
+        for (var step = 0; step < 20 && shared.length == before; step++) {
+          await tester.pump(const Duration(milliseconds: 100));
+          await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+        }
+        expect(shared, hasLength(before + 1), reason: card);
+        expect(((shared.last['paths'] as List).single as String).endsWith('/$file.png'), isTrue, reason: card);
+        await tester.pump();
       }
-      expect(shared, hasLength(2));
-      expect(File('${directory.path}/omi_wrapped_phrases.png').existsSync(), isTrue);
       await tester.pumpWidget(const SizedBox());
     });
 
-    testWidgets('a malformed result keeps the classic page', (tester) async {
+    testWidgets('a malformed result keeps the classic page, which fails on it exactly as without the flag',
+        (tester) async {
       await pumpWrapped(
           tester,
           () => respond(WrappedStatus.done, result: {
@@ -483,7 +503,7 @@ void main() {
       expect(tester.takeException(), isA<TypeError>());
     });
 
-    testWidgets('polling stops on a session change and never applies a stale result', (tester) async {
+    testWidgets('polling stops on a session change, even with a poll in flight', (tester) async {
       final host = NativeTestHost.install();
       var fetches = 0;
       Completer<Wrapped2025Response?>? pending;
@@ -499,15 +519,42 @@ void main() {
       expect(fetches, 2, reason: 'the first poll is in flight');
 
       final previous = AuthService.installLocalHarnessTokenGateway(const _AnotherOwner());
-      addTearDown(() => AuthService.installLocalHarnessTokenGateway(previous));
+      addTearDown(() {
+        AuthService.installLocalHarnessTokenGateway(previous);
+        AuthService.instance.captureSessionSnapshot();
+      });
       AuthService.instance.captureSessionSnapshot();
       pending!.complete(Wrapped2025Response(status: WrappedStatus.done, result: _wrappedResult));
       await tester.pump();
       await tester.pump(const Duration(seconds: 10));
 
       expect(fetches, 2, reason: 'no poll after the session changed');
-      expect(find.byType(templates.YearInNumbersShareTemplate), findsNothing);
       await tester.pumpWidget(const SizedBox());
+    });
+  });
+
+  group('Voice profile from Settings', () {
+    testWidgets('the native guided voice screen carries the route back row', (tester) async {
+      final host = NativeTestHost.install();
+      final flow = GuidedVoiceController(FakeVoiceIO());
+      addTearDown(flow.dispose);
+      await tester.pumpWidget(NativeTestHost.app(VoiceProfileRoute(controller: flow)));
+      await NativeTestHost.settle(tester);
+
+      expect(find.byType(UiKitView), findsOneWidget);
+      expect(find.byType(AppBar), findsNothing);
+      expect(_rows(_snapshot(host))['voice_profile_back']!['symbol'], 'chevron.left');
+    });
+
+    testWidgets('without the native renderer the original page chrome stays', (tester) async {
+      final flow = GuidedVoiceController(FakeVoiceIO());
+      addTearDown(flow.dispose);
+      await tester.pumpWidget(NativeTestHost.app(VoiceProfileRoute(controller: flow)));
+      await tester.pump();
+
+      expect(find.byType(UiKitView), findsNothing);
+      expect(find.byType(AppBar), findsOneWidget);
+      expect(find.byType(OmiBackButton), findsOneWidget);
     });
   });
 

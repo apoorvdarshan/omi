@@ -312,8 +312,9 @@ extension _Wrapped2025Native on _Wrapped2025PageState {
               ].join('\n')),
         label('wrapped_collage_obsessions', l10n.wrappedObsessionsLabelUpper,
             subtitle: [
-              for (final (key, emoji, _) in obsessionRows)
-                if (key != 'book') '$emoji ${obsession(key)}',
+              // The collage's own order and placeholder.
+              for (final (key, emoji) in [('show', '📺'), ('movie', '🎬'), ('food', '🍕'), ('celebrity', '⭐')])
+                '$emoji ${_capitalizeWords(_wrappedText(obsessions, key) ?? '-')}',
             ].join('\n')),
         label('wrapped_collage_struggle', l10n.wrappedStruggleLabelUpper, subtitle: struggle),
         label('wrapped_collage_win', l10n.wrappedWinLabelUpper, subtitle: win),

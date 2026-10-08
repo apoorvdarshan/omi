@@ -55,17 +55,22 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
   // The native list draws Apple's ShortcutsLink itself only when this host compiled it in; it is
   // resolved once. Until then, and without it, the Shortcuts card keeps the classic page.
   bool _shortcutsLinkCapable = false;
-
-  Future<void> _loadShortcutsLinkCapability() async {
-    final capabilities = await nativeUiCapabilities();
-    if (mounted && capabilities.contains('shortcuts_link')) setState(() => _shortcutsLinkCapable = true);
-  }
+  late final Future<bool> _shortcutsLinkCapability = _shortcutsHintSupported
+      ? nativeUiCapabilities().then((capabilities) => capabilities.contains('shortcuts_link'))
+      : Future.value(false);
 
   Future<void> _loadAppShortcutsAvailability() async {
     final revision = _siriRevision;
     try {
       final available = await SiriIntegration.current.appShortcutsAvailable();
-      if (mounted && revision == _siriRevision) setState(() => _appShortcutsAvailable = available);
+      // Both answers land together, so the card never flips between the classic and native lists.
+      final linkCapable = await _shortcutsLinkCapability;
+      if (mounted && revision == _siriRevision) {
+        setState(() {
+          _appShortcutsAvailable = available;
+          _shortcutsLinkCapable = linkCapable;
+        });
+      }
     } catch (_) {
       // Fail closed: leave the card hidden when the bridge cannot answer.
     }
@@ -94,7 +99,6 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
     PlatformManager.instance.analytics.dataPrivacyPageOpened();
     if (_isIOS) _loadSiriSetting();
     if (_shortcutsHintSupported) _loadAppShortcutsAvailability();
-    if (_shortcutsHintSupported) unawaited(_loadShortcutsLinkCapability());
   }
 
   Widget _buildEncryptionBanner(BuildContext context) {

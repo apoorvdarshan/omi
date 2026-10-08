@@ -89,7 +89,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('the import modal pastes from a fake clipboard and re-presents it', (tester) async {
+    testWidgets('import modal Dart paste loop (smoke): a fake clipboard re-presents the pasted text', (tester) async {
       await JourneyHermeticBoot.start(extraPrefs: {'appearanceMode': 'dark'});
       addTearDown(JourneyHermeticBoot.stop);
       const json = '{"provider":"custom"}';
