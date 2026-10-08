@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -84,8 +85,13 @@ class _Routes extends NavigatorObserver {
   void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) => pops++;
 
   /// The page the last pushed route builds, without building it.
-  Widget lastPage(WidgetTester tester) =>
-      (pushed.last as MaterialPageRoute).builder(tester.element(find.byType(Navigator).first));
+  Widget lastPage(WidgetTester tester) {
+    final context = tester.element(find.byType(Navigator).first);
+    return switch (pushed.last) {
+      MaterialPageRoute(:final builder) || CupertinoPageRoute(:final builder) => builder(context),
+      final route => throw TestFailure('Unexpected route $route'),
+    };
+  }
 }
 
 /// Answers each native 'present' with the next reply; an activity stays up until it is dismissed.
@@ -143,10 +149,11 @@ void main() {
     final current = surface(tester);
     return [...current.toolbar, ...current.sections.expand((section) => section.rows)]
         .where((row) => row.id == id)
-        .firstOrNull;
+        .singleOrNull;
   }
 
   Future<_Routes> pump(WidgetTester tester, Widget page, AppProvider provider) async {
+    addTearDown(provider.dispose);
     final routes = _Routes();
     await tester.pumpWidget(MultiProvider(
         providers: [

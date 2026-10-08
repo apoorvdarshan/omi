@@ -52,7 +52,7 @@ App _ownedApp() => App(
       ];
 
 /// Answers the reply editor with [reply] and keeps activities and toasts inert, standing in for the
-/// person; the reply itself still goes through ReviewsListPage's sender.
+/// person; the reply itself goes through the existing HTTP owner to the fixture backend.
 void _answerReplyEditor(String reply) {
   final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
   final activities = <Completer<Object?>>[];
@@ -90,14 +90,11 @@ Future<void> _settle(WidgetTester tester) async {
 void main() {
   runNativeHostSuite((checkNativeHost) {
     testWidgets('native app detail opens the native reviews sheet, the full list and an owner reply', (tester) async {
-      await JourneyHermeticBoot.start(extraPrefs: {'appearanceMode': 'dark'});
+      final backend = await JourneyHermeticBoot.start(extraPrefs: {'appearanceMode': 'dark'});
       addTearDown(JourneyHermeticBoot.stop);
-      final sent = <(String, String, String)>[];
-      ReviewsListPage.debugReplySenderForTest = (appId, reply, reviewer) async {
-        sent.add((appId, reply, reviewer));
-        return true;
-      };
-      addTearDown(() => ReviewsListPage.debugReplySenderForTest = null);
+      const replyPath = '/v1/apps/native-catalog-fixture/review/reply';
+      // The fixture backend accepts the reply, so the existing HTTP owner sends it for real.
+      backend.failNext('PATCH', replyPath, status: 200);
       final app = _ownedApp();
       await primeNetworkImages(tester, [app.image]);
       await tester.pumpWidget(nativeHostApp(AppDetailPage(app: app), providers: [
@@ -120,8 +117,12 @@ void main() {
       _answerReplyEditor('  Thank you!  ');
       unawaited(Future.sync(() => nativeProjectedRow(tester, 'review_reply:0').action!(null)));
       await _settle(tester);
-      expect(sent, [('native-catalog-fixture', 'Thank you!', 'reviewer-one')]);
+      expect(backend.countOf('PATCH', replyPath), 1);
+      expect(app.reviews.first.response, 'Thank you!');
       expect(nativeProjectedRow(tester, 'review_reply:0').title, _l10n.editReply);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('native reviews sheet and app options sheet', (tester) async {
@@ -132,12 +133,17 @@ void main() {
           Scaffold(body: RecentReviewsSection(nativePage: true, app: app, reviews: app.reviews.take(3).toList()))));
       await checkNativeHost(tester, 'native-app-catalog-reviews-sheet-dark');
       expect(nativeProjectedRow(tester, 'app_reviews_all').kind, 'navigation');
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
 
       await tester.pumpWidget(nativeHostApp(Scaffold(body: ShowAppOptionsSheet(app: app, nativeTitle: app.name))));
       await checkNativeHost(tester, 'native-app-catalog-reviews-app-options-dark');
       expect(nativeProjectedRow(tester, 'app_keep_public').kind, 'toggle');
       expect(nativeProjectedRow(tester, 'app_manage').title, _l10n.manageApp);
       expect(nativeProjectedRow(tester, 'app_delete').destructive, isTrue);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('native capability and category app lists', (tester) async {
@@ -160,6 +166,8 @@ void main() {
               ))));
       await checkNativeHost(tester, 'native-app-catalog-reviews-capability-dark');
       expect(nativeProjectedRow(tester, 'group_0_0').kind, 'navigation');
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
 
       await tester.pumpWidget(nativeHostApp(CategoryAppsPage(
           category: Category(title: 'Productivity', id: 'productivity'),
@@ -169,6 +177,7 @@ void main() {
       expect(nativeProjectedRow(tester, 'apps_0').kind, 'navigation');
       await tester.pumpWidget(const SizedBox());
       await tester.pump();
+      expect(tester.takeException(), isNull);
     });
   });
 }
