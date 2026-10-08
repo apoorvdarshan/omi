@@ -47,6 +47,9 @@ struct NativeSurfaceRow: Decodable, Equatable, Identifiable {
         }
     }
     let blocks: [RichBlock]?
+    /// A 'level' control's lower bound (default 0) and optional grid step; no other kind takes them.
+    let minimumValue: Double?
+    let step: Double?
 
     func replacingValue(_ value: Value?) -> Self {
         Self(id: id, title: title, kind: kind, subtitle: subtitle, value: value,
@@ -55,7 +58,21 @@ struct NativeSurfaceRow: Decodable, Equatable, Identifiable {
              optionSearch: optionSearch, optionClose: optionClose, keypadMode: keypadMode,
              eraseLabel: eraseLabel, clearLabel: clearLabel, plainText: plainText, imageUri: imageUri,
              level: level, maximumValue: maximumValue, visibilityEnabled: visibilityEnabled,
-             visibilityHiddenEnabled: visibilityHiddenEnabled, points: points, blocks: blocks)
+             visibilityHiddenEnabled: visibilityHiddenEnabled, points: points, blocks: blocks,
+             minimumValue: minimumValue, step: step)
+    }
+
+    /// Mirrors NativeRow.accepts in Dart: a finite number within minimumValue (default 0) and
+    /// maximumValue, on the step grid when one is set. A degenerate range or grid accepts nothing.
+    func acceptsLevel(_ number: Double) -> Bool {
+        let minimum = minimumValue ?? 0
+        guard kind == "level", let maximumValue, minimum.isFinite, maximumValue.isFinite, maximumValue > minimum,
+              number.isFinite, number >= minimum, number <= maximumValue else { return false }
+        guard let step else { return true }
+        guard step.isFinite, step > 0, step <= maximumValue - minimum,
+              (maximumValue - minimum) / step <= 1000 else { return false }
+        let steps = (number - minimum) / step
+        return abs(steps - steps.rounded()) < 1e-6
     }
 
 
@@ -65,6 +82,9 @@ struct NativeSurfaceRow: Decodable, Equatable, Identifiable {
         case "slider", "progress":
             guard case let .number(number) = value, let maximumValue else { return false }
             return number.isFinite && maximumValue.isFinite && maximumValue > 0 && (0...maximumValue).contains(number)
+        case "level":
+            guard case let .number(number) = value else { return false }
+            return acceptsLevel(number)
         case "keypad":
             guard case let .text(text) = value else { return false }
             return text.count <= 10000 && ["dialer", "dtmf"].contains(keypadMode ?? "")
@@ -195,12 +215,12 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
               Set(snapshot.sections.map(\.id)).count == snapshot.sections.count,
               Set(ids).count == ids.count, !ids.contains(where: { $0.isEmpty || $0.hasPrefix("_") }),
               rows.allSatisfy({ row in
-                  ["label", "button", "navigation", "transcript", "rich_text", "image", "toggle", "task", "choice", "segmented", "color", "text", "menu", "date", "message_user", "message_ai", "chart", "waveform", "keypad", "slider", "progress"].contains(row.kind)
+                  ["label", "button", "navigation", "transcript", "rich_text", "image", "toggle", "task", "choice", "segmented", "color", "text", "menu", "date", "message_user", "message_ai", "chart", "waveform", "keypad", "slider", "progress", "level"].contains(row.kind)
                       && Set(row.options.map(\.id)).count == row.options.count
                       && row.options.allSatisfy({ !$0.id.isEmpty })
                       && row.hasValidValue
                       && ((row.blocks ?? []).isEmpty || (row.kind == "rich_text" && row.blocks?.allSatisfy(\.valid) == true))
-                      && (row.maximumValue == nil || ["slider", "progress", "image"].contains(row.kind))
+                      && (row.maximumValue == nil || ["slider", "progress", "image", "level"].contains(row.kind))
                       && (row.plainText != true || ["message_ai", "message_user"].contains(row.kind))
                       && (row.kind == "keypad" || (row.keypadMode == nil && row.eraseLabel == nil && row.clearLabel == nil))
                       && row.hasValidImageURI
@@ -215,6 +235,10 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
                       && (row.kind != "waveform" || (row.points ?? []).allSatisfy { abs($0.y) <= 1 })
                       && Set((row.points ?? []).map(\.x)).count == (row.points ?? []).count
               }) else { throw ContractError.invalidSnapshot }
+        // Bounds and steps belong to the level control only, as in NativeRow.valid.
+        guard rows.allSatisfy({ ($0.minimumValue == nil && $0.step == nil) || $0.kind == "level" }) else {
+            throw ContractError.invalidSnapshot
+        }
         return snapshot
     }
     enum ContractError: Error { case invalidSnapshot }

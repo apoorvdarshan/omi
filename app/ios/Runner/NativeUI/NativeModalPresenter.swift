@@ -51,6 +51,8 @@ final class NativeModalPresenter: NSObject, UIAdaptivePresentationControllerDele
         guard snapshot.chat == nil, !snapshot.toolbar.isEmpty,
               snapshot.toolbar.allSatisfy({ $0.kind == "button" }),
               snapshot.toolbar.contains(where: { $0.id == cancelID && $0.enabled }) else { throw PresentationError.invalid }
+        // Modals edit text, switches and choices only; a level control keeps the caller's Flutter dialog.
+        guard !snapshot.allRows.contains(where: { $0.kind == "level" }) else { throw PresentationError.invalid }
         var parent = root
         while let presented = parent.presentedViewController { parent = presented }
         guard parent.viewIfLoaded?.window != nil, !parent.isBeingDismissed else {

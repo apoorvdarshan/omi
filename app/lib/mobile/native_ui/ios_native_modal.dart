@@ -44,6 +44,8 @@ Future<NativeModalResult?> showIosNativeModal(
   final rows = [...actions, ...sections.expand((section) => section.rows)];
   // An unrepresentable request keeps the caller's complete Flutter dialog.
   if (rows.any((row) => !row.valid) || rows.map((row) => row.id).toSet().length != rows.length) return null;
+  // Modals edit text, switches and choices only; a level control keeps the Flutter dialog too.
+  if (rows.any((row) => row.kind == 'level')) return null;
   final ticket = _PresentationTicket();
   final owner = AuthService.instance.captureSessionSnapshot();
   var sessionValid = true;

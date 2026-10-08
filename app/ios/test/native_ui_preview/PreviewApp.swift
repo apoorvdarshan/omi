@@ -133,6 +133,7 @@ final class PreviewHarness: ObservableObject {
     var raw: [String: Any]
     var lastDraft = ""
     var keysSent = ""
+    var levelSends = 0
     func burstKeys() {
         Task {
             let first = Task { await surface.send("keypad", value: "1") }
@@ -165,7 +166,12 @@ final class PreviewHarness: ObservableObject {
         guard let self else { return }
         // Visibility notifications do not change fixture content or erase a command receipt.
         if id.hasPrefix("_visible:") || id.hasPrefix("_hidden:") { return }
+        // Every commit that reaches the owner is counted, so a test proves dragging sent nothing.
+        if id == "led_brightness" { self.levelSends += 1; self.lastSaved = "level-sends:\(self.levelSends)" }
         try await Task.sleep(nanoseconds: 200_000_000)
+        if ProcessInfo.processInfo.arguments.contains("failed-level") && id == "led_brightness" {
+            throw NSError(domain: "Fixture", code: 3)
+        }
         if ProcessInfo.processInfo.arguments.contains("failed-key") && id == "keypad" {
             throw NSError(domain: "Fixture", code: 2)
         }
@@ -193,6 +199,10 @@ final class PreviewHarness: ObservableObject {
                         let previous = rows[rowIndex]["value"] as? String ?? ""
                         rows[rowIndex]["value"] = key == "clear" ? "" : key == "erase" ? String(previous.dropLast()) : previous + key
                     } else if ["text", "toggle", "choice", "slider"].contains(rows[rowIndex]["kind"] as? String ?? "") { rows[rowIndex]["value"] = value }
+                    else if rows[rowIndex]["kind"] as? String == "level", let level = value as? Double {
+                        rows[rowIndex]["value"] = level
+                        rows[rowIndex]["subtitle"] = "\(Int(level))%"
+                    }
                 }
                 sections[index]["rows"] = rows
             }
@@ -386,6 +396,14 @@ final class PreviewHarness: ObservableObject {
                     row("task_open", "Review the native screens", "task", value: false, options: ["open", "delete"]),
                 ]],
             ]
+        }
+        if ProcessInfo.processInfo.arguments.contains("level") {
+            surfaceRaw["title"] = "Device"
+            surfaceRaw["searchEnabled"] = false
+            surfaceRaw["sections"] = [["id": "device", "title": "Light", "footer": "", "rows": [
+                ["id": "led_brightness", "title": "LED Brightness", "kind": "level", "subtitle": "50%", "value": 50.0,
+                 "maximumValue": 100.0, "step": 25.0, "options": [], "enabled": true, "destructive": false]
+            ]]]
         }
         if ProcessInfo.processInfo.arguments.contains("chat") {
             surfaceRaw["title"] = "Ask Omi"
