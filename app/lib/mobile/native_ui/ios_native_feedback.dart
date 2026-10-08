@@ -26,25 +26,15 @@ const nativeToastSymbols = {
 };
 
 /// Icons OmiFeedback callers pass, with their native symbols. Today only Icons.person_outline and
-/// Icons.tv_outlined are passed (speaker_tag_prompt_card.dart); the delete glyphs are the undo default.
-/// Any other icon shows its kind's default symbol.
+/// Icons.tv_outlined are passed (speaker_tag_prompt_card.dart); delete glyphs show the trash. Any other icon
+/// shows its kind's default symbol.
 final _iconSymbols = <IconData, String>{
-  Icons.person: 'person',
   Icons.person_outline: 'person',
-  Icons.person_outlined: 'person',
-  Icons.person_rounded: 'person',
-  Icons.person_outline_rounded: 'person',
-  Icons.tv: 'tv',
   Icons.tv_outlined: 'tv',
-  Icons.tv_rounded: 'tv',
   Icons.delete: 'trash',
   Icons.delete_outline: 'trash',
-  Icons.delete_outlined: 'trash',
-  Icons.delete_rounded: 'trash',
   Icons.delete_outline_rounded: 'trash',
   Icons.delete_forever: 'trash',
-  Icons.delete_forever_outlined: 'trash',
-  Icons.delete_forever_rounded: 'trash',
 };
 
 /// The symbol for a toast of [kind] that OmiFeedback would draw with [icon].
@@ -131,6 +121,8 @@ class NativeToastRequest {
     bool label(String? value) => value == null || value.characters.isNotEmpty && value.characters.length <= 40;
     final length = message.characters.length;
     return requestId >= 0 &&
+        _toastSession.isNotEmpty &&
+        _toastSession.length <= 64 &&
         length >= 1 &&
         length <= 1000 &&
         !message.contains('\u0000') &&
@@ -160,7 +152,10 @@ abstract final class NativeFeedbackHost {
   static bool get active => _supported || kDebugMode && _debugActive;
 
   /// Called by [supportsIosSwiftUi] once the host confirmed the renderer.
-  static void confirmSupported() => _supported = true;
+  static void confirmSupported() {
+    _supported = true;
+    _watchSession();
+  }
 
   /// Debug-only: hermetic tests present toasts through a mocked config channel.
   @visibleForTesting
@@ -179,6 +174,15 @@ var _lastSentRequestId = -1;
 var _sessionEpoch = 0;
 StreamSubscription<int>? _sessionChanges;
 
+/// Watches the account session for the rest of the process, from the support check or the first toast: a
+/// change dismisses the toast.
+void _watchSession() {
+  _sessionChanges ??= AuthService.instance.sessionGenerationEvents.listen((_) {
+    _sessionEpoch++;
+    unawaited(dismissIosNativeToast());
+  });
+}
+
 /// Presents [request] natively and completes when the toast ends. Null means it was not presented: the
 /// host is inactive or older, or [request] is invalid or older than one already sent, so the caller shows
 /// its Flutter toast. An account-session change dismisses the toast; an answer after one is
@@ -186,11 +190,7 @@ StreamSubscription<int>? _sessionChanges;
 Future<NativeToastOutcome?> showIosNativeToast(NativeToastRequest request) async {
   if (!NativeFeedbackHost.active || !request.valid || request.requestId <= _lastSentRequestId) return null;
   _lastSentRequestId = request.requestId;
-  // The first toast watches the account session for the rest of the process.
-  _sessionChanges ??= AuthService.instance.sessionGenerationEvents.listen((_) {
-    _sessionEpoch++;
-    unawaited(dismissIosNativeToast());
-  });
+  _watchSession();
   final epoch = _sessionEpoch;
   final answer = Completer<Object?>();
   final watchdog = Timer(Duration(milliseconds: request.durationMs) + _outcomeGrace, () {

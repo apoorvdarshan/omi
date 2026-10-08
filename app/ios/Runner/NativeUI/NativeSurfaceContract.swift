@@ -258,7 +258,7 @@ struct NativeToastRequest: Decodable, Equatable {
               Self.symbols.contains(symbol), (symbol == "progress") == (kind == "progress"),
               kind == "undo" ? actionLabel != nil : (kind == "error" || actionLabel == nil),
               (closeLabel != nil) == (kind == "error"), label(actionLabel), label(closeLabel),
-              bottomClearance.isFinite, (0...240).contains(bottomClearance),
+              bottomClearance.isFinite, (0.0...240.0).contains(bottomClearance),
               ["system", "light", "dark"].contains(appearance), !locale.isEmpty,
               ["ltr", "rtl"].contains(direction) else { throw ContractError.invalidToast }
     }

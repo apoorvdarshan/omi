@@ -270,13 +270,15 @@ struct NativeSurfaceTests {
             return try NativeToastRequest.decode(input)
         }
         var order = NativeToastOrder()
-        let sequence = [(try toast(5, "process-a"), true), (try toast(5, "process-a"), false),
-                        (try toast(4, "process-a"), false), (try toast(6, "process-a"), true),
-                        // A restarted engine starts a new sequence instead of being refused for good.
-                        (try toast(0, "process-b"), true), (try toast(0, "process-b"), false),
-                        (try toast(1, "process-b"), true)]
+        // A restarted engine (process-b) starts a new sequence instead of being refused for good.
+        let sequence: [(NativeToastRequest, Bool)] = try [
+            (toast(5, "process-a"), true), (toast(5, "process-a"), false), (toast(4, "process-a"), false),
+            (toast(6, "process-a"), true), (toast(0, "process-b"), true), (toast(0, "process-b"), false),
+            (toast(1, "process-b"), true),
+        ]
         for (index, (request, accepted)) in sequence.enumerated() {
-            precondition(order.accept(request) == accepted, "Toast order step \(index)")
+            let result = order.accept(request)
+            precondition(result == accepted, "Toast order step \(index)")
         }
     }
 

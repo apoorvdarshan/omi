@@ -223,6 +223,16 @@ void main() {
       });
     }
 
+    testWidgets('an Undo whose callback throws still resolves true and reports the error', (tester) async {
+      final presenter = _activate()..reply = (_) => 'action';
+      final context = await _pumpFeedback(tester);
+      final undone = OmiFeedback.undo(context, 'Task deleted', onUndo: () => throw StateError('restore failed'));
+      await tester.pump();
+      expect(await undone, isTrue);
+      expect(tester.takeException(), isStateError);
+      expect(presenter.toasts, hasLength(1));
+    });
+
     testWidgets('an error runs onAction exactly once for action', (tester) async {
       final presenter = _activate()..reply = (_) => 'action';
       final context = await _pumpFeedback(tester);

@@ -92,7 +92,7 @@ abstract final class OmiFeedback {
         actionLabel: context.l10n.undo,
         onAction: onUndo,
         icon: icon,
-      );
+      ).catchError(_nativeFailed);
     }
     final controller = _show(
       context,
@@ -134,7 +134,7 @@ abstract final class OmiFeedback {
         onAction: onAction,
         showClose: showClose,
         icon: icon,
-      ));
+      ).catchError(_nativeFailed));
       return null;
     }
     final messenger = ScaffoldMessenger.maybeOf(context);
@@ -217,8 +217,19 @@ abstract final class OmiFeedback {
       return await messenger.showSnackBar(fallback).closed == SnackBarClosedReason.action;
     }
     if (outcome != NativeToastOutcome.action || !hasAction) return false;
-    onAction();
+    // The reader took the action even if it throws, as when a SnackBar's action handler throws.
+    try {
+      onAction();
+    } catch (error, stack) {
+      _nativeFailed(error, stack);
+    }
     return true;
+  }
+
+  /// Reports a native toast failure like a gesture callback's; the toast counts as not acted on.
+  static bool _nativeFailed(Object error, StackTrace stack) {
+    FlutterError.reportError(FlutterErrorDetails(exception: error, stack: stack, library: 'omi feedback'));
+    return false;
   }
 
   /// The snackbar [OmiFeedback] shows; public for tests and for [ScaffoldMessenger] owners that

@@ -157,6 +157,7 @@ private final class ToastFixtureController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        _ = presenter // Observe keyboard frames before any field can focus, as AppDelegate does at launch.
         let child = UIHostingController(rootView: ToastFixtureControls(model: model, prefix: "toast"))
         addChild(child)
         child.view.frame = view.bounds

@@ -513,16 +513,17 @@ final class PreviewUITests: XCTestCase {
         app.buttons["toast-progress"].tap()
         let toast = app.otherElements["native-toast"]
         XCTAssertTrue(toast.waitForExistence(timeout: 5))
+        // Coordinate taps test real touch pass-through rather than the accessibility hit test.
         let background = app.buttons["toast-background"]
-        background.tap()
-        background.tap()
+        background.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        background.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         waitForLabel(background, "Background 2")
         XCTAssertTrue(toast.exists, "A touch outside the toast leaves it up")
         XCTAssertEqual(app.staticTexts["toast-outcomes"].label, "none")
         app.buttons["toast-dismiss"].tap()
         waitForLabel(app.staticTexts["toast-outcomes"], "1:invalidated")
         XCTAssertTrue(waitForDisappearance(toast))
-        background.tap()
+        background.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         waitForLabel(background, "Background 3")
     }
 
@@ -544,6 +545,10 @@ final class PreviewUITests: XCTestCase {
         let close = app.buttons["native-toast-close"]
         XCTAssertTrue(close.waitForExistence(timeout: 5))
         XCTAssertEqual(close.label, "Close")
+        // The replaced capsule leaves with a short transition; wait until only the new action remains.
+        let single = NSPredicate { _, _ in app.buttons.matching(identifier: "native-toast-action").count == 1 }
+        expectation(for: single, evaluatedWith: nil)
+        waitForExpectations(timeout: 5)
         XCTAssertEqual(app.buttons["native-toast-action"].label, "Try Again")
         capture(app, "native-toast-error")
         close.tap()

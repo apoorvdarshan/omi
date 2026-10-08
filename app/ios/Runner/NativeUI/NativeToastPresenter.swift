@@ -158,17 +158,24 @@ private final class NativeToastWindow: UIWindow {
 
     required init?(coder: NSCoder) { return nil }
 
-    /// A tap on the toast never takes the key window, so a focused field below keeps its keyboard.
-    override var canBecomeKey: Bool { false }
+    /// The toast never keeps the key window, so a focused field below keeps its keyboard.
+    override func becomeKey() {
+        super.becomeKey()
+        host.appWindow?.makeKey()
+    }
 
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         guard model.frame.contains(point) else { return nil }
         return super.hitTest(point, with: event)
     }
 
+    /// The keyboard's last screen frame, kept so a safe-area change recomputes its overlap.
+    private var keyboardFrame = CGRect.null
+
     override func safeAreaInsetsDidChange() {
         super.safeAreaInsetsDidChange()
         model.safeBottom = safeAreaInsets.bottom
+        updateKeyboard(keyboardFrame)
     }
 
     func show(_ request: NativeToastRequest, keyboard: CGRect) {
@@ -185,6 +192,7 @@ private final class NativeToastWindow: UIWindow {
     func hide() { model.hide() }
 
     func updateKeyboard(_ frame: CGRect) {
+        keyboardFrame = frame
         guard !frame.isNull, let screen = windowScene?.screen else { model.keyboard = 0; return }
         let local = convert(frame, from: screen.coordinateSpace)
         model.keyboard = max(0, bounds.maxY - local.minY - safeAreaInsets.bottom)
@@ -218,12 +226,14 @@ struct NativeToastView: View {
                     .id(request.requestId)
                     .padding(.horizontal, 16)
                     .padding(.bottom, model.bottomOffset)
-                    .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+                    .transition(reduceMotion ? AnyTransition.opacity
+                        : AnyTransition.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .animation(reduceMotion ? .easeInOut(duration: 0.2) : .spring(response: 0.35, dampingFraction: 0.86),
+        .animation(reduceMotion ? Animation.easeInOut(duration: 0.2)
+                       : Animation.spring(response: 0.35, dampingFraction: 0.86),
                    value: model.request?.requestId)
-        .animation(.easeOut(duration: 0.25), value: model.bottomOffset)
+        .animation(reduceMotion ? nil : Animation.easeOut(duration: 0.25), value: model.bottomOffset)
         .onPreferenceChange(NativeToastFramePreference.self) { frames in model.frames = frames }
         .ignoresSafeArea(.all, edges: .bottom)
     }
@@ -234,6 +244,7 @@ private struct NativeToastCapsule: View {
     let request: NativeToastRequest
     @ObservedObject var model: NativeToastModel
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var drag: CGFloat = 0
 
     var body: some View {
@@ -256,7 +267,9 @@ private struct NativeToastCapsule: View {
                     if value.translation.height > 24 {
                         model.finish(request.requestId, "swiped")
                     } else {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { drag = 0 }
+                        withAnimation(reduceMotion ? nil : Animation.spring(response: 0.3, dampingFraction: 0.8)) {
+                            drag = 0
+                        }
                     }
                 })
             .accessibilityElement(children: .contain)
@@ -269,11 +282,21 @@ private struct NativeToastCapsule: View {
     @ViewBuilder private var content: some View {
         if dynamicTypeSize.isAccessibilitySize {
             VStack(alignment: .leading, spacing: 4) {
-                HStack(alignment: .firstTextBaseline, spacing: 12) { icon; message }.padding(.top, 8)
-                HStack(spacing: 4) { Spacer(minLength: 0); controls }
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    icon
+                    message
+                }.padding(.top, 8)
+                HStack(spacing: 4) {
+                    Spacer(minLength: 0)
+                    controls
+                }
             }
         } else {
-            HStack(spacing: 12) { icon; message; controls }.frame(minHeight: 44)
+            HStack(spacing: 12) {
+                icon
+                message
+                controls
+            }.frame(minHeight: 44)
         }
     }
 
