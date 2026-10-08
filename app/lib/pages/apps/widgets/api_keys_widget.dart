@@ -3,16 +3,26 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/mobile/native_ui/ios_native_secret.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
+import 'package:omi/services/auth/auth_token_result.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'app_form_fields.dart';
 
+part 'api_keys_native.dart';
+
 class ApiKeysWidget extends StatefulWidget {
   final String appId;
 
-  const ApiKeysWidget({super.key, required this.appId});
+  /// The whole Developer API page for this app (its own Scaffold), rather than the card inside the
+  /// app form. With native presentation it is a native list over the same key owner.
+  final bool page;
+
+  const ApiKeysWidget({super.key, required this.appId, this.page = false});
 
   @override
   State<ApiKeysWidget> createState() => _ApiKeysWidgetState();
@@ -22,6 +32,12 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
   bool _isLoading = false;
   String? _deletingKeyId;
   AppApiKey? _newKey;
+  bool _creating = false;
+
+  /// The app and account whose keys the provider last finished loading. The provider's list is
+  /// shared between apps, so the native list shows it only for this app and the current session.
+  String? _loadedFor;
+  AuthSessionSnapshot? _loadedOwner;
 
   @override
   void initState() {
@@ -32,6 +48,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
   }
 
   Future<void> _loadApiKeys() async {
+    final owner = nativePresentationEnabled ? AuthService.instance.captureSessionSnapshot() : null;
     setState(() {
       _isLoading = true;
     });
@@ -42,14 +59,28 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
       if (mounted) {
         setState(() {
           _isLoading = false;
+          if (_sessionCurrent(owner)) {
+            _loadedFor = widget.appId;
+            _loadedOwner = owner;
+          }
         });
       }
     }
   }
 
+  bool _sessionCurrent(AuthSessionSnapshot? owner) =>
+      owner != null && AuthService.instance.isSessionSnapshotCurrent(owner);
+
+  void _update(VoidCallback update) {
+    if (mounted) setState(update);
+  }
+
   Future<void> _createApiKey() async {
+    final owner = nativePresentationEnabled ? AuthService.instance.captureSessionSnapshot() : null;
     try {
       final result = await Provider.of<AddAppProvider>(context, listen: false).createApiKey(widget.appId);
+      // With native presentation, a key created for an account that has since signed out is never shown.
+      if (nativePresentationEnabled && !_sessionCurrent(owner)) return;
       _newKey = result;
       if (mounted) _showNewKeyDialog();
     } catch (e) {
@@ -111,7 +142,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
     final l10n = context.l10n;
     final provider = Provider.of<AddAppProvider>(context);
 
-    return AppFormCard(
+    final card = AppFormCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -178,6 +209,10 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
         ],
       ),
     );
+    if (!widget.page) return card;
+    final classic =
+        Scaffold(appBar: AppBar(title: Text(l10n.developerApi), leading: const OmiBackButton()), body: card);
+    return _nativeApiKeysSurface(provider, classic);
   }
 
   Widget _buildNewKeyContent(BuildContext dialogContext) {

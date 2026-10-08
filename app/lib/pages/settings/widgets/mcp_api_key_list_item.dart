@@ -57,15 +57,18 @@ class McpApiKeyListItem extends StatelessWidget {
   }
 
   /// Revoking a key cannot be undone, so it is confirmed every time (docs/ux-contract.md §4).
-  Future<void> _confirmRevoke(BuildContext context) async {
-    final provider = Provider.of<McpProvider>(context, listen: false);
-    final confirmed = await showOmiConfirm(
-      context,
-      title: context.l10n.revokeKeyQuestion,
-      message: context.l10n.revokeKeyConfirmation(apiKey.name),
-      confirmLabel: context.l10n.revoke,
-      destructive: true,
-    );
-    if (confirmed) provider.deleteKey(apiKey.id);
-  }
+  Future<void> _confirmRevoke(BuildContext context) =>
+      confirmMcpApiKeyRevoke(context, Provider.of<McpProvider>(context, listen: false), apiKey);
+}
+
+/// Asks before revoking [apiKey], then revokes it through [provider].
+Future<void> confirmMcpApiKeyRevoke(BuildContext context, McpProvider provider, McpApiKey apiKey) async {
+  final confirmed = await showOmiConfirm(
+    context,
+    title: context.l10n.revokeKeyQuestion,
+    message: context.l10n.revokeKeyConfirmation(apiKey.name),
+    confirmLabel: context.l10n.revoke,
+    destructive: true,
+  );
+  if (confirmed) provider.deleteKey(apiKey.id);
 }
