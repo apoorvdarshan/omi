@@ -29,14 +29,12 @@ const _unsetCountry = '__unset__';
 
 final _countryId = RegExp(r'^[A-Z]{2}$');
 
-class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTickerProviderStateMixin {
-  late AnimationController _pulseController;
+class _StripeConnectSetupState extends State<StripeConnectSetup> {
   late final PaymentMethodProvider _payments = context.read<PaymentMethodProvider>();
 
   @override
   void initState() {
     super.initState();
-    _pulseController = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat(reverse: true);
     _payments.getSupportedCountries();
   }
 
@@ -44,7 +42,6 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
   void dispose() {
     // The provider was captured while mounted; context lookups no longer work in dispose.
     _payments.stopStripePolling();
-    _pulseController.dispose();
     super.dispose();
   }
 
@@ -147,8 +144,8 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
       body: IosNativeSurface(
         title: l10n.paymentMethodStripe,
         fallback: classic,
-        loading: polling || connect && notConnected && provider.isLoading,
-        loadingLabel: polling ? l10n.connectingYourStripeAccount : null,
+        // Only polling: the country fetch flips isLoading without notifying, so it could stick.
+        loading: polling,
         toolbar: [
           NativeRow('stripe_back', l10n.back,
               symbol: 'chevron.left', action: (_) async => await Navigator.of(context).maybePop()),
@@ -369,27 +366,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
   List<Widget> _buildPollingSection(PaymentMethodProvider provider) {
     return [
       const SizedBox(height: 48),
-      AnimatedBuilder(
-        animation: _pulseController,
-        builder: (context, child) {
-          return Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: OmiColors.accent, width: 3),
-              boxShadow: [
-                BoxShadow(
-                  color: OmiColors.accent.withValues(alpha: 0.25),
-                  blurRadius: 20 * _pulseController.value,
-                  spreadRadius: 10 * _pulseController.value,
-                ),
-              ],
-            ),
-            child: Center(child: Icon(Icons.sync, color: OmiColors.accent, size: 40)),
-          );
-        },
-      ),
+      const _PollingPulse(),
       const SizedBox(height: 48),
       Text(
         context.l10n.connectingYourStripeAccount,
@@ -500,6 +477,56 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The classic polling indicator. It owns its animation so nothing ticks while the native
+/// surface (or any other section) is showing.
+class _PollingPulse extends StatefulWidget {
+  const _PollingPulse();
+
+  @override
+  State<_PollingPulse> createState() => _PollingPulseState();
+}
+
+class _PollingPulseState extends State<_PollingPulse> with SingleTickerProviderStateMixin {
+  late final AnimationController _pulseController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _pulseController,
+      builder: (context, child) {
+        return Container(
+          width: 80,
+          height: 80,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: OmiColors.accent, width: 3),
+            boxShadow: [
+              BoxShadow(
+                color: OmiColors.accent.withValues(alpha: 0.25),
+                blurRadius: 20 * _pulseController.value,
+                spreadRadius: 10 * _pulseController.value,
+              ),
+            ],
+          ),
+          child: Center(child: Icon(Icons.sync, color: OmiColors.accent, size: 40)),
+        );
+      },
     );
   }
 }

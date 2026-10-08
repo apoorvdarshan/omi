@@ -14,7 +14,9 @@ extension _NativeAiAppGenerator on _AiAppGeneratorPageState {
   /// the bridge: the preview reads a temporary PNG fenced to the account session that opened the page.
   void _startNativeIcon() {
     _nativeSessionOwner = AuthService.instance.captureSessionSnapshot();
-    _nativeOwner = context.read<AiAppGeneratorProvider>()..addListener(_syncNativeIcon);
+    _nativeOwner = context.read<AiAppGeneratorProvider>()
+      ..addListener(_syncNativeIcon)
+      ..addListener(_syncNativePrice);
     // Icons an interrupted earlier page left behind (the app was killed before dispose).
     _nativePurge = _purgeNativeIcons();
     _nativeSession = AuthService.instance.sessionGenerationEvents.listen((_) {
@@ -27,6 +29,7 @@ extension _NativeAiAppGenerator on _AiAppGeneratorPageState {
   void _stopNativeIcon() {
     _nativeIconGeneration++;
     _nativeOwner?.removeListener(_syncNativeIcon);
+    _nativeOwner?.removeListener(_syncNativePrice);
     _nativeOwner = null;
     unawaited(_nativeSession?.cancel());
     _deleteNativeIcon();
@@ -35,6 +38,12 @@ extension _NativeAiAppGenerator on _AiAppGeneratorPageState {
   bool get _nativeSessionCurrent {
     final owner = _nativeSessionOwner;
     return owner != null && AuthService.instance.isSessionSnapshotCurrent(owner);
+  }
+
+  /// The price field reappears empty once the app is free again (the toggle or a clear), as the
+  /// classic field does. Follows the owner instead of assigning during build.
+  void _syncNativePrice() {
+    if (_nativeOwner?.isPaid == false && _nativePrice.isNotEmpty) _updateNative(() => _nativePrice = '');
   }
 
   /// A new icon (generate or regenerate) replaces the file under a new name; clearing deletes it.
@@ -219,11 +228,8 @@ extension _NativeAiAppGenerator on _AiAppGeneratorPageState {
         NativeRow('ai_gen_paid', l10n.paidApp,
             kind: 'toggle',
             value: provider.isPaid,
-            subtitle: provider.isPaid ? l10n.usersPayToUse : l10n.freeForEveryone, action: (value) {
-          // The price field reappears empty, as the classic field does.
-          if (value == false) _updateNative(() => _nativePrice = '');
-          provider.setIsPaid(value as bool);
-        }),
+            subtitle: provider.isPaid ? l10n.usersPayToUse : l10n.freeForEveryone,
+            action: (value) => provider.setIsPaid(value as bool)),
         if (provider.isPaid)
           NativeRow('ai_gen_price', '\$ ${l10n.pricePlaceholder}',
               kind: 'text',

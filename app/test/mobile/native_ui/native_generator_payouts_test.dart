@@ -294,6 +294,13 @@ void main() {
         for (final view in tester.widgetList<UiKitView>(find.byType(UiKitView))) view.creationParams,
       ]);
 
+  /// Delivers an action the way the mounted SwiftUI view does, through the view's channel.
+  Future<void> fromNative(WidgetTester tester, NativeTestHost host, String id, [Object? value]) async {
+    expect(find.byType(UiKitView), findsOneWidget, reason: 'The screen is native');
+    await host.sendFromNative(host.created.last, MethodCall('action', {'id': id, 'value': value}));
+    await tester.pump();
+  }
+
   String? previewFile(WidgetTester tester) {
     final uri = row(tester, 'ai_gen_preview').imageUri;
     return uri == null ? null : Uri.parse(uri).toFilePath();
@@ -363,6 +370,11 @@ void main() {
       ]);
       await row(tester, 'ai_gen_price').action!('abc');
       expect(generator.prices.last, 0);
+      await row(tester, 'ai_gen_paid').action!(false);
+      await tester.pump();
+      await row(tester, 'ai_gen_paid').action!(true);
+      await tester.pump();
+      expect(row(tester, 'ai_gen_price').value, '', reason: 'The price field reappears empty');
 
       final sent = everySnapshot(tester, host);
       expect(sent, isNot(contains(base64Encode(iconBytes))));
@@ -417,6 +429,19 @@ void main() {
       await tester.pumpWidget(const SizedBox());
       await settleIo(tester);
       expect(File(file).existsSync(), isFalse);
+    });
+
+    testWidgets('an icon replaced while its file is still being written leaves nothing behind', (tester) async {
+      NativeTestHost.install();
+      final generator = await pumpGenerator(tester);
+      generator.generated(iconBytes);
+      // The first write is still pending when the regenerated icon arrives; it completes stale.
+      await generator.regenerateIcon();
+      await settleIo(tester, until: () => previewFile(tester) != null);
+      await settleIo(tester);
+      final files = Directory('${temporary.path}/omi_ai_generator').listSync().whereType<File>().map((f) => f.path);
+      expect(files, [previewFile(tester)]);
+      expect(File(previewFile(tester)!).readAsBytesSync(), generator.icon);
     });
 
     testWidgets('the temporary icon is deleted when the account session changes', (tester) async {
@@ -483,6 +508,7 @@ void main() {
       NativeTestHost.install();
       final payments = _FakePayments()..active = PaymentMethodType.paypal;
       await pumpPage(tester, const PaymentsPage(), payments: payments);
+      expect(find.byType(UiKitView), findsOneWidget);
       expect(surface(tester).title, _l10n.payments);
       expect(ids(tester), ['payout_back', 'payout_info', 'payout_connect:stripe', 'payout_coming_soon']);
       expect(row(tester, 'payout_connect:stripe').kind, 'navigation');
@@ -493,14 +519,15 @@ void main() {
     });
 
     testWidgets('a connected inactive Stripe offers update and set active', (tester) async {
-      NativeTestHost.install();
+      final host = NativeTestHost.install();
       final payments = _FakePayments()..connected = true;
       await pumpPage(tester, const PaymentsPage(), payments: payments);
+      expect(find.byType(UiKitView), findsOneWidget);
       final method = row(tester, 'payout_method:stripe');
       expect(method.kind, 'menu');
       expect(method.options.keys, ['update', 'set_active']);
       expect(ids(tester), contains('payout_info'));
-      await method.action!('set_active');
+      await fromNative(tester, host, 'payout_method:stripe', 'set_active');
       expect(payments.setActive, [PaymentMethodType.stripe]);
     });
 
@@ -510,6 +537,7 @@ void main() {
         ..connected = true
         ..active = PaymentMethodType.stripe;
       await pumpPage(tester, const PaymentsPage(), payments: payments);
+      expect(find.byType(UiKitView), findsOneWidget);
       expect(ids(tester), ['payout_back', 'payout_active:stripe', 'payout_update:stripe', 'payout_coming_soon']);
       expect(row(tester, 'payout_active:stripe').symbol, 'checkmark.seal.fill');
       await row(tester, 'payout_update:stripe').action!(null);
@@ -533,23 +561,33 @@ void main() {
     }
 
     testWidgets('the country choice ignores the unset option and Connect needs a country', (tester) async {
-      NativeTestHost.install();
+      final host = NativeTestHost.install();
       final payments = _FakePayments();
       await pumpPage(tester, const StripeConnectSetup(), payments: payments);
+      expect(find.byType(UiKitView), findsOneWidget);
       final country = row(tester, 'stripe_country');
       expect(country.options.keys, ['__unset__', 'US', 'DE']);
       expect(country.options['US'], '🇺🇸 United States');
       expect(country.value, '__unset__');
       expect(row(tester, 'stripe_connect').projection['enabled'], isFalse);
 
-      await country.action!('US');
-      await tester.pump();
+      await fromNative(tester, host, 'stripe_country', '__unset__');
+      expect(payments.selectedCountryId, isNull, reason: 'The unset option never sets a country');
+      await fromNative(tester, host, 'stripe_country', 'US');
       expect(payments.selectedCountryId, 'US');
       expect(row(tester, 'stripe_country').value, 'US');
-      await row(tester, 'stripe_country').action!('__unset__');
-      await tester.pump();
+      await fromNative(tester, host, 'stripe_country', '__unset__');
       expect(payments.selectedCountryId, 'US', reason: 'The unset option never clears or sets a country');
       expect(row(tester, 'stripe_connect').projection['enabled'], isTrue);
+      expect(find.byType(UiKitView), findsOneWidget);
+    });
+
+    testWidgets('loading the countries never shows the native spinner', (tester) async {
+      NativeTestHost.install();
+      final payments = _FakePayments()..loading = true;
+      await pumpPage(tester, const StripeConnectSetup(), payments: payments);
+      expect(find.byType(UiKitView), findsOneWidget);
+      expect(surface(tester).loading, isFalse, reason: 'The country fetch does not reliably notify its end');
     });
 
     testWidgets('the account link never reaches a snapshot', (tester) async {
@@ -557,8 +595,9 @@ void main() {
       final launched = mockLauncher();
       final payments = _FakePayments()..setSelectedCountryId('US');
       await pumpPage(tester, const StripeConnectSetup(), payments: payments);
-      await row(tester, 'stripe_connect').action!(null);
+      await fromNative(tester, host, 'stripe_connect');
       await NativeTestHost.settle(tester);
+      expect(find.byType(UiKitView), findsOneWidget, reason: 'Polling stays native');
       expect([payments.links, payments.pollStarts], [1, 1]);
       expect(ids(tester), containsAll(['stripe_retry', 'stripe_later']));
       expect(surface(tester).loading, isTrue);
@@ -570,6 +609,10 @@ void main() {
       NativeTestHost.install();
       final payments = _FakePayments()..polling = true;
       await pumpPage(tester, const StripeConnectSetup(), payments: payments);
+      expect(find.byType(UiKitView), findsOneWidget);
+      // Past the route transition, nothing animates while polling is shown natively.
+      await tester.pump(const Duration(seconds: 1));
+      expect(tester.binding.transientCallbackCount, 0, reason: 'No classic pulse ticks under the native surface');
       await row(tester, 'stripe_back').action!(null);
       await settleRoute(tester);
       expect(find.byType(StripeConnectSetup), findsNothing);
@@ -581,6 +624,7 @@ void main() {
       NativeTestHost.install();
       final payments = _FakePayments()..connected = true;
       await pumpPage(tester, const StripeConnectSetup(), payments: payments);
+      expect(find.byType(UiKitView), findsOneWidget);
       expect(ids(tester), ['stripe_back', 'stripe_connected_status', 'stripe_update', 'stripe_go_back']);
       await row(tester, 'stripe_go_back').action!(null);
       await settleRoute(tester);
