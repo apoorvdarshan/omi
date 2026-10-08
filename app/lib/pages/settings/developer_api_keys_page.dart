@@ -21,16 +21,34 @@ bool nativeKeyMetadataValid({required String id, required String name, required 
 
 /// Settings > Developer > Developer API: the docs link, Create Key and the key list, over the same
 /// [DevApiKeyProvider] the Flutter section uses.
-class DeveloperApiKeysPage extends StatelessWidget {
+class DeveloperApiKeysPage extends StatefulWidget {
   const DeveloperApiKeysPage({super.key, @visibleForTesting this.provider});
 
   /// Replaces the page's own key owner in tests; the page still fetches through it and disposes it.
   final DevApiKeyProvider? provider;
 
   @override
+  State<DeveloperApiKeysPage> createState() => _DeveloperApiKeysPageState();
+}
+
+class _DeveloperApiKeysPageState extends State<DeveloperApiKeysPage> {
+  /// A create sheet is opening or open; a second tap opens nothing.
+  bool _creating = false;
+
+  Future<void> _create(DevApiKeyProvider provider) async {
+    if (_creating) return;
+    setState(() => _creating = true);
+    try {
+      await CreateDevApiKeySheet.show(context, provider);
+    } finally {
+      if (mounted) setState(() => _creating = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (_) => (provider ?? DevApiKeyProvider())..fetchKeys(),
+      create: (_) => (widget.provider ?? DevApiKeyProvider())..fetchKeys(),
       child: Consumer<DevApiKeyProvider>(builder: (context, provider, _) => _page(context, provider)),
     );
   }
@@ -61,7 +79,7 @@ class DeveloperApiKeysPage extends StatelessWidget {
           NativeRow('dev_keys_back', l10n.back,
               symbol: 'chevron.left', action: (_) => Navigator.of(context).maybePop()),
           NativeRow('dev_keys_create', l10n.createKey,
-              symbol: 'plus', action: (_) => CreateDevApiKeySheet.show(context, provider)),
+              symbol: 'plus', enabled: !_creating, action: (_) => _create(provider)),
         ],
         sections: [
           NativeSection('dev_keys_links', [
@@ -80,10 +98,17 @@ class DeveloperApiKeysPage extends StatelessWidget {
                     '${key.keyPrefix}***',
                     OmiDateFormat.of(context).date(key.createdAt),
                     devKeyScopeSummary(l10n, key.scopes).join(', '),
-                  ].join(' · '),
-                  options: {'revoke': l10n.revoke},
-                  destructive: true,
-                  action: (_) => confirmDevApiKeyRevoke(context, provider, key)),
+                  ].where((part) => part.isNotEmpty).join(' · '),
+                  options: {'revoke': l10n.revoke}, action: (_) async {
+                final confirmed = await confirmDevApiKeyRevoke(context, provider, key);
+                // The owner restores a key it could not revoke; say so instead of letting it reappear.
+                if (confirmed &&
+                    context.mounted &&
+                    provider.keys.any((current) => current.id == key.id) &&
+                    provider.error != null) {
+                  OmiFeedback.error(context, l10n.failedToRevokeApiKey(provider.error!));
+                }
+              }),
           ]),
         ],
       ),

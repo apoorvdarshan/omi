@@ -29,7 +29,8 @@ class CreateDevApiKeySheet extends StatefulWidget {
       nativeBuilder: (ctx) =>
           ChangeNotifierProvider.value(value: provider, child: const CreateDevApiKeySheet(native: true)),
     );
-    // Only the native form closes with a key; it is revealed only to the account that created it.
+    // Only with native presentation does the form close with a key; it is revealed only to the account
+    // that created it.
     if (created == null || !context.mounted) return;
     if (owner == null || !AuthService.instance.isSessionSnapshotCurrent(owner)) return;
     await DevApiKeyCreatedSheet.show(context, created);
@@ -100,7 +101,7 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
   Future<void> _createKey() async {
     // The native form has no Flutter validator mounted; it applies the same rule.
     final form = _formKey.currentState;
-    if (form != null ? form.validate() : !_isCreating && _nameController.text.trim().isNotEmpty) {
+    if (!_isCreating && (form != null ? form.validate() : _nameController.text.trim().isNotEmpty)) {
       final owner = nativePresentationEnabled ? AuthService.instance.captureSessionSnapshot() : null;
       setState(() => _isCreating = true);
       final provider = Provider.of<DevApiKeyProvider>(context, listen: false);
@@ -111,7 +112,8 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
         // With native presentation, a key created for an account that has since changed is never shown.
         final current =
             !nativePresentationEnabled || owner != null && AuthService.instance.isSessionSnapshotCurrent(owner);
-        if (widget.native) {
+        // With native presentation the page reveals the key ([show]), never this closing sheet's context.
+        if (widget.native || nativePresentationEnabled) {
           Navigator.of(context).pop(current ? newKey : null);
           if (newKey == null && current) _showCreateError(provider);
           return;

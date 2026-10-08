@@ -39,6 +39,9 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
   String? _loadedFor;
   AuthSessionSnapshot? _loadedOwner;
 
+  /// The last load returned nothing new: the provider keeps its previous list when a load fails.
+  bool _loadFailed = false;
+
   @override
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -53,13 +56,17 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
       _isLoading = true;
     });
 
+    final provider = Provider.of<AddAppProvider>(context, listen: false);
+    final before = provider.apiKeys;
     try {
-      await Provider.of<AddAppProvider>(context, listen: false).loadApiKeys(widget.appId);
+      await provider.loadApiKeys(widget.appId);
     } finally {
       if (mounted) {
         setState(() {
           _isLoading = false;
-          if (_sessionCurrent(owner)) {
+          // A successful load assigns a new list; anything else may still be another app's keys.
+          _loadFailed = owner != null && identical(provider.apiKeys, before);
+          if (_sessionCurrent(owner) && !_loadFailed) {
             _loadedFor = widget.appId;
             _loadedOwner = owner;
           }

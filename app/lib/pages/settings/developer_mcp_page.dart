@@ -13,6 +13,7 @@ import 'package:omi/pages/settings/widgets/create_mcp_api_key_dialog.dart';
 import 'package:omi/pages/settings/widgets/mcp_api_key_created_dialog.dart';
 import 'package:omi/pages/settings/widgets/mcp_api_key_list_item.dart';
 import 'package:omi/providers/mcp_provider.dart';
+import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -74,9 +75,16 @@ class _DeveloperMcpPageState extends State<DeveloperMcpPage> {
                   kind: 'menu',
                   symbol: 'key',
                   subtitle: '${key.keyPrefix}*** · ${OmiDateFormat.of(context).date(key.createdAt)}',
-                  options: {'revoke': l10n.revoke},
-                  destructive: true,
-                  action: (_) => confirmMcpApiKeyRevoke(context, provider, key)),
+                  options: {'revoke': l10n.revoke}, action: (_) async {
+                final confirmed = await confirmMcpApiKeyRevoke(context, provider, key);
+                // The owner restores a key it could not revoke; say so instead of letting it reappear.
+                if (confirmed &&
+                    context.mounted &&
+                    provider.keys.any((current) => current.id == key.id) &&
+                    provider.error != null) {
+                  OmiFeedback.error(context, l10n.failedToRevokeApiKey(provider.error!));
+                }
+              }),
           ]),
           NativeSection('mcp_claude_code', [
             NativeRow('mcp_claude_code', l10n.claudeCode,
@@ -117,9 +125,19 @@ class _DeveloperMcpPageState extends State<DeveloperMcpPage> {
   /// blocking activity and reveals it once. A host without native modals keeps the Flutter dialog.
   Future<void> _create() async {
     if (_creating) return;
-    final l10n = context.l10n;
     final provider = context.read<McpProvider>();
     final owner = AuthService.instance.captureSessionSnapshot();
+    // Held from the first tap, so a second Create never starts another prompt or key.
+    setState(() => _creating = true);
+    try {
+      await _createNamed(provider, owner);
+    } finally {
+      if (mounted) setState(() => _creating = false);
+    }
+  }
+
+  Future<void> _createNamed(McpProvider provider, AuthSessionSnapshot? owner) async {
+    final l10n = context.l10n;
     var blank = false;
     String name;
     while (true) {
@@ -147,7 +165,6 @@ class _DeveloperMcpPageState extends State<DeveloperMcpPage> {
       if (name.isNotEmpty) break;
       blank = true;
     }
-    setState(() => _creating = true);
     final activity = await showIosNativeActivity(context, label: l10n.creating);
     McpApiKeyCreated? created;
     try {
@@ -155,7 +172,6 @@ class _DeveloperMcpPageState extends State<DeveloperMcpPage> {
     } finally {
       // The overlay covers every route; it is gone before anything else is presented.
       await activity?.dismiss();
-      if (mounted) setState(() => _creating = false);
     }
     if (!mounted || owner == null || !AuthService.instance.isSessionSnapshotCurrent(owner)) return;
     if (created == null) {

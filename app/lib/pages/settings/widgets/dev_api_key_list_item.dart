@@ -95,8 +95,8 @@ List<String> devKeyScopeSummary(AppLocalizations l10n, List<String>? scopes) {
   return [if (hasRead) l10n.readScope, if (hasWrite) l10n.writeScope];
 }
 
-/// Asks before revoking [apiKey], then revokes it through [provider].
-Future<void> confirmDevApiKeyRevoke(BuildContext context, DevApiKeyProvider provider, DevApiKey apiKey) async {
+/// Asks before revoking [apiKey], then revokes it through [provider]. Answers whether it was confirmed.
+Future<bool> confirmDevApiKeyRevoke(BuildContext context, DevApiKeyProvider provider, DevApiKey apiKey) async {
   final confirmed = await showOmiConfirm(
     context,
     title: context.l10n.revokeKeyQuestion,
@@ -104,5 +104,6 @@ Future<void> confirmDevApiKeyRevoke(BuildContext context, DevApiKeyProvider prov
     confirmLabel: context.l10n.revoke,
     destructive: true,
   );
-  if (confirmed) provider.deleteKey(apiKey.id);
+  if (confirmed) await provider.deleteKey(apiKey.id);
+  return confirmed;
 }

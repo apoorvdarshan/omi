@@ -61,8 +61,8 @@ class McpApiKeyListItem extends StatelessWidget {
       confirmMcpApiKeyRevoke(context, Provider.of<McpProvider>(context, listen: false), apiKey);
 }
 
-/// Asks before revoking [apiKey], then revokes it through [provider].
-Future<void> confirmMcpApiKeyRevoke(BuildContext context, McpProvider provider, McpApiKey apiKey) async {
+/// Asks before revoking [apiKey], then revokes it through [provider]. Answers whether it was confirmed.
+Future<bool> confirmMcpApiKeyRevoke(BuildContext context, McpProvider provider, McpApiKey apiKey) async {
   final confirmed = await showOmiConfirm(
     context,
     title: context.l10n.revokeKeyQuestion,
@@ -70,5 +70,6 @@ Future<void> confirmMcpApiKeyRevoke(BuildContext context, McpProvider provider, 
     confirmLabel: context.l10n.revoke,
     destructive: true,
   );
-  if (confirmed) provider.deleteKey(apiKey.id);
+  if (confirmed) await provider.deleteKey(apiKey.id);
+  return confirmed;
 }

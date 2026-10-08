@@ -40,11 +40,15 @@ void main() {
       unawaited(Future.sync(() => nativeProjectedRow(tester, 'app_keys_create').action!(null)));
       await _until(tester, () => find.byType(NativeSecretPage).evaluate().isNotEmpty);
       expect(backend.count('POST', '/v1/apps/app-host/keys'), 1);
-      await _expectRevealedOnce(tester, created);
+      await _expectRevealedOnce(tester, created, 'app-keys');
       await _done(tester, created);
       await _until(tester, () => _rowIds(tester).contains('app_api_key:0'));
+      expect(backend.count('GET', '/v1/apps/app-host/keys'), 2, reason: 'Creating reloads the list');
 
       await _revoke(tester, backend, 'app_api_key:0', 'DELETE', '/v1/apps/app-host/keys/${backend.lastId('app')}');
+      await _until(tester, () => backend.count('GET', '/v1/apps/app-host/keys') == 3);
+      AuthService.instance.handleAuthUserChanged('another-owner');
+      await _until(tester, () => find.byType(UiKitView).evaluate().isEmpty);
       await tester.pumpWidget(const SizedBox());
       await tester.pump();
       expect(tester.takeException(), isNull);
@@ -70,7 +74,7 @@ void main() {
         'name': 'Host CLI',
         'scopes': ['memories:read']
       });
-      await _expectRevealedOnce(tester, created);
+      await _expectRevealedOnce(tester, created, 'developer-api');
       await _done(tester, created);
 
       await _until(tester, () => _rowIds(tester).contains('dev_key:0'));
@@ -95,7 +99,7 @@ void main() {
       expect(presentations, containsAllInOrder(['present', 'presentActivity', 'dismissPresentation']));
       expect(backend.count('POST', '/v1/mcp/keys'), 1);
       expect(backend.lastBody, {'name': 'Host Claude'});
-      await _expectRevealedOnce(tester, created);
+      await _expectRevealedOnce(tester, created, 'mcp');
       await _done(tester, created);
 
       await _until(tester, () => _rowIds(tester).contains('mcp_key:0'));
@@ -139,14 +143,14 @@ List<NativeRow> _rows(WidgetTester tester) => [
 List<String> _rowIds(WidgetTester tester) => _rows(tester).map((row) => row.id).toList();
 
 /// The key crosses only as the single sensitive row's value; every list projection omits it.
-Future<void> _expectRevealedOnce(WidgetTester tester, String secret) async {
+Future<void> _expectRevealedOnce(WidgetTester tester, String secret, String screen) async {
   await _until(tester, () => _rowIds(tester).contains('secret_value'));
   final carrying = _rows(tester).where((row) => jsonEncode(row.projection).contains(secret)).toList();
   expect(carrying.map((row) => (row.id, row.kind, row.value)), [('secret_value', 'secret', secret)]);
   final sheet =
       tester.widgetList<IosNativeSurface>(find.byType(IosNativeSurface)).where((surface) => surface.sensitive);
   expect(sheet, hasLength(1));
-  expect(await captureNativeHostScreenshot('native-developer-app-credentials-secret-dark'), isNotEmpty);
+  expect(await captureNativeHostScreenshot('native-developer-app-credentials-$screen-secret-dark'), isNotEmpty);
 }
 
 /// Done disposes the sheet, so no mounted projection holds the key any longer.
@@ -154,6 +158,7 @@ Future<void> _done(WidgetTester tester, String secret) async {
   await nativeProjectedRow(tester, 'secret_done').action!(null);
   await _until(tester, () => find.byType(NativeSecretPage).evaluate().isEmpty);
   expect(_rows(tester).where((row) => jsonEncode(row.projection).contains(secret)), isEmpty);
+  await _until(tester, () => find.byType(UiKitView).evaluate().length == 1);
 }
 
 /// A declined confirmation sends nothing; a confirmed one sends exactly one DELETE.

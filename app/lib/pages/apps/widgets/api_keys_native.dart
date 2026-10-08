@@ -12,7 +12,9 @@ extension _NativeApiKeysPresentation on _ApiKeysWidgetState {
       body: IosNativeSurface(
         title: l10n.developerApi,
         fallback: classic,
-        loading: !loaded || _isLoading && keys.isEmpty,
+        loading: _isLoading && keys.isEmpty || !loaded && !_loadFailed,
+        failed: !loaded && _loadFailed && !_isLoading,
+        errorMessage: l10n.couldNotLoadApiKeys,
         empty: l10n.noApiKeysYet,
         onRefresh: (_) => _loadApiKeys(),
         toolbar: [

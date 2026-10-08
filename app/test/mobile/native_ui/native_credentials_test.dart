@@ -111,10 +111,14 @@ class _AppKeysOwner extends AddAppProvider {
   final deleted = <String>[];
   var creates = 0;
 
+  /// Like the real provider, a failed load keeps whatever list it held.
+  var failLoads = false;
+
   @override
   Future<void> loadApiKeys(String appId) async {
     loads.add(appId);
     await loadGate?.future;
+    if (failLoads) return;
     apiKeys = List.of(served[appId] ?? const []);
     notifyListeners();
   }
@@ -141,8 +145,14 @@ class _DevKeysOwner extends DevApiKeyProvider {
 
   List<DevApiKey> served;
   DevApiKeyCreated? next;
+  Completer<void>? createGate;
   final created = <(String, List<String>?)>[];
   final deleted = <String>[];
+  String? failure;
+  var failDeletes = false;
+
+  @override
+  String? get error => failure;
 
   @override
   List<DevApiKey> get keys => served;
@@ -153,13 +163,18 @@ class _DevKeysOwner extends DevApiKeyProvider {
   @override
   Future<DevApiKeyCreated?> createKey(String name, {List<String>? scopes}) async {
     created.add((name, scopes));
+    await createGate?.future;
     return next;
   }
 
   @override
   Future<void> deleteKey(String keyId) async {
     deleted.add(keyId);
-    served = served.where((key) => key.id != keyId).toList();
+    if (failDeletes) {
+      failure = 'offline';
+    } else {
+      served = served.where((key) => key.id != keyId).toList();
+    }
     notifyListeners();
   }
 }
@@ -271,6 +286,22 @@ void main() {
       expect(_sectionRows(tester).map((row) => row.title), ['sk_…0a']);
     });
 
+    testWidgets("a failed load shows the error, never the previous app's keys", (tester) async {
+      NativeTestHost.install();
+      final owner = _AppKeysOwner({'app-a': []})
+        ..apiKeys = [_appKey('key-0b')]
+        ..failLoads = true;
+      await _pumpAppKeys(tester, owner);
+      final surface = tester.widget<IosNativeSurface>(find.byType(IosNativeSurface));
+      expect(_sectionRows(tester), isEmpty);
+      expect(surface.failed, true);
+      expect(surface.loading, false);
+      owner.failLoads = false;
+      await surface.onRefresh!(null);
+      await NativeTestHost.settle(tester);
+      expect(tester.widget<IosNativeSurface>(find.byType(IosNativeSurface)).failed, false);
+    });
+
     testWidgets('keys loaded for a previous session are never projected', (tester) async {
       NativeTestHost.install();
       final owner = _AppKeysOwner({
@@ -325,6 +356,22 @@ void main() {
       expect(_sectionRows(tester).single.title, 'sk_…ew');
     });
 
+    testWidgets('a key the secret row cannot carry keeps the classic dialog', (tester) async {
+      final host = NativeTestHost.install();
+      const unbridgeable = 'omi key with spaces';
+      final owner = _AppKeysOwner({'app-a': []})..createGate = Completer<AppApiKey>();
+      await _pumpAppKeys(tester, owner);
+      unawaited(host.sendFromNative(host.created.single, const MethodCall('action', {'id': 'app_keys_create'})));
+      await tester.pump();
+      owner.createGate!.complete(_appKey('key-new', secret: unbridgeable));
+      await tester.pumpAndSettle();
+      expect(find.byType(NativeSecretPage), findsNothing);
+      expect(find.descendant(of: find.byType(OmiAlertDialog), matching: find.text(unbridgeable)), findsOneWidget);
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+      expect(find.text(unbridgeable), findsNothing);
+    });
+
     testWidgets('the info button opens the API keys explanation', (tester) async {
       NativeTestHost.install();
       final presents = _mockConfig(present: (_) async => _cancelled);
@@ -375,11 +422,17 @@ void main() {
 
     testWidgets('a key whose metadata fails validation keeps the complete Flutter page', (tester) async {
       final host = NativeTestHost.install();
-      await tester.pumpWidget(
-          NativeTestHost.app(DeveloperApiKeysPage(provider: _DevKeysOwner([_devKey('dev-1', prefix: 'omi dev')]))));
-      await NativeTestHost.settle(tester);
-      expect(find.byType(UiKitView), findsNothing);
-      expect(find.byType(DeveloperApiKeysContent), findsOneWidget);
+      for (final key in [
+        _devKey('dev-1', prefix: 'omi dev'),
+        _devKey(''),
+        DevApiKey(createdAt: _createdAt, id: 'dev-1', keyPrefix: 'omi_dev_ab', name: 'n' * 1001),
+      ]) {
+        await tester
+            .pumpWidget(NativeTestHost.app(DeveloperApiKeysPage(key: UniqueKey(), provider: _DevKeysOwner([key]))));
+        await NativeTestHost.settle(tester);
+        expect(find.byType(UiKitView), findsNothing);
+        expect(find.byType(DeveloperApiKeysContent), findsOneWidget);
+      }
       expect(host.created, isEmpty);
     });
 
@@ -393,6 +446,25 @@ void main() {
       await tester.pump();
       expect(owner.deleted, ['dev-1']);
     });
+  });
+
+  testWidgets('a revoke the owner could not apply is reported, a declined one is not', (tester) async {
+    NativeTestHost.install();
+    var answer = _cancelled;
+    _mockConfig(present: (_) async => answer);
+    final owner = _DevKeysOwner([_devKey('dev-1')])
+      ..failDeletes = true
+      ..failure = 'stale';
+    await tester.pumpWidget(NativeTestHost.app(DeveloperApiKeysPage(provider: owner)));
+    await NativeTestHost.settle(tester);
+    await _row(tester, 'dev_key:0').action!('revoke');
+    await tester.pump();
+    expect(find.textContaining('Failed to revoke API key'), findsNothing);
+    answer = _choose('confirm');
+    await _row(tester, 'dev_key:0').action!('revoke');
+    await tester.pump();
+    expect(owner.deleted, ['dev-1']);
+    expect(find.text('Failed to revoke API key: offline'), findsOneWidget);
   });
 
   group('create developer key sheet', () {
@@ -457,6 +529,26 @@ void main() {
       expect(owner.created, [('CLI', null)]);
       expect((await result)?.key, _devSecret, reason: 'The sheet closes with the key for the page to reveal');
       expect(find.text(_devSecret), findsNothing);
+    });
+
+    testWidgets('a key created before a session change closes the sheet without it', (tester) async {
+      NativeTestHost.install();
+      final owner = _DevKeysOwner([])
+        ..createGate = Completer<void>()
+        ..next = DevApiKeyCreated(
+            createdAt: _createdAt, id: 'dev-new', key: _devSecret, keyPrefix: 'omi_dev_ne', name: 'CLI');
+      final result = await open(tester, owner);
+      await _row(tester, 'dev_key_name').action!('CLI');
+      await tester.pump();
+      unawaited(Future.sync(() => _row(tester, 'dev_key_create').action!(null)));
+      await tester.pump();
+      expect(owner.created, hasLength(1));
+      AuthService.instance.handleAuthUserChanged('another-owner');
+      owner.createGate!.complete();
+      await tester.pumpAndSettle();
+      expect(await result, isNull);
+      expect(find.byType(NativeSecretPage), findsNothing);
+      expect(find.textContaining(_devSecret), findsNothing);
     });
 
     testWidgets('selected scopes are sent as the allowlisted list', (tester) async {
@@ -589,6 +681,23 @@ void main() {
       expect(owner.created, isEmpty);
     });
 
+    testWidgets('a second Create while the first is pending starts nothing', (tester) async {
+      NativeTestHost.install();
+      final answer = Completer<Object?>();
+      final calls = _mockConfig(present: (_) => answer.future);
+      await pumpMcp(tester);
+      final create = _row(tester, 'mcp_create');
+      unawaited(Future.sync(() => create.action!(null)));
+      unawaited(Future.sync(() => create.action!(null)));
+      await tester.pump();
+      expect(_row(tester, 'mcp_create').enabled, false);
+      expect(calls.where((call) => call.method == 'present'), hasLength(1));
+      answer.complete(_cancelled);
+      await tester.pumpAndSettle();
+      expect(calls.where((call) => call.method == 'present'), hasLength(1));
+      expect(_row(tester, 'mcp_create').enabled, true);
+    });
+
     testWidgets('create shows an activity, dismisses it, then reveals the key once', (tester) async {
       NativeTestHost.install();
       final calls = _mockConfig(present: (_) async => _choose('create', {'mcp_key_name': ' Claude '}));
@@ -644,7 +753,13 @@ void main() {
       expect(toolbar.map((row) => (row as Map)['title']).skip(1), ['omi-1.log', 'omi-2.log', 'omi-3.log']);
     });
 
-    testWidgets('cancel chooses nothing, and an unavailable host keeps the Flutter sheet', (tester) async {
+    testWidgets('a host that refuses the alert keeps the Flutter sheet', (tester) async {
+      NativeTestHost.install();
+      _mockConfig(present: (_) async => throw PlatformException(code: 'invalid_native_presentation'));
+      expect(await chooseDebugLogFileNatively(await caller(tester), files), isNull);
+    });
+
+    testWidgets('cancel chooses nothing', (tester) async {
       NativeTestHost.install();
       _mockConfig(present: (_) async => _cancelled);
       final cancelled = await chooseDebugLogFileNatively(await caller(tester), files);
