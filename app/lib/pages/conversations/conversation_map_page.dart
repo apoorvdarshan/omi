@@ -342,6 +342,7 @@ class _NativeConversationMapState extends State<_NativeConversationMap> {
             if (_map.uri != null)
               NativeRow('conversation_map_image', l10n.conversationMap,
                   kind: 'image', imageUri: _map.uri, maximumValue: 4),
+            if (_map.loading) NativeRow('conversation_map_loading', l10n.loading, kind: 'label'),
             if (_map.failed) NativeRow('conversation_map_error', l10n.couldNotLoadMap, kind: 'label'),
             NativeRow('conversation_map_open', l10n.openInMaps,
                 symbol: 'map', action: (_) => page._launch(groups.first.latitude, groups.first.longitude)),
@@ -388,11 +389,15 @@ class ConversationMapClusterChooser extends StatefulWidget {
 
 class _ConversationMapClusterChooserState extends State<ConversationMapClusterChooser> {
   final _owner = AuthService.instance.captureSessionSnapshot();
+  bool _chosen = false;
 
   void _choose(ServerConversation conversation) {
+    // A second command before the sheet closes must not pop the map beneath it.
+    if (_chosen) return;
+    _chosen = true;
     final owner = _owner;
     Navigator.of(context).pop();
-    if (owner != null && !AuthService.instance.isSessionSnapshotCurrent(owner)) return;
+    if (owner == null || !AuthService.instance.isSessionSnapshotCurrent(owner)) return;
     widget.onOpen(conversation);
   }
 

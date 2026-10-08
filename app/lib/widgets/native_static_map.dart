@@ -79,11 +79,12 @@ Future<String?> resolveNativeStaticMapFile({
 /// Deletes a file [resolveNativeStaticMapFile] wrote. Anything else is left alone.
 Future<void> deleteNativeStaticMapFile(String? uri) async {
   if (uri == null) return;
-  final parsed = Uri.tryParse(uri);
-  if (parsed == null || parsed.scheme != 'file') return;
-  final file = File(parsed.toFilePath());
-  if (!file.uri.pathSegments.last.startsWith(_filePrefix)) return;
-  await _delete(file);
+  try {
+    final parsed = Uri.parse(uri);
+    if (parsed.scheme != 'file' || parsed.pathSegments.isEmpty) return;
+    if (!parsed.pathSegments.last.startsWith(_filePrefix)) return;
+    await _delete(File(parsed.toFilePath()));
+  } catch (_) {/* Not a file this owner wrote. */}
 }
 
 Future<void> _delete(File file) async {
@@ -157,7 +158,11 @@ class NativeStaticMap extends ChangeNotifier {
   /// synchronously.
   void show({required List<OmiMapPin> pins, required int width, required int height, required Brightness brightness}) {
     if (_disposed || _ended || !_sessionCurrent()) return;
-    final normalized = normalizeOmiMapPins(pins);
+    // A non-finite coordinate can never be drawn; it is dropped rather than sent to the proxy.
+    final normalized = normalizeOmiMapPins([
+      for (final pin in pins)
+        if (pin.latitude.isFinite && pin.longitude.isFinite) pin
+    ]);
     final key = [
       for (final pin in normalized) '${pin.latitude},${pin.longitude}',
       '${width}x$height',

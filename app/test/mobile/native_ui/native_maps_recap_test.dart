@@ -213,6 +213,7 @@ void main() {
       // While the map loads there is no image and no error yet.
       expect(_row(tester, 'conversation_map_image'), isNull);
       expect(_row(tester, 'conversation_map_error'), isNull);
+      expect(_row(tester, 'conversation_map_loading')!.title, 'Loading…');
       final file = maps.complete(0)!;
       await tester.pump();
       await tester.pump();
@@ -341,9 +342,13 @@ void main() {
       expect(rows.every((row) => row.subtitle.isNotEmpty && row.kind == 'navigation' && row.valid), isTrue);
       expect(_row(tester, 'conversation_map_cluster_close'), isNotNull);
 
+      final row = _row(tester, 'conversation_map_cluster_1')!;
       expect(await _send(tester, host, 'conversation_map_cluster_1'), isNull);
+      // A second command before the sheet closes neither pops the page beneath nor opens twice.
+      await row.action!(null);
       await tester.pumpAndSettle();
       expect(opened, ['b']);
+      expect(find.text('open'), findsOneWidget);
       expect(find.byType(ConversationMapClusterChooser), findsNothing);
     });
 

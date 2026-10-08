@@ -1155,6 +1155,7 @@ class _RecapJourneySheetState extends State<RecapJourneySheet> {
         NativeSection('recap_journey_map', [
           if (_map.uri != null)
             NativeRow('recap_journey_image', l10n.yourDaysJourney, kind: 'image', imageUri: _map.uri, maximumValue: 4),
+          if (_map.loading) NativeRow('recap_journey_map_loading', l10n.loading, kind: 'label'),
           if (_map.failed) NativeRow('recap_journey_map_error', l10n.couldNotLoadMap, kind: 'label'),
           // As the classic preview: Apple Maps takes no waypoints, so this opens the day's first stop.
           if (locations.isNotEmpty)
