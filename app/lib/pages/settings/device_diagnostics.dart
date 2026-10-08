@@ -288,7 +288,10 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
       return;
     }
     if (!mounted) return;
-    final send = await _reviewNatively(json) ?? (mounted ? await _reviewInFlutter(json) : null);
+    final native = await _reviewNatively(json);
+    // A review withdrawn by a session change or by leaving the page was never answered.
+    if (native != null && ['invalidated', 'unmounted'].contains(native.reason)) return;
+    final send = native != null ? native.action == 'send' : (mounted ? await _reviewInFlutter(json) : null);
     if (send == null) return;
     if (!send) {
       _trackSendFailed(DiagnosticsSendFailedFailureStage.dialogCancelled, json, bundle);
@@ -343,12 +346,12 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     );
   }
 
-  /// Whether the person chose Send in the native review, or null to review in Flutter: the native
-  /// presentation is unavailable, or the bundle is too large to show natively.
-  Future<bool?> _reviewNatively(String json) async {
+  /// The native review's outcome, or null to review in Flutter: the native presentation is
+  /// unavailable, or the bundle is too large to show natively.
+  Future<NativeModalResult?> _reviewNatively(String json) async {
     if (utf8.encode(json).length > maxNativeDiagnosticsReviewBytes) return null;
     final l10n = context.l10n;
-    final result = await showIosNativeModal(
+    return showIosNativeModal(
       context,
       title: l10n.sendToSupport,
       actions: [NativeRow('cancel', l10n.cancel), NativeRow('send', l10n.send)],
@@ -361,7 +364,6 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
         ]),
       ],
     );
-    return result == null ? null : result.action == 'send';
   }
 
   Future<bool> _reviewInFlutter(String json) async {

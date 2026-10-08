@@ -87,16 +87,21 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
   /// Pending native level writes by control. Each holds the latest value only; leaving the page
   /// writes it at once, so the final value always reaches the device.
-  final _nativeWrites = <String, ({Timer timer, Future<void> Function() write})>{};
+  final _nativeWrites = <String, ({Timer timer, String deviceId, Future<void> Function() write})>{};
   bool _isFindingDevice = false;
 
   bool _autoSyncOfflineRecordings = SharedPreferencesUtil().autoSyncOfflineRecordings;
   bool _omiButtonActionsEnabled = SharedPreferencesUtil().omiButtonActionsEnabled;
 
-  /// Ray-Ban Meta camera readiness for [_rayBanMetaCameraStatusDeviceId]; null while it is checked.
+  /// Ray-Ban Meta camera readiness, last answered; null until the first check completes.
   String? _rayBanMetaCameraStatus;
   String? _rayBanMetaCameraStatusDeviceId;
   bool _rayBanMetaCameraStatusRequested = false;
+  int _rayBanMetaCameraStatusRequest = 0;
+
+  /// The device owner the page last built with; a pending write for a device it no longer pairs
+  /// (forgotten or unpaired while the page closes) is dropped instead of reconnecting it.
+  DeviceProvider? _deviceProvider;
 
   /// The native device thumbnail: the bundled picture last requested, and its file URI once copied.
   String? _thumbnailAsset;
@@ -185,13 +190,13 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   // Native level controls. Swift sends one value when a drag ends; Dart rounds it, shows it at
   // once and writes the latest value after a trailing [_nativeWriteDelay].
 
-  void _scheduleNativeWrite(String control, Future<void> Function() write) {
+  void _scheduleNativeWrite(String control, String deviceId, Future<void> Function() write) {
     _nativeWrites.remove(control)?.timer.cancel();
     final timer = Timer(_nativeWriteDelay, () {
       _nativeWrites.remove(control);
       unawaited(write());
     });
-    _nativeWrites[control] = (timer: timer, write: write);
+    _nativeWrites[control] = (timer: timer, deviceId: deviceId, write: write);
   }
 
   void _flushNativeWrites() {
@@ -199,7 +204,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     _nativeWrites.clear();
     for (final write in pending) {
       write.timer.cancel();
-      unawaited(write.write());
+      if (write.deviceId == _deviceProvider?.pairedDevice?.id) unawaited(write.write());
     }
   }
 
@@ -208,7 +213,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     if (deviceId == null) return;
     final ratio = value.round().clamp(0, 100);
     setState(() => _dimRatio = ratio.toDouble());
-    _scheduleNativeWrite('led', () => _writeDimRatio(deviceId, ratio));
+    _scheduleNativeWrite('led', deviceId, () => _writeDimRatio(deviceId, ratio));
   }
 
   void _setNativeMicGain(num value) {
@@ -216,7 +221,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     if (deviceId == null) return;
     final gain = value.round().clamp(0, 8);
     setState(() => _micGain = gain.toDouble());
-    _scheduleNativeWrite('mic_gain', () => _writeMicGain(deviceId, gain));
+    _scheduleNativeWrite('mic_gain', deviceId, () => _writeMicGain(deviceId, gain));
   }
 
   /// A preset is an explicit choice, so it replaces any pending drag value and is written at once.
@@ -312,10 +317,11 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     final deviceId = provider.connectedDevice?.id;
     if (!_rayBanMetaCameraStatusRequested || _rayBanMetaCameraStatusDeviceId != deviceId) {
       _rayBanMetaCameraStatusRequested = true;
+      // The previous answer stays until the new one arrives, as the classic FutureBuilder kept it.
       _rayBanMetaCameraStatusDeviceId = deviceId;
-      _rayBanMetaCameraStatus = null;
+      final request = ++_rayBanMetaCameraStatusRequest;
       unawaited(_loadRayBanMetaCameraStatus(deviceId).then((status) {
-        if (!mounted || _rayBanMetaCameraStatusDeviceId != deviceId) return;
+        if (!mounted || request != _rayBanMetaCameraStatusRequest) return;
         setState(() => _rayBanMetaCameraStatus = status);
       }));
     }
@@ -731,7 +737,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<DeviceProvider>();
+    final provider = _deviceProvider = context.watch<DeviceProvider>();
     final capture = _maybeProvider<CaptureProvider>(context);
     final paired = provider.pairedDevice;
     final connected = provider.connectedDevice;
@@ -782,7 +788,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                 ? l10n.loading
                 : null);
     if (projected == null) return classic;
-    // The same picture as the classic header, including the turned-off Omi while disconnected.
+    // The same picture, from the same arguments, as the classic header.
     _watchThumbnail(DeviceUtils.getDeviceImagePathWithState(
       deviceType: connected?.type,
       modelNumber: connected?.modelNumber,

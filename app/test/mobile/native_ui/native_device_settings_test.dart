@@ -40,13 +40,14 @@ class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
 
   final BtDevice device;
   bool connected;
+  bool paired = true;
 
   @override
   bool get isConnected => connected;
   @override
   BtDevice? get connectedDevice => connected ? device : null;
   @override
-  BtDevice? get pairedDevice => device;
+  BtDevice? get pairedDevice => paired ? device : null;
   @override
   int get batteryLevel => 0;
   @override
@@ -394,6 +395,22 @@ void main() {
       expect(connection.gainWrites, [7]);
     });
 
+    testWidgets('a pending level is dropped once its device is no longer paired', (tester) async {
+      final host = NativeTestHost.install();
+      final connection = _FakeOmiConnection();
+      final provider = _StubDeviceProvider(device: _omi);
+      addTearDown(provider.dispose);
+      await _pumpSettings(tester, provider, connection);
+
+      _send(host, 'device_led', 10.0);
+      await tester.pump();
+      // Forget Device clears the pairing, then leaves the page before the debounce ends.
+      provider.paired = false;
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(seconds: 1));
+      expect(connection.dimWrites, isEmpty);
+    });
+
     testWidgets('the double-tap choice persists options and rejects anything else', (tester) async {
       final host = NativeTestHost.install();
       final provider = _StubDeviceProvider(device: _omi);
@@ -430,8 +447,15 @@ void main() {
         await tester.pump();
       }
       expect(connection.gainWrites, [2, 4, 6]);
-      expect(_rows(tester)['device_mic_gain_high']!.symbol, 'checkmark');
-      expect(_rows(tester)['device_mic_gain_quiet']!.symbol, isNull);
+
+      // A preset replaces a drag that is still waiting to be written.
+      _send(host, 'device_mic_gain', 7.0);
+      await tester.pump();
+      _send(host, 'device_mic_gain_quiet', null);
+      await tester.pump(const Duration(seconds: 1));
+      expect(connection.gainWrites, [2, 4, 6, 2]);
+      expect(_rows(tester)['device_mic_gain_quiet']!.symbol, 'checkmark');
+      expect(_rows(tester)['device_mic_gain_high']!.symbol, isNull);
     });
 
     testWidgets('the disconnected explanation appears only while disconnected', (tester) async {

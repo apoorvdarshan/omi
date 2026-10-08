@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
@@ -68,7 +69,11 @@ void main() => runNativeHostSuite((checkNativeHost) {
 
         final led = nativeProjectedRow(tester, 'device_led');
         expect((led.kind, led.value), ('level', 50.0));
-        await led.action!(30.0);
+        // Deliver the command the way Swift does, through the surface channel and its dispatch checks.
+        final id = nativeViewId(tester, find.byType(UiKitView))!;
+        final channel = MethodChannel('com.omi.native_ui/surface/$id');
+        await tester.binding.defaultBinaryMessenger.handlePlatformMessage(channel.name,
+            channel.codec.encodeMethodCall(const MethodCall('action', {'id': 'device_led', 'value': 30.0})), (_) {});
         await tester.pump(const Duration(milliseconds: 400));
         expect(connection.dimWrites, [30]);
         expect(nativeProjectedRow(tester, 'device_led').subtitle, '30%');
