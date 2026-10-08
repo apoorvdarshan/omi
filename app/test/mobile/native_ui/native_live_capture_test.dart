@@ -339,6 +339,8 @@ void main() {
     expect(row(tester, 'capture_wal')!.title, _l10n.audioUploadFailedTapRetry('1m 15s'));
     await send(tester, 'capture_wal_retry');
     expect(capture.walRetries, 1);
+    await send(tester, 'capture_wal');
+    expect(capture.walRetries, 2);
   });
 
   testWidgets('the empty timeline names what this session can produce', (tester) async {
@@ -457,7 +459,11 @@ void main() {
         now: () => now,
         reprocess: (id) async {
           reprocessed.add(id);
-          return conversation;
+          return ServerConversation(
+              id: id,
+              createdAt: conversation.createdAt,
+              status: ConversationStatus.completed,
+              structured: Structured('Done', ''));
         },
       )),
     ));
@@ -469,6 +475,8 @@ void main() {
     await send(tester, 'processing_retry');
     await NativeTestHost.settle(tester);
     expect(reprocessed, ['processing-1']);
+    // The reprocess answered with a finished conversation: nothing is stuck, so no second retry.
+    expect(row(tester, 'processing_retry'), isNull);
   });
 
   testWidgets('processing with nothing captured says so', (tester) async {

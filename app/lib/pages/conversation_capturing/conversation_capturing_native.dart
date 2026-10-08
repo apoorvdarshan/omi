@@ -16,6 +16,11 @@ extension _NativeConversationCapturing on _ConversationCapturingPageState {
       listenable: wedge,
       builder: (context, _) {
         final l10n = context.l10n;
+        // A new capture session on this page starts by following its newest line again.
+        if (provider.activeCaptureSessionId != _readerSessionId) {
+          _readerSessionId = provider.activeCaptureSessionId;
+          _readerFollowing = true;
+        }
         final timeline = _nativeTimeline(provider);
         final latestId = timeline.isEmpty ? null : timeline.last.id;
         final effectivelyMuted = provider.isPaused || provider.isCallActive;
@@ -104,8 +109,10 @@ extension _NativeConversationCapturing on _ConversationCapturingPageState {
               return actOnCaptureRecovery(wedge, episode);
             }),
       if (wal != null) ...[
+        // A failure that says "tap to retry" is tappable, as the classic indicator is.
         NativeRow('capture_wal', wal.text,
-            kind: 'label',
+            kind: wal.retryable ? 'button' : 'label',
+            action: wal.retryable ? (_) => provider.retryFailedSessionWalUploads() : null,
             subtitle: wal.backlog ?? '',
             symbol: wal.failed
                 ? 'exclamationmark.icloud'

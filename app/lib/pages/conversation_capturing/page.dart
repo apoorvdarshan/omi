@@ -107,6 +107,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
   /// once they return to it or ask for the latest line.
   bool _readerFollowing = true;
   int _readerJumps = 0;
+  String? _readerSessionId;
   bool _nativeFinishing = false;
 
   @override

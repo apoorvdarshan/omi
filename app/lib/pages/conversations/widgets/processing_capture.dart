@@ -813,6 +813,8 @@ class ProcessingRetryController extends ChangeNotifier {
         _timedOut = false;
         provider.addProcessingConversation(updated);
       } else {
+        // Processed: nothing is stuck any more, so the retry is withdrawn.
+        _timedOut = false;
         provider.removeProcessingConversation(conversationId);
         provider.upsertConversation(updated);
       }
