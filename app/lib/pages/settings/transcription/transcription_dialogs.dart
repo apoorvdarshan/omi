@@ -136,61 +136,75 @@ Future<String?> showImportConfigDialog(BuildContext context) async {
   }
 }
 
-Future<String?> _showFlutterImportConfigDialog(BuildContext context, {String initialText = ''}) async {
-  final controller = TextEditingController(text: initialText);
-  try {
-    return await showDialog<String>(
-      context: context,
-      builder: (dialogContext) {
-        final l10n = dialogContext.l10n;
-        return OmiAlertDialog(
-          title: l10n.importConfiguration,
-          message: l10n.pasteJsonConfig,
-          content: Material(
-            type: MaterialType.transparency,
-            child: SizedBox(
-              width: double.maxFinite,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    height: 200,
-                    child: TextField(
-                      controller: controller,
-                      maxLines: null,
-                      expands: true,
-                      textAlignVertical: TextAlignVertical.top,
-                      style: OmiType.footnote.copyWith(fontFamily: 'monospace'),
-                      decoration: transcriptionInputDecoration(hint: l10n.transcriptionJsonPlaceholder),
-                    ),
-                  ),
-                  const SizedBox(height: OmiSpacing.xs),
-                  TranscriptionHelpText(l10n.addApiKeyAfterImport),
-                ],
+Future<String?> _showFlutterImportConfigDialog(BuildContext context, {String initialText = ''}) =>
+    showDialog<String>(context: context, builder: (_) => _ImportConfigDialog(initialText: initialText));
+
+/// Owns its text controller, so the field stays usable through the dialog's exit transition.
+class _ImportConfigDialog extends StatefulWidget {
+  const _ImportConfigDialog({required this.initialText});
+
+  final String initialText;
+
+  @override
+  State<_ImportConfigDialog> createState() => _ImportConfigDialogState();
+}
+
+class _ImportConfigDialogState extends State<_ImportConfigDialog> {
+  late final TextEditingController _controller = TextEditingController(text: widget.initialText);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return OmiAlertDialog(
+      title: l10n.importConfiguration,
+      message: l10n.pasteJsonConfig,
+      content: Material(
+        type: MaterialType.transparency,
+        child: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                height: 200,
+                child: TextField(
+                  controller: _controller,
+                  maxLines: null,
+                  expands: true,
+                  textAlignVertical: TextAlignVertical.top,
+                  style: OmiType.footnote.copyWith(fontFamily: 'monospace'),
+                  decoration: transcriptionInputDecoration(hint: l10n.transcriptionJsonPlaceholder),
+                ),
               ),
-            ),
+              const SizedBox(height: OmiSpacing.xs),
+              TranscriptionHelpText(l10n.addApiKeyAfterImport),
+            ],
           ),
-          actions: [
-            OmiDialogAction(label: l10n.cancel, onPressed: () => Navigator.of(dialogContext).pop()),
-            OmiDialogAction(
-              label: l10n.paste,
-              onPressed: () async {
-                final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
-                final text = clipboardData?.text;
-                if (text != null) controller.text = text;
-              },
-            ),
-            OmiDialogAction(
-              label: l10n.import,
-              isDefault: true,
-              onPressed: () => Navigator.of(dialogContext).pop(controller.text),
-            ),
-          ],
-        );
-      },
+        ),
+      ),
+      actions: [
+        OmiDialogAction(label: l10n.cancel, onPressed: () => Navigator.of(context).pop()),
+        OmiDialogAction(
+          label: l10n.paste,
+          onPressed: () async {
+            final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+            final text = clipboardData?.text;
+            if (text != null && mounted) _controller.text = text;
+          },
+        ),
+        OmiDialogAction(
+          label: l10n.import,
+          isDefault: true,
+          onPressed: () => Navigator.of(context).pop(_controller.text),
+        ),
+      ],
     );
-  } finally {
-    controller.dispose();
   }
 }
