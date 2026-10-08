@@ -121,7 +121,7 @@ private final class ModalFixtureController: UIViewController {
             ? [row("message", "Delete the selected person?", "label")]
             : [row("draft", "Name", "text", ""), row("opt_out", "Do not ask again", "toggle", false)]]]
         let args: [String: Any] = ["requestId": 1, "cancelId": "cancel", "snapshot": snapshot,
-            "alert": alert, "dismissible": true, "guardEdits": true,
+            "alert": alert, "dismissible": !ProcessInfo.processInfo.arguments.contains("locked"), "guardEdits": true,
             "discard": ["title": "Discard Changes?", "message": "Your changes have not been saved.",
                 "confirm": "Discard", "cancel": "Keep Editing"]]
         do {

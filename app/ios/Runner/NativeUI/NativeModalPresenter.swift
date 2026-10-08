@@ -22,6 +22,8 @@ final class NativeModalPresenter: NSObject, UIAdaptivePresentationControllerDele
         let state: NativeSurfaceState?
         let cancelID: String
         let guardEdits: Bool
+        /// A swipe may close it. A non-dismissible sheet ignores swipes; its own actions still close it.
+        let dismissible: Bool
         let discard: [String: String]
         let completion: (Any?) -> Void
         var asking = false
@@ -32,7 +34,7 @@ final class NativeModalPresenter: NSObject, UIAdaptivePresentationControllerDele
         var monitor: Task<Void, Never>?
 
         init(id: Int, controller: UIViewController, initial: NativeSurfaceSnapshot?,
-             state: NativeSurfaceState?, cancelID: String, guardEdits: Bool,
+             state: NativeSurfaceState?, cancelID: String, guardEdits: Bool, dismissible: Bool,
              discard: [String: String], completion: @escaping (Any?) -> Void) {
             self.id = id
             self.controller = controller
@@ -40,6 +42,7 @@ final class NativeModalPresenter: NSObject, UIAdaptivePresentationControllerDele
             self.state = state
             self.cancelID = cancelID
             self.guardEdits = guardEdits
+            self.dismissible = dismissible
             self.discard = discard
             self.completion = completion
         }
@@ -114,6 +117,7 @@ final class NativeModalPresenter: NSObject, UIAdaptivePresentationControllerDele
             : snapshot.appearance == "dark" ? .dark : .light
         let presentation = Presentation(id: id, controller: controller, initial: snapshot, state: state,
                                         cancelID: cancelID, guardEdits: args["guardEdits"] as? Bool == true,
+                                        dismissible: args["dismissible"] as? Bool != false,
                                         discard: discard, completion: completion)
         active = presentation
         show(presentation, from: parent)
@@ -140,7 +144,8 @@ final class NativeModalPresenter: NSObject, UIAdaptivePresentationControllerDele
         controller.overrideUserInterfaceStyle = request.appearance == "system" ? .unspecified
             : request.appearance == "dark" ? .dark : .light
         let presentation = Presentation(id: request.id, controller: controller, initial: nil, state: nil,
-                                        cancelID: "", guardEdits: false, discard: [:], completion: completion)
+                                        cancelID: "", guardEdits: false, dismissible: false, discard: [:],
+                                        completion: completion)
         active = presentation
         show(presentation, from: parent, announcing: request.label)
     }
@@ -210,7 +215,8 @@ final class NativeModalPresenter: NSObject, UIAdaptivePresentationControllerDele
         active = nil
         // Should UIKit still show one it failed to present, it does not stay up untracked.
         if !presentation.shown {
-            presentation.whenShown = { presentation.controller.presentingViewController?.dismiss(animated: false) }
+            let controller = presentation.controller
+            presentation.whenShown = { controller.presentingViewController?.dismiss(animated: false) }
         }
         presentation.completion(Self.outcome(action: nil, values: [:], reason: reason))
     }
@@ -261,7 +267,7 @@ final class NativeModalPresenter: NSObject, UIAdaptivePresentationControllerDele
     }
 
     func presentationControllerDidAttemptToDismiss(_ presentationController: UIPresentationController) {
-        if let active { requestDismissal(active, reason: "dismissed") }
+        if let active, active.dismissible { requestDismissal(active, reason: "dismissed") }
     }
 
     func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
@@ -303,6 +309,7 @@ struct NativeActivityView: View {
         .padding(24)
         .frame(minWidth: 160, maxWidth: 320)
         .modifier(NativeActivityCardStyle())
+        .accessibilityElement(children: .combine)
         .accessibilityIdentifier("native-activity")
     }
 }

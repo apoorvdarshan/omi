@@ -310,6 +310,26 @@ void main() {
       expect(await activity.closed, 'programmatic');
     });
 
+    testWidgets('presenting it closes the keyboard so the field beneath takes no input', (tester) async {
+      NativeTestHost.install();
+      final presenter = _Presenter.install();
+      final focus = FocusNode();
+      addTearDown(focus.dispose);
+      await tester.pumpWidget(NativeTestHost.app(Scaffold(
+          body: Column(children: [
+        TextField(focusNode: focus),
+        const SizedBox(key: ValueKey('caller'), height: 40),
+      ]))));
+      focus.requestFocus();
+      await tester.pump();
+      expect(focus.hasFocus, isTrue);
+      final activity = (await showIosNativeActivity(_caller(tester, 'caller'), label: 'Saving'))!;
+      await tester.pump();
+      expect(presenter.methods, ['presentActivity']);
+      expect(focus.hasFocus, isFalse);
+      await activity.dismiss();
+    });
+
     testWidgets('a session-generation event dismisses it', (tester) async {
       NativeTestHost.install();
       final presenter = _Presenter.install();

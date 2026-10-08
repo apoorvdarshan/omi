@@ -180,6 +180,7 @@ final class PreviewUITests: XCTestCase {
         field.typeText("Avery final edit")
         app.buttons["save"].tap()
         XCTAssertTrue(app.staticTexts["saved:Avery final edit:false"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["reason:action"].exists)
         XCTAssertFalse(field.exists)
         capture(app, "native-modal-explicit-save")
     }
@@ -500,6 +501,19 @@ final class PreviewUITests: XCTestCase {
         capture(app, "native-modal-swipe-dismissed")
     }
 
+    func testNonDismissibleSheetIgnoresSwipes() {
+        let app = start(["modal", "locked"])
+        app.buttons["modal-open"].tap()
+        let field = app.textFields["draft"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08))
+            .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.98)))
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["reason:dismissed"].exists)
+        app.buttons["cancel"].tap()
+        XCTAssertTrue(app.staticTexts["reason:cancel"].waitForExistence(timeout: 10))
+    }
+
     func testNativeAlertCancelAndProgrammaticDismissalReportReasons() {
         let alert = start(["modal", "alert"])
         alert.buttons["modal-open"].tap()
@@ -550,11 +564,12 @@ final class PreviewUITests: XCTestCase {
     func testActivityLargeTextLabelStaysVisible() {
         let app = start(["modal", "large", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"])
         app.buttons["activity-open"].tap()
-        let label = app.staticTexts["Saving your changes to this conversation summary"]
-        XCTAssertTrue(label.waitForExistence(timeout: 5))
-        print("TMPDEBUG-BEGIN\n" + app.debugDescription + "\nTMPDEBUG-END")
-        XCTAssertTrue(app.windows.firstMatch.frame.contains(label.frame))
-        XCTAssertGreaterThan(label.frame.height, 100, "The label wraps instead of truncating")
+        // The card is one accessibility element whose label is the activity label.
+        let card = app.descendants(matching: .any)["native-activity"]
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        XCTAssertTrue(card.label.contains("Saving your changes to this conversation summary"))
+        XCTAssertTrue(app.windows.firstMatch.frame.contains(card.frame))
+        XCTAssertGreaterThan(card.frame.height, 100, "The label wraps instead of truncating")
         capture(app, "native-activity-large-text")
         XCTAssertTrue(app.staticTexts["reason:programmatic"].waitForExistence(timeout: 15))
     }

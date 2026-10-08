@@ -344,7 +344,9 @@ class NativeActivity {
 
   /// Completes once the activity is gone, with why: 'programmatic' ([dismiss], or its maximum
   /// lifetime), 'invalidated' (the account session changed), 'unmounted' (the caller's context
-  /// unmounted) or 'dismissed' (the host refused it, or UIKit or another owner removed it).
+  /// unmounted) or 'dismissed' (the host refused it, or UIKit or another owner removed it). A
+  /// caller whose work is still running when this answers 'dismissed' has no overlay any more and
+  /// may show its Flutter spinner instead.
   Future<String> get closed => _closed.future;
 
   /// Removes the activity, or drops it while it still waits for its turn. Idempotent: every call
@@ -400,6 +402,8 @@ Future<NativeActivity?> showIosNativeActivity(BuildContext context, {required St
     try {
       final reason = await _inPresentationOrder(ticket, () => context.mounted && current(), () async {
         final id = _nextPresentationId++;
+        // The keyboard window sits above the overlay; close it so nothing beneath takes input.
+        FocusManager.instance.primaryFocus?.unfocus();
         final response = await _presentWatched(context, ticket, current, id, {'requestId': id, ...request},
             method: 'presentActivity', lifetime: _activityLifetime);
         if (ticket._cause case final cause?) return cause;
@@ -421,7 +425,7 @@ Future<NativeActivity?> showIosNativeActivity(BuildContext context, {required St
 
   unawaited(run().then(activity._finish, onError: (Object error, StackTrace stack) {
     activity._finish('dismissed');
-    Error.throwWithStackTrace(error, stack);
+    FlutterError.reportError(FlutterErrorDetails(exception: error, stack: stack, library: 'native ui'));
   }));
   return activity;
 }
