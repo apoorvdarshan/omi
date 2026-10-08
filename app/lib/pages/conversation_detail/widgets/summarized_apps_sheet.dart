@@ -289,14 +289,17 @@ class _AppsListState extends State<_AppsList> {
 
     final preferredAppId = layout.preferredAppId;
     final hasPreferred = preferredAppId?.isNotEmpty == true;
+    final preferredApp = layout.preferredApp;
+    final lastUsedApp = layout.lastUsedApp;
+    // Classic repeats a suggested last-used app under Other with its badge; one row per app keeps
+    // the badge on the suggested row instead.
     final suggestedRows = [
       for (final app in suggestedApps)
         appRow(app,
             available: widget.provider.isSuggestedAppAvailable(app.id),
-            isDefault: hasPreferred && app.id == preferredAppId),
+            isDefault: hasPreferred && app.id == preferredAppId,
+            isLastUsed: app.id == lastUsedApp?.id && app.id != preferredAppId),
     ].nonNulls.toList();
-    final preferredApp = layout.preferredApp;
-    final lastUsedApp = layout.lastUsedApp;
     final otherRows = [
       if (preferredApp != null && !layout.suggestedAppIds.contains(preferredApp.id))
         appRow(preferredApp, available: true, isDefault: true),
@@ -310,7 +313,8 @@ class _AppsListState extends State<_AppsList> {
       fallback: OmiSheetScaffold(
         title: l10n.summaryTemplate,
         padding: EdgeInsets.zero,
-        child: SizedBox(height: MediaQuery.sizeOf(context).height * 0.7, child: _buildClassic(context)),
+        // A Builder lays the classic list out only if the fallback is ever shown.
+        child: SizedBox(height: MediaQuery.sizeOf(context).height * 0.7, child: Builder(builder: _buildClassic)),
       ),
       toolbar: [
         NativeRow('template_close', l10n.close, symbol: 'xmark', action: (_) => Navigator.of(context).maybePop()),

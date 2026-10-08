@@ -24,6 +24,7 @@ import 'package:omi/pages/conversation_detail/widgets/create_template_bottom_she
 import 'package:omi/pages/conversation_detail/widgets/feedback_sheet.dart';
 import 'package:omi/pages/conversation_detail/widgets/share_to_contacts_sheet.dart';
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
+import 'package:omi/pages/conversation_detail/widgets/summary_tab.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/appearance_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -132,6 +133,16 @@ class _TemplateOwner extends ConversationDetailProvider {
     reprocessed.add(appId);
     return true;
   }
+}
+
+/// A detail owner whose app catalog is [known].
+class _AttributionOwner extends ConversationDetailProvider {
+  _AttributionOwner(this.known);
+
+  final Map<String, App> known;
+
+  @override
+  App? findAppById(String? appId) => known[appId];
 }
 
 ConversationDetailProvider _detail(ConversationDetailProvider provider, ServerConversation conversation) {
@@ -268,7 +279,8 @@ void main() {
     final alpha = _app('alpha', 'alpha');
     final bravo = _app('bravo', 'Bravo');
 
-    Future<_TemplateOwner> openChooser(WidgetTester tester, {Set<String> unavailable = const {}}) async {
+    Future<_TemplateOwner> openChooser(WidgetTester tester,
+        {Set<String> unavailable = const {}, String lastUsed = 'last'}) async {
       NativeTestHost.install();
       SharedPreferencesUtil().uid = 'me';
       final owner = _detail(
@@ -277,7 +289,7 @@ void main() {
               // The suggested and last used apps also appear among the enabled ones.
               enabled: [bravo, suggestedApp, alpha, ownApp, lastUsedApp, defaultApp],
               preferred: 'default',
-              lastUsed: 'last',
+              lastUsed: lastUsed,
               unavailable: unavailable),
           _conversation()) as _TemplateOwner;
       await _open(tester, (_) => const SummarizedAppsBottomSheet(native: true), providers: [
@@ -302,6 +314,14 @@ void main() {
       expect(apps.first.imageUri, startsWith('https://'));
       expect(apps.first.options, {'default': _l10n.setDefaultButton});
       expect(sections[2].rows.map((row) => row.id), ['template_create', 'template_all']);
+    });
+
+    testWidgets('a suggested template used last keeps its Last used badge on its one row', (tester) async {
+      await openChooser(tester, lastUsed: 'suggested');
+      final apps = _surface(tester).sections.take(2).expand((section) => section.rows).toList();
+      expect(apps.map((row) => row.title), ['Suggested', 'Zulu default', 'X-ray own', 'alpha', 'Bravo', 'Yankee last']);
+      expect(apps.first.subtitle, contains(_l10n.lastUsedLabel));
+      expect(apps.skip(1).any((row) => row.subtitle.contains(_l10n.lastUsedLabel)), isFalse);
     });
 
     testWidgets('a tap reprocesses with that app once and closes', (tester) async {
@@ -344,6 +364,49 @@ void main() {
       await tester.pumpAndSettle();
       expect(_row(tester, 'template_app:0').projection['enabled'], isTrue);
       expect(owner.reprocessed, isEmpty);
+    });
+  });
+
+  group('summary attribution', () {
+    final writer = _app('writer', 'Meeting notes', description: 'Turns calls into notes');
+
+    Future<List<NativeRow>> summaryRows(WidgetTester tester, Map<String, App> known) async {
+      NativeTestHost.install();
+      final conversation = ServerConversation(
+        id: 'conv-app',
+        createdAt: DateTime(2026, 7, 1, 9).toUtc(),
+        structured: Structured('Sprint sync', ''),
+        appResults: [AppResponse('Decided to ship Friday.', appId: 'writer')],
+        // Still processing, so the summary projects without the completed-only extras.
+        status: ConversationStatus.processing,
+      );
+      final owner = _detail(_AttributionOwner(known), conversation);
+      final published = <List<NativeSection>>[];
+      await tester.pumpWidget(MultiProvider(
+          providers: [ChangeNotifierProvider<ConversationDetailProvider>.value(value: owner)],
+          child: MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: const [Locale('en')],
+              home: Scaffold(body: SummaryTab(onNativePresentation: published.add)))));
+      await tester.pump();
+      return published.last.single.rows;
+    }
+
+    testWidgets('an app-written summary names its app in a row that opens the app', (tester) async {
+      final rows = await summaryRows(tester, {'writer': writer});
+      final app = rows.singleWhere((row) => row.id == 'detail_summary_app');
+      expect(app.title, 'Meeting notes');
+      expect(app.kind, 'navigation');
+      expect(app.subtitle, 'Turns calls into notes');
+      expect(app.imageUri, startsWith('https://'));
+      expect(app.action, isNotNull);
+      expect(rows.every((row) => row.valid), isTrue);
+    });
+
+    testWidgets('an app the catalog no longer knows shows no attribution', (tester) async {
+      final rows = await summaryRows(tester, {});
+      expect(rows.map((row) => row.id), contains('detail_summary_content'));
+      expect(rows.any((row) => row.id == 'detail_summary_app'), isFalse);
     });
   });
 
