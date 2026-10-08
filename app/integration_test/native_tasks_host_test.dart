@@ -50,7 +50,8 @@ List<ActionItemWithMetadata> _fixture() {
   ];
 }
 
-/// The native shell's Tasks tab exactly as home/page.dart builds it.
+/// The page as home/page.dart's native-shell 'tasks' builder mounts it (without the shell's own tab-bar
+/// surface, so the harness checks a single UIKit view).
 Future<_TasksOwner> _pumpTasksTab(WidgetTester tester) async {
   await JourneyHermeticBoot.start(extraPrefs: {'appearanceMode': 'dark'});
   addTearDown(JourneyHermeticBoot.stop);
@@ -114,7 +115,8 @@ void main() {
       expect(find.byType(UiKitView), findsNothing);
       expect(find.byType(TaskSelectionActionBar), findsOneWidget);
       owner.startSelection();
-      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      expect(await captureNativeHostScreenshot('native-tasks-selection-hierarchy-fallback-dark'), isNotEmpty);
       expect(find.byType(UiKitView), findsNothing, reason: 'selection keeps the refused route on its fallback');
       expect(find.byType(TaskSelectionActionBar), findsOneWidget);
       owner.endSelection();

@@ -15,6 +15,7 @@ import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
@@ -86,12 +87,12 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     }
   }
 
-  late final ActionItemsProvider _selectionOwner = Provider.of<ActionItemsProvider>(context, listen: false);
+  late final ActionItemsProvider _selectionOwner;
 
   @override
   void initState() {
     super.initState();
-    _selectionOwner;
+    _selectionOwner = Provider.of<ActionItemsProvider>(context, listen: false);
     _scrollController.addListener(_onScroll);
     _loadTaskGoalLinks();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -154,7 +155,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   void dispose() {
     // The native selection has no route of its own: leaving the page ends it, after this frame.
     final owner = _selectionOwner;
-    if (nativePresentationEnabled && owner.isSelectionMode) {
+    if (widget.selectionBarInFallback && nativePresentationEnabled && owner.isSelectionMode) {
       WidgetsBinding.instance.addPostFrameCallback((_) => owner.endSelection());
     }
     _scrollController.removeListener(_onScroll);
@@ -486,7 +487,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     final loading = provider.isLoading && provider.actionItems.isEmpty;
     final selectedCount = provider.selectedCount;
     final allSelected = provider.actionItems.isNotEmpty && selectedCount == provider.actionItems.length;
-    final visible = _nativeVisibleTasks(provider, categorizedItems);
+    final visible =
+        failed ? const <String, List<ActionItemWithMetadata>>{} : _nativeVisibleTasks(provider, categorizedItems);
     final taskIds = {for (final items in visible.values) ...items.map((item) => 'task_${item.id}')};
     return IosNativeSurface(
       title: selecting ? l10n.selectedCount(selectedCount) : l10n.tasks,
@@ -506,6 +508,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           NativeRow('tasks_cancel', l10n.cancel, symbol: 'xmark', action: (_) => provider.endSelection()),
           NativeRow('tasks_select_all', allSelected ? l10n.deselectAllTasksMenu : l10n.selectAllTasksMenu,
               action: (_) => allSelected ? provider.clearSelection() : provider.selectAllItems()),
+          NativeRow('tasks_completed', provider.showCompletedView ? l10n.hideCompletedTasks : l10n.showCompletedTasks,
+              action: (_) => provider.toggleShowCompletedView()),
         ] else if (reordering) ...[
           NativeRow('tasks_home', l10n.home,
               symbol: 'house', action: (_) => context.read<HomeProvider>().setIndex(HomeProvider.homeTab)),
@@ -574,23 +578,30 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             ]
           : const [],
       sections: [
-        for (final MapEntry(key: category, value: items) in visible.entries)
-          NativeSection(
-            category.name,
-            [
-              for (final item in items) _nativeTaskRow(provider, item, category, items, selecting: selecting),
-              if (provider.showCompletedView && !reordering && !provider.isSearching)
-                NativeRow('tasks_clear_${category.name}', l10n.tasksClearCompleted,
-                    destructive: true, action: (_) => _confirmClearCompleted(provider, items)),
-            ],
-            title: _getCategoryTitle(context, category),
-            footer: l10n.tasksCountLabel(items.length),
-            collapsible: category == TaskCategory.overdue || category == TaskCategory.noDeadline,
-            reorder: reordering ? (value) => _applyNativeReorder(provider, category, value) : null,
-          ),
-        if (visible.isEmpty && !provider.isSearching && !loading && !failed)
+        for (final MapEntry(key: id, value: items) in visible.entries)
+          if (TaskCategory.values.asNameMap()[id] case final category?)
+            NativeSection(
+              id,
+              [
+                for (final item in items) _nativeTaskRow(provider, item, items, selecting: selecting),
+                if (provider.showCompletedView && !reordering)
+                  NativeRow('tasks_clear_$id', l10n.tasksClearCompleted,
+                      destructive: true, action: (_) => _confirmClearCompleted(provider, items)),
+              ],
+              title: _getCategoryTitle(context, category),
+              footer: l10n.tasksCountLabel(items.length),
+              collapsible: category == TaskCategory.overdue || category == TaskCategory.noDeadline,
+              reorder: reordering ? (value) => _applyNativeReorder(provider, category, value) : null,
+            )
+          else
+            // Search results are one flat list in match order, open and completed alike, as in Flutter.
+            NativeSection(id, [for (final item in items) _nativeTaskRow(provider, item, items, selecting: selecting)],
+                footer: l10n.tasksCountLabel(items.length)),
+        if (visible.isEmpty && !loading && !failed)
           NativeSection('empty', [
-            NativeRow('tasks_empty', l10n.noTasksYet, kind: 'label', subtitle: l10n.tasksEmptyStateMessage),
+            provider.isSearching
+                ? NativeRow('tasks_no_results', l10n.noResultsFound, kind: 'label')
+                : NativeRow('tasks_empty', l10n.noTasksYet, kind: 'label', subtitle: l10n.tasksEmptyStateMessage),
           ]),
         if (provider.hasMore)
           NativeSection('pagination', [
@@ -601,26 +612,26 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
-  /// Each non-empty category's displayed rows in order: the search matches while searching.
-  Map<TaskCategory, List<ActionItemWithMetadata>> _nativeVisibleTasks(
+  /// The displayed rows by section id: each non-empty category in order, or while searching every match
+  /// in one 'search' section, as the Flutter list shows them.
+  Map<String, List<ActionItemWithMetadata>> _nativeVisibleTasks(
     ActionItemsProvider provider,
     Map<TaskCategory, List<ActionItemWithMetadata>> categorizedItems,
   ) {
-    final matches = provider.isSearching ? provider.filteredActionItems.map((item) => item.id).toSet() : null;
+    if (provider.isSearching) {
+      final matches = provider.filteredActionItems;
+      return {if (matches.isNotEmpty) 'search': matches};
+    }
     return {
       for (final category in TaskCategory.values)
-        if (_getOrderedItems(category, categorizedItems[category] ?? [])
-                .where((item) => matches == null || matches.contains(item.id))
-                .toList()
-            case final items when items.isNotEmpty)
-          category: items,
+        if (_getOrderedItems(category, categorizedItems[category] ?? []) case final items when items.isNotEmpty)
+          category.name: items,
     };
   }
 
   NativeRow _nativeTaskRow(
     ActionItemsProvider provider,
     ActionItemWithMetadata item,
-    TaskCategory category,
     List<ActionItemWithMetadata> rows, {
     required bool selecting,
   }) {
@@ -672,13 +683,19 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       } else if (value == 'outdent') {
         _decrementIndent(item.id);
       } else if (value == 'due') {
+        // The choice applies only for the page and account that asked.
+        final owner = AuthService.instance.captureSessionSnapshot();
+        bool current() => mounted && owner != null && AuthService.instance.isSessionSnapshotCurrent(owner);
         await showOmiRowMenu(context, title: l10n.setDueDate, actions: [
+          // The categories a drop could reach: the completed view has no Overdue section.
           for (final target in TaskCategory.values)
-            if (target != category)
+            if (target != _getCategoryForItem(item) && !(target == TaskCategory.overdue && provider.showCompletedView))
               OmiMenuAction(
                   icon: Icons.event_outlined,
                   label: _getCategoryTitle(context, target),
-                  onSelected: () => _updateTaskCategory(item, target)),
+                  onSelected: () {
+                    if (current()) _updateTaskCategory(item, target);
+                  }),
         ]);
       }
     });

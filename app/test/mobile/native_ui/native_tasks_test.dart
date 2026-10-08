@@ -225,7 +225,7 @@ void main() {
       expect(find.byType(UiKitView), findsOneWidget, reason: 'selection no longer falls back');
       expect(find.byType(TaskSelectionActionBar), findsNothing, reason: 'the native bottom bar replaces it');
       expect(page.surface.title, _l10n.selectedCount(0));
-      expect(page.surface.toolbar.map((row) => row.id), ['tasks_cancel', 'tasks_select_all']);
+      expect(page.surface.toolbar.map((row) => row.id), ['tasks_cancel', 'tasks_select_all', 'tasks_completed']);
       expect(page.task('child').kind, 'label');
       expect(page.task('child').indent, 1);
       expect(page.task('child').symbol, 'circle');
@@ -357,14 +357,39 @@ void main() {
 
     testWidgets("'due' moves the task with the drag and drop dates", (tester) async {
       final page = await _pump(tester);
-      final presented = _answerPresentations(_choose(_l10n.tomorrow));
+      var choice = _l10n.tomorrow;
+      final presented = _answerPresentations((snapshot) => _choose(choice)(snapshot));
       await page.send('task_loose', 'due');
       await tester.pump();
       final titles = (presented.single['toolbar'] as List).cast<Map>().map((row) => row['title']);
       expect(titles, containsAll([_l10n.today, _l10n.tomorrow, _l10n.tasksLater, _l10n.tasksOverdue]));
       expect(titles, isNot(contains(_l10n.tasksNoDeadline)), reason: 'the current category is not offered');
-      final now = DateTime.now();
-      expect(page.calls.dueDates, [('loose', DateTime(now.year, now.month, now.day + 1, 23, 59))]);
+      final day = DateTime(_now.year, _now.month, _now.day);
+      final expected = {
+        _l10n.today: DateTime(day.year, day.month, day.day, 23, 59),
+        _l10n.tomorrow: DateTime(day.year, day.month, day.day + 1, 23, 59),
+        _l10n.tasksLater: DateTime(day.year, day.month, day.day + 2, 23, 59),
+        _l10n.tasksOverdue: DateTime(day.year, day.month, day.day - 1, 23, 59),
+      };
+      for (final MapEntry(key: title, value: date) in expected.entries) {
+        choice = title;
+        await page.send('task_loose', 'due');
+        await tester.pump();
+        expect(page.calls.dueDates.last, ('loose', date), reason: title);
+      }
+      expect(page.calls.dueDates.first, ('loose', expected[_l10n.tomorrow]));
+      choice = _l10n.tasksNoDeadline;
+      await page.send('task_parent', 'due');
+      await tester.pump();
+      expect(page.calls.dueDates.last, ('parent', null));
+
+      choice = _l10n.tomorrow;
+      await page.send('tasks_menu', 'completed');
+      await page.send('task_done', 'due');
+      await tester.pump();
+      final completedTitles = (presented.last['toolbar'] as List).cast<Map>().map((row) => row['title']);
+      expect(completedTitles, isNot(contains(_l10n.tasksOverdue)), reason: 'the completed view has no Overdue');
+      expect(completedTitles, isNot(contains(_l10n.today)));
     });
 
     testWidgets('swipes route to complete and to delete with Undo', (tester) async {
@@ -423,8 +448,17 @@ void main() {
     testWidgets('a search without matches says so', (tester) async {
       final page = await _pump(tester);
       await page.send('_search', 'nothing matches this');
-      expect(page.surface.sections, isEmpty);
+      expect(page.surface.sections.map((section) => section.id), ['empty']);
+      expect(page.row('tasks_no_results').title, _l10n.noResultsFound);
       expect(page.surface.empty, _l10n.noResultsFound);
+    });
+
+    testWidgets('search results are one flat list of open and completed matches', (tester) async {
+      final page = await _pump(tester);
+      await page.send('_search', 'Task d');
+      expect(page.surface.sections.map((section) => section.id), ['search']);
+      expect(page.section('search').rows.map((row) => row.id), ['task_done']);
+      expect(page.section('search').footer, _l10n.tasksCountLabel(1));
     });
   });
 
@@ -461,10 +495,11 @@ void main() {
       await expectLater(page.send('_reorder:noDeadline', ['task_parent']), _refused);
       await expectLater(page.send('_reorder:missing', today), _refused);
 
+      // The owner changes before the surface rebuilds: the projection still accepts the old order, the page refuses.
       page.provider.stageDeleteActionItem(page.provider.actionItems.firstWhere((item) => item.id == 'sibling'));
-      await tester.pump();
-      await tester.pump();
       await expectLater(page.send('_reorder:today', today), _refused, reason: 'a removed row makes it stale');
+      await tester.pump();
+      await expectLater(page.send('_reorder:today', today), _refused, reason: 'and the new projection refuses it too');
       expect(page.calls.sortOrders, isEmpty);
       expect(page.calls.indents, isEmpty);
     });
