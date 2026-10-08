@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -34,28 +35,38 @@ class AudioDownloadSheetHandle {
       showCloseButton: false,
       isDismissible: false,
       enableDrag: false,
-      builder: (sheetContext) {
-        handle._sheetContext = sheetContext;
-        return PopScope(
-          canPop: false,
-          onPopInvokedWithResult: (didPop, _) {
-            if (!didPop) handle.cancel();
-          },
-          child: AnimatedBuilder(
-            animation: Listenable.merge([handle.state, handle.progress]),
-            builder: (context, _) => AudioDownloadProgressSheet(
-              state: handle.state.value,
-              progress: handle.progress.value,
-              onCancel: handle.cancel,
-            ),
-          ),
-        );
-      },
+      builder: (sheetContext) => handle._present(sheetContext, native: false),
+      nativeBuilder: (sheetContext) => handle._present(sheetContext, native: true),
     ).whenComplete(() {
       handle._open = false;
       handle._sheetContext = null;
     });
     return handle;
+  }
+
+  /// Back means cancel in both presentations; the native one keeps the Flutter content as its
+  /// fallback inside the usual sheet shell.
+  Widget _present(BuildContext sheetContext, {required bool native}) {
+    _sheetContext = sheetContext;
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) cancel();
+      },
+      child: AnimatedBuilder(
+        animation: Listenable.merge([state, progress]),
+        builder: (context, _) {
+          final content = AudioDownloadProgressSheet(state: state.value, progress: progress.value, onCancel: cancel);
+          if (!native) return content;
+          return AudioDownloadNativeSheet(
+            state: state.value,
+            progress: progress.value,
+            onCancel: cancel,
+            fallback: OmiSheetScaffold(showCloseButton: false, child: content),
+          );
+        },
+      ),
+    );
   }
 
   /// Cancels the download (once) and closes the sheet.
@@ -83,7 +94,8 @@ class AudioDownloadProgressSheet extends StatelessWidget {
 
   const AudioDownloadProgressSheet({super.key, required this.state, this.progress = 0.0, this.onCancel});
 
-  String _title(BuildContext context) {
+  /// The stage's copy, shared with the native sheet.
+  String title(BuildContext context) {
     return switch (state) {
       AudioDownloadState.preparing => context.l10n.preparingAudio,
       AudioDownloadState.downloading => context.l10n.downloadingAudioProgress,
@@ -130,7 +142,7 @@ class AudioDownloadProgressSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final working = state != AudioDownloadState.success && state != AudioDownloadState.error;
-    final title = _title(context);
+    final title = this.title(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(OmiSpacing.xs, OmiSpacing.md, OmiSpacing.xs, OmiSpacing.lg),
       child: Column(
@@ -148,6 +160,49 @@ class AudioDownloadProgressSheet extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// The native audio-download sheet: the stage, the download's progress, the outcome and Cancel
+/// while work runs. It cannot be swiped away; Back maps to cancel through the handle's PopScope.
+class AudioDownloadNativeSheet extends StatelessWidget {
+  const AudioDownloadNativeSheet(
+      {super.key, required this.state, required this.progress, required this.fallback, this.onCancel});
+
+  final AudioDownloadState state;
+  final double progress;
+  final VoidCallback? onCancel;
+  final Widget fallback;
+
+  /// The download fraction the progress row may show: finite and within 0...1.
+  static double clampedProgress(double value) => value.isFinite ? value.clamp(0.0, 1.0).toDouble() : 0.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final title = AudioDownloadProgressSheet(state: state).title(context);
+    final working = state != AudioDownloadState.success && state != AudioDownloadState.error;
+    final fraction = clampedProgress(progress);
+    return IosNativeSurface(
+      title: title,
+      fallback: fallback,
+      sections: [
+        NativeSection('audio_download', [
+          if (state == AudioDownloadState.success)
+            NativeRow('audio_download_status', title, kind: 'label', symbol: 'checkmark.circle.fill')
+          else if (state == AudioDownloadState.error)
+            NativeRow('audio_download_status', title,
+                kind: 'label', symbol: 'exclamationmark.circle.fill', destructive: true)
+          else
+            NativeRow('audio_download_status', title, kind: 'label'),
+          if (state == AudioDownloadState.downloading)
+            NativeRow('audio_download_progress', title,
+                kind: 'progress', value: fraction, maximumValue: 1, subtitle: '${(fraction * 100).toInt()}%'),
+          if (working && onCancel != null)
+            NativeRow('audio_download_cancel', l10n.cancel, destructive: true, action: (_) => onCancel!()),
+        ]),
+      ],
     );
   }
 }
