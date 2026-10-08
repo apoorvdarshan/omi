@@ -90,7 +90,8 @@ class _NativePrimaryLanguagePickerState extends State<NativePrimaryLanguagePicke
 
   Future<void> _save() async {
     final code = _selected;
-    if (code == null || _saving) return;
+    // A sheet that is already closing (a save succeeded) never saves or pops again.
+    if (code == null || _saving || ModalRoute.of(context)?.isCurrent == false) return;
     setState(() => _saving = true);
     try {
       await _savePrimaryLanguage(context, widget.homeProvider, code, _selectedName);
@@ -132,7 +133,10 @@ class _NativePrimaryLanguagePickerState extends State<NativePrimaryLanguagePicke
       searchValue: _query,
       searchPlaceholder: l10n.searchLanguageHint,
       toolbar: [
-        NativeRow('language_close', l10n.close, symbol: 'xmark', action: (_) => Navigator.of(context).maybePop()),
+        NativeRow('language_close', l10n.close, symbol: 'xmark', action: (_) {
+          if (ModalRoute.of(context)?.isCurrent == false) return;
+          Navigator.of(context).maybePop();
+        }),
         NativeRow('language_save', l10n.save, enabled: _selected != null && !_saving, action: (_) => _save()),
       ],
       sections: [

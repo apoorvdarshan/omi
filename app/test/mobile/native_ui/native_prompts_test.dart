@@ -313,6 +313,22 @@ void main() {
       expect(rows.firstWhere((row) => row['id'] == 'changelog_next')['enabled'], isTrue);
     });
 
+    testWidgets('a repeated close pops only the changelog', (tester) async {
+      final host = NativeTestHost.install();
+      await tester.pumpWidget(_launcher((context) => Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => Scaffold(body: ChangelogSheet(changelogs: [_changelog('1.0.1')], native: true))))));
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      await NativeTestHost.settle(tester);
+      final viewId = host.created.last;
+      await host.sendFromNative(viewId, const MethodCall('action', {'id': 'changelog_close', 'value': null}));
+      await tester.pump();
+      await host.sendFromNative(viewId, const MethodCall('action', {'id': 'changelog_close', 'value': null}));
+      await tester.pumpAndSettle();
+      expect(find.byType(ChangelogSheet), findsNothing);
+      expect(find.text('open'), findsOneWidget, reason: 'the route beneath stays');
+    });
+
     testWidgets('a single version has no version picker', (tester) async {
       final host = await mount(tester, [_changelog('1.0.1')]);
       expect(_ids(_rows(_snapshot(tester, host))), ['changelog_item_0']);

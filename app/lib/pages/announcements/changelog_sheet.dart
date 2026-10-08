@@ -135,7 +135,11 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
       onRefresh: widget.changelogsFuture == null ? null : (_) => _retry(),
       fallback: fallback,
       toolbar: [
-        NativeRow('changelog_close', l10n.close, symbol: 'xmark', action: (_) => Navigator.of(context).maybePop()),
+        NativeRow('changelog_close', l10n.close, symbol: 'xmark', action: (_) {
+          // A repeated close during the closing transition must not pop the route beneath.
+          if (ModalRoute.of(context)?.isCurrent == false) return;
+          Navigator.of(context).maybePop();
+        }),
       ],
       sections: [
         if (loaded && count > 1)

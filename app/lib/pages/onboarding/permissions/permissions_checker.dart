@@ -78,7 +78,8 @@ class _PermissionsInterstitialPageState extends State<PermissionsInterstitialPag
           source: widget.source,
           nativeContinue: () {
             // One Continue at a time: a repeated native command must not ask twice or go home twice.
-            if (_continuing) return;
+            // Once Home replaced this page, a late command is ignored too.
+            if (_continuing || ModalRoute.of(context)?.isCurrent == false) return;
             _continuing = true;
             unawaited(_continue(context).whenComplete(() => _continuing = false));
           },
