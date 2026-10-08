@@ -1,16 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/pages/capture/connect.dart';
 import 'package:omi/pages/onboarding/find_device/page.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
-import 'package:omi/utils/platform/platform_manager.dart';
 
+import 'journeys/support/hermetic_boot.dart';
 import 'support/native_host_harness.dart';
 import 'visual_audit/fakes.dart';
 
@@ -39,9 +37,9 @@ class _InjectedDiscovery extends OnboardingProvider {
 /// Run on Simulator with OMI_APP_PROFILE=local_dev and OMI_IOS_SWIFTUI=true.
 void main() => runNativeHostSuite((checkNativeHost) {
       setUp(() async {
-        SharedPreferences.setMockInitialValues({'appearanceMode': 'dark'});
-        await SharedPreferencesUtil.init();
-        PlatformManager.initializeForLocalHarness();
+        // A signed-in synthetic owner, so the native surface's session is active.
+        await JourneyHermeticBoot.start(extraPrefs: {'appearanceMode': 'dark'});
+        addTearDown(JourneyHermeticBoot.stop);
       });
 
       Future<_InjectedDiscovery> openConnect(WidgetTester tester) async {

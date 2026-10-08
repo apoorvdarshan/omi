@@ -347,18 +347,18 @@ void main() {
 
     for (final (name, reply, persisted) in [
       (
-        'confirm with the opt-out',
+        'acknowledge with the opt-out',
         {
-          'action': 'confirm',
+          'action': 'acknowledge',
           'values': {'opt_out': true},
           'reason': 'action'
         },
         true
       ),
       (
-        'confirm without the opt-out',
+        'acknowledge without the opt-out',
         {
-          'action': 'confirm',
+          'action': 'acknowledge',
           'values': {'opt_out': false},
           'reason': 'action'
         },
@@ -367,7 +367,7 @@ void main() {
       ('cancel', {'action': null, 'values': <String, Object?>{}, 'reason': 'cancel'}, false),
       ('a swipe', {'action': null, 'values': <String, Object?>{}, 'reason': 'dismissed'}, false),
     ]) {
-      testWidgets('the native confirmation persists the opt-out only on confirm: $name', (tester) async {
+      testWidgets('the native confirmation persists the opt-out only on acknowledge: $name', (tester) async {
         NativeTestHost.install();
         final presented = <Map>[];
         final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -383,7 +383,8 @@ void main() {
 
         expect(presented.single['dismissible'], isFalse);
         final snapshot = presented.single['snapshot'] as Map;
-        expect((snapshot['toolbar'] as List).map((row) => row['title']), contains(_l10n.iUnderstand));
+        expect((snapshot['toolbar'] as List).map((row) => row['title']), [_l10n.iUnderstand],
+            reason: 'Acknowledge-only, as the classic card');
         expect(SharedPreferencesUtil().getBool(prefKey), persisted);
       });
     }

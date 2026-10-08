@@ -48,6 +48,9 @@ class _RayBanMetaSetupSheetState extends State<RayBanMetaSetupSheet> {
   bool _refreshing = false;
   bool _completed = false;
 
+  /// A native step button's request is running; a second tap waits for it, as the classic button does.
+  bool _working = false;
+
   @override
   void initState() {
     super.initState();
@@ -142,7 +145,15 @@ class _RayBanMetaSetupSheetState extends State<RayBanMetaSetupSheet> {
     final l10n = context.l10n;
     NativeRow text(String id, String title) => NativeRow(id, title, kind: 'label');
     NativeRow button(String id, String title, FutureOr<void> Function() onPressed) =>
-        NativeRow(id, title, action: (_) => onPressed());
+        NativeRow(id, title, enabled: !_working, action: (_) async {
+          if (_working) return;
+          setState(() => _working = true);
+          try {
+            await onPressed();
+          } finally {
+            if (mounted) setState(() => _working = false);
+          }
+        });
     void close(bool ready) => Navigator.of(context).pop(ready);
     return switch (_step) {
       _SetupStep.loading || _SetupStep.ready => NativeSection('rayban_setup_loading', [

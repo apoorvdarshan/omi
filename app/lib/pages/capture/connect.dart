@@ -233,9 +233,11 @@ List<NativeSection> nativeDiscoverySections(
   final devices = provider.visibleDeviceList;
   final cantFind = provider.deviceList.isEmpty && provider.enableInstructions;
   final battery = provider.batteryPercentage.clamp(0, 100);
+  // While nothing is found the surface's own loading row already says "Searching for devices".
+  final loading = !provider.isConnected && devices.isEmpty && !provider.enableInstructions;
   return [
     NativeSection('connect_status', [
-      if (!provider.isConnected && !cantFind)
+      if (!provider.isConnected && !cantFind && !loading)
         NativeRow(
           'connect_searching',
           provider.nearbyDeviceCount == 0

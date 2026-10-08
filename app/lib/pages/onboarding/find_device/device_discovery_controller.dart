@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
+import 'package:omi/mobile/native_ui/ios_native_modal.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/mobile/native_ui/native_asset_image.dart';
 import 'package:omi/pages/onboarding/apple_watch_permission_page.dart';
@@ -326,20 +327,28 @@ class DeviceDiscoveryController {
       return;
     }
 
-    // The native confirmation carries the same opt-out toggle; every other build keeps the
+    // The native alert keeps the single "I Understand" with the same opt-out toggle; null keeps the
     // acknowledge-only card below.
-    final native = nativePresentationEnabled && await supportsNativePresentation();
+    final l10n = _context.l10n;
+    final native = !nativePresentationEnabled
+        ? null
+        : await showIosNativeModal(
+            _context,
+            title: device.getFirmwareWarningTitle(),
+            dismissible: false,
+            actions: [NativeRow('acknowledge', l10n.iUnderstand)],
+            sections: [
+              NativeSection('firmware_warning', [
+                NativeRow('message', warningMessage, kind: 'label'),
+                NativeRow('opt_out', l10n.dontShowAgain, kind: 'toggle', value: false),
+              ]),
+            ],
+          );
     if (!_context.mounted) return;
-    if (native) {
-      final result = await showOmiConfirmWithOptOut(
-        _context,
-        title: device.getFirmwareWarningTitle(),
-        message: warningMessage,
-        confirmLabel: _context.l10n.iUnderstand,
-        optOutLabel: _context.l10n.dontShowAgain,
-        barrierDismissible: false,
-      );
-      if (result.confirmed && result.dontAskAgain) SharedPreferencesUtil().saveBool(prefKey, true);
+    if (native != null) {
+      if (native.action == 'acknowledge' && native.values['opt_out'] == true) {
+        SharedPreferencesUtil().saveBool(prefKey, true);
+      }
       return;
     }
 

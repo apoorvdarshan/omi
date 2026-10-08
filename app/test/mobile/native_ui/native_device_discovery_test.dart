@@ -151,9 +151,8 @@ void main() {
       expect(snapshot['loadingLabel'], _l10n.searchingForDevices);
       expect((snapshot['toolbar'] as List).map((row) => row['id']), ['connect_back', 'connect_settings']);
       expect(_row(tester, 'connect_settings')!['symbol'], 'gearshape');
-      expect(_row(tester, 'connect_searching'),
-          allOf(containsPair('title', _l10n.searchingForDevices), containsPair('kind', 'label')));
-      expect(_sections(tester).map((section) => section['id']), ['connect_status', 'connect_more']);
+      expect(_row(tester, 'connect_searching'), isNull, reason: 'The loading row already says it');
+      expect(_sections(tester).map((section) => section['id']), ['connect_more']);
       expect(_row(tester, 'connect_get_device')!['symbol'], 'safari');
       expect(_row(tester, 'connect_guide')!['symbol'], 'info.circle');
 
@@ -328,6 +327,7 @@ void main() {
       expect(find.byType(UiKitView), findsNothing);
       expect(find.byType(FindDevicesPage), findsOneWidget);
       expect(provider.cancels, 1, reason: 'The native owner handed the scan to the classic page');
+      expect(provider.scans, 2, reason: 'FindDevicesPage took the scan over');
 
       provider.found([_device('id-1', 'Omi')]);
       await NativeTestHost.settle(tester);
@@ -385,7 +385,8 @@ void main() {
     expect(ids.toSet().length, ids.length);
     final allowed = RegExp(r'^assets/images/[A-Za-z0-9_/-]+\.(png|jpg|jpeg|webp)$');
     for (final asset in assets) {
-      expect(allowed.hasMatch(asset) && !asset.contains('..'), isTrue, reason: asset);
+      // nativeAssetImageUri's rule: the bundled-image pattern, no '..' and no empty path segment.
+      expect(allowed.hasMatch(asset) && !asset.contains('..') && !asset.split('/').contains(''), isTrue, reason: asset);
     }
   });
 
@@ -576,16 +577,18 @@ void main() {
       expect(find.byType(Dialog), findsNothing);
     });
 
-    testWidgets('a refused presentation falls back to the Flutter dialog', (tester) async {
-      final readiness = BluetoothReadiness(readState: () async => 'off', observeBridge: false);
-      await pumpListener(tester, readiness, reply: (_) => PlatformException(code: 'invalid_native_presentation'));
+    for (final code in ['invalid_native_presentation', 'unexpected_presenter_error']) {
+      testWidgets('a refused presentation falls back to the Flutter dialog: $code', (tester) async {
+        final readiness = BluetoothReadiness(readState: () async => 'off', observeBridge: false);
+        await pumpListener(tester, readiness, reply: (_) => PlatformException(code: code));
 
-      expect(await readiness.ensureReady(BluetoothUse.discovery), isFalse);
-      await tester.pumpAndSettle();
-      expect(find.text(_l10n.bluetoothNeeded), findsOneWidget);
-      await tester.tap(find.text(_l10n.ok));
-      await tester.pumpAndSettle();
-      expect(readiness.guidance, isNull);
-    });
+        expect(await readiness.ensureReady(BluetoothUse.discovery), isFalse);
+        await tester.pumpAndSettle();
+        expect(find.text(_l10n.bluetoothNeeded), findsOneWidget);
+        await tester.tap(find.text(_l10n.ok));
+        await tester.pumpAndSettle();
+        expect(readiness.guidance, isNull);
+      });
+    }
   });
 }

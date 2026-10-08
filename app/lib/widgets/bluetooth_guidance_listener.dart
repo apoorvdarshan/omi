@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'package:omi/app_globals.dart';
@@ -168,7 +169,7 @@ class _BluetoothGuidanceListenerState extends State<BluetoothGuidanceListener> {
     }
 
     readiness.addListener(watchResolution);
-    final NativeModalResult? native;
+    NativeModalResult? native;
     try {
       final l10n = promptContext.l10n;
       native = await showIosNativeModal(
@@ -196,6 +197,10 @@ class _BluetoothGuidanceListenerState extends State<BluetoothGuidanceListener> {
           ]),
         ],
       );
+    } on PlatformException catch (error) {
+      // Any other refusal keeps the Flutter dialog, so the recovery prompt is never lost.
+      Logger.warning('Native Bluetooth guidance unavailable: ${error.code}');
+      native = null;
     } finally {
       readiness.removeListener(watchResolution);
     }
