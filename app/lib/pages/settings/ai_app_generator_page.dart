@@ -57,6 +57,7 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
   File? _nativeIconFile;
   String? _nativeIconUri;
   int _nativeIconGeneration = 0;
+  Future<void> _nativePurge = Future.value();
 
   /// The native price field's text; the classic field keeps its own.
   String _nativePrice = '';

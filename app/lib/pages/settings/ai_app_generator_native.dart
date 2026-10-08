@@ -15,6 +15,8 @@ extension _NativeAiAppGenerator on _AiAppGeneratorPageState {
   void _startNativeIcon() {
     _nativeSessionOwner = AuthService.instance.captureSessionSnapshot();
     _nativeOwner = context.read<AiAppGeneratorProvider>()..addListener(_syncNativeIcon);
+    // Icons an interrupted earlier page left behind (the app was killed before dispose).
+    _nativePurge = _purgeNativeIcons();
     _nativeSession = AuthService.instance.sessionGenerationEvents.listen((_) {
       _nativeIconGeneration++;
       _deleteNativeIcon();
@@ -50,6 +52,8 @@ extension _NativeAiAppGenerator on _AiAppGeneratorPageState {
     File? file;
     try {
       if (!await supportsNativePresentation()) return;
+      // A new icon is written only after the leftover purge, which would otherwise delete it.
+      await _nativePurge;
       final directory = Directory('${(await getTemporaryDirectory()).path}/omi_ai_generator');
       await directory.create(recursive: true);
       file = File('${directory.path}/icon_${DateTime.now().microsecondsSinceEpoch}_$generation.png');
@@ -81,7 +85,6 @@ extension _NativeAiAppGenerator on _AiAppGeneratorPageState {
     if (!nativePresentationEnabled) return classic;
     final l10n = context.l10n;
     final generated = provider.hasGeneratedApp;
-    if (!provider.isPaid) _nativePrice = '';
     return Scaffold(
       body: IosNativeSurface(
         title: generated ? _nativeExcerpt(provider.generatedName ?? l10n.appName) : l10n.aiAppGeneratorBannerTitle,
@@ -216,8 +219,11 @@ extension _NativeAiAppGenerator on _AiAppGeneratorPageState {
         NativeRow('ai_gen_paid', l10n.paidApp,
             kind: 'toggle',
             value: provider.isPaid,
-            subtitle: provider.isPaid ? l10n.usersPayToUse : l10n.freeForEveryone,
-            action: (value) => provider.setIsPaid(value as bool)),
+            subtitle: provider.isPaid ? l10n.usersPayToUse : l10n.freeForEveryone, action: (value) {
+          // The price field reappears empty, as the classic field does.
+          if (value == false) _updateNative(() => _nativePrice = '');
+          provider.setIsPaid(value as bool);
+        }),
         if (provider.isPaid)
           NativeRow('ai_gen_price', '\$ ${l10n.pricePlaceholder}',
               kind: 'text',
@@ -236,6 +242,20 @@ extension _NativeAiAppGenerator on _AiAppGeneratorPageState {
             action: (_) => _submitApp(provider)),
       ]),
     ];
+  }
+}
+
+Future<void> _purgeNativeIcons() async {
+  try {
+    if (!await supportsNativePresentation()) return;
+    final directory = Directory('${(await getTemporaryDirectory()).path}/omi_ai_generator');
+    if (!await directory.exists()) return;
+    // Only this page writes here, and it has written nothing yet: its first icon follows a generation.
+    await for (final entry in directory.list()) {
+      if (entry is File) await _deleteQuietly(entry);
+    }
+  } catch (_) {
+    /* Best effort: the system purges its temporary directory. */
   }
 }
 

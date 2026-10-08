@@ -396,6 +396,18 @@ void main() {
       expect(File(second).existsSync(), isFalse);
     });
 
+    testWidgets('icons an interrupted earlier page left behind are purged, the new icon kept', (tester) async {
+      NativeTestHost.install();
+      final stale = File('${temporary.path}/omi_ai_generator/icon_stale.png')
+        ..createSync(recursive: true)
+        ..writeAsBytesSync(iconBytes);
+      final generator = await pumpGenerator(tester);
+      generator.generated(iconBytes);
+      await settleIo(tester, until: () => previewFile(tester) != null);
+      expect(stale.existsSync(), isFalse);
+      expect(File(previewFile(tester)!).existsSync(), isTrue);
+    });
+
     testWidgets('the temporary icon is deleted when the page is disposed', (tester) async {
       NativeTestHost.install();
       final generator = await pumpGenerator(tester);
