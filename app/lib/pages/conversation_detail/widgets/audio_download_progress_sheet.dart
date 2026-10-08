@@ -21,6 +21,9 @@ class AudioDownloadSheetHandle {
   bool _open = true;
   bool _cancelled = false;
 
+  /// [close] arrived before the sheet first built; it closes as soon as it has a context.
+  bool _closeRequested = false;
+
   /// Whether the sheet is still on screen.
   bool get isOpen => _open;
 
@@ -28,14 +31,18 @@ class AudioDownloadSheetHandle {
   bool get cancelled => _cancelled;
 
   /// Presents the sheet over [context].
-  static AudioDownloadSheetHandle show(BuildContext context, {VoidCallback? onCancel}) {
+  ///
+  /// [nativeContentForTest] builds the native content inside the Flutter sheet, so a hermetic test
+  /// reaches the native wiring that only an iOS host with the flag would otherwise present.
+  static AudioDownloadSheetHandle show(BuildContext context,
+      {VoidCallback? onCancel, @visibleForTesting bool nativeContentForTest = false}) {
     final handle = AudioDownloadSheetHandle._(onCancel);
     showOmiSheet<void>(
       context: context,
       showCloseButton: false,
       isDismissible: false,
       enableDrag: false,
-      builder: (sheetContext) => handle._present(sheetContext, native: false),
+      builder: (sheetContext) => handle._present(sheetContext, native: nativeContentForTest),
       nativeBuilder: (sheetContext) => handle._present(sheetContext, native: true),
     ).whenComplete(() {
       handle._open = false;
@@ -48,6 +55,10 @@ class AudioDownloadSheetHandle {
   /// fallback inside the usual sheet shell.
   Widget _present(BuildContext sheetContext, {required bool native}) {
     _sheetContext = sheetContext;
+    if (_closeRequested) {
+      _closeRequested = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) => close());
+    }
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -80,7 +91,13 @@ class AudioDownloadSheetHandle {
   /// Closes the sheet if it is still open. Safe to call any number of times.
   void close() {
     final sheetContext = _sheetContext;
-    if (!_open || sheetContext == null || !sheetContext.mounted) return;
+    if (!_open) return;
+    if (sheetContext == null) {
+      // The route is not built yet (the native check is asynchronous): close once it is.
+      _closeRequested = true;
+      return;
+    }
+    if (!sheetContext.mounted) return;
     _open = false;
     Navigator.of(sheetContext).pop();
   }
@@ -186,19 +203,23 @@ class AudioDownloadNativeSheet extends StatelessWidget {
     final fraction = clampedProgress(progress);
     return IosNativeSurface(
       title: title,
+      loading: state == AudioDownloadState.preparing || state == AudioDownloadState.processing,
+      loadingLabel: title,
       fallback: fallback,
       sections: [
         NativeSection('audio_download', [
+          // Preparing and processing show the surface's activity row; downloading shows its progress.
           if (state == AudioDownloadState.success)
             NativeRow('audio_download_status', title, kind: 'label', symbol: 'checkmark.circle.fill')
           else if (state == AudioDownloadState.error)
             NativeRow('audio_download_status', title,
-                kind: 'label', symbol: 'exclamationmark.circle.fill', destructive: true)
-          else
-            NativeRow('audio_download_status', title, kind: 'label'),
+                kind: 'label', symbol: 'exclamationmark.circle.fill', destructive: true),
           if (state == AudioDownloadState.downloading)
             NativeRow('audio_download_progress', title,
-                kind: 'progress', value: fraction, maximumValue: 1, subtitle: '${(fraction * 100).toInt()}%'),
+                kind: 'progress',
+                value: fraction,
+                maximumValue: 1,
+                subtitle: fraction > 0 ? '${(fraction * 100).toInt()}%' : ''),
           if (working && onCancel != null)
             NativeRow('audio_download_cancel', l10n.cancel, destructive: true, action: (_) => onCancel!()),
         ]),

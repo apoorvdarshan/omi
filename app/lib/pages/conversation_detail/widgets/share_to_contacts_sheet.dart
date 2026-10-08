@@ -272,10 +272,11 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
     final l10n = context.l10n;
     final selectedCount = _selectedContacts.length;
     final shareError = _loadFailed || _permissionDenied ? null : _errorMessage;
+    final positions = {for (final (index, contact) in _contacts.indexed) contact: index};
     return IosNativeSurface(
       title: l10n.shareViaSms,
       fallback: OmiSheetScaffold(title: l10n.shareViaSms, padding: EdgeInsets.zero, child: _buildClassic(context)),
-      loading: _isLoading,
+      loading: _isLoading || _isPreparingShare,
       failed: _loadFailed,
       errorMessage: _loadFailed ? _errorMessage : null,
       // Retry after a failed read only: reloading a loaded list would drop the selection.
@@ -292,8 +293,9 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
         NativeRow('contacts_close', l10n.close, symbol: 'xmark', action: (_) => Navigator.of(context).maybePop()),
         if (selectedCount > 0) NativeRow('contacts_clear', l10n.clearAllSelection, action: (_) => _clearSelection()),
         if (!_permissionDenied)
+          // Text, not an icon: the label carries the selected count.
           NativeRow('contacts_share', _shareLabel(selectedCount),
-              symbol: 'paperplane', enabled: selectedCount > 0 && !_isPreparingShare, action: (_) => _openNativeSms()),
+              enabled: selectedCount > 0 && !_isPreparingShare, action: (_) => _openNativeSms()),
       ],
       sections: [
         if (_permissionDenied)
@@ -316,8 +318,10 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
               NativeRow('contacts_empty',
                   _searchController.text.isEmpty ? l10n.noContactsWithPhoneNumbers : l10n.noContactsMatchSearch,
                   kind: 'label', symbol: 'magnifyingglass'),
-            for (final (index, contact) in _filteredContacts.indexed)
-              NativeRow('contact:$index', contact.displayName,
+            // Keyed by position in the full list, so a toggle sent while a search refilters still
+            // reaches the contact the person saw.
+            for (final contact in _filteredContacts)
+              NativeRow('contact:${positions[contact]}', contact.displayName,
                   kind: 'toggle', subtitle: contact.phoneNumber, value: contact.isSelected, action: (value) {
                 if (value != contact.isSelected) _toggleContactSelection(contact);
               }),

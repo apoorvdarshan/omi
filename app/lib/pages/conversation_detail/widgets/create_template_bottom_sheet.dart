@@ -288,6 +288,9 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
       canPop: !_isCreating,
       child: IosNativeSurface(
         title: l10n.createCustomTemplate,
+        // The creation stages show as the surface's activity row; the toolbar action is icon-only.
+        loading: _isCreating,
+        loadingLabel: _isCreating && _statusMessage.isNotEmpty ? _statusMessage : null,
         fallback: OmiSheetScaffold(title: l10n.createCustomTemplate, child: _buildClassic(context)),
         toolbar: [
           NativeRow('template_form_close', l10n.close,

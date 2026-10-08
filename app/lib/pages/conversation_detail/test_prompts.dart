@@ -36,6 +36,7 @@ class _TestPromptsPageState extends State<TestPromptsPage> {
     return Scaffold(
         body: IosNativeSurface(
       title: l10n.testConversationPrompt,
+      loading: loading,
       fallback: classic,
       toolbar: [
         NativeRow('test_prompt_back', l10n.back,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -8,6 +10,7 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/feedback_prompt_policy.dart';
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
@@ -117,12 +120,23 @@ void main() {
         return MobileFeedbackReceipt(feedbackId: feedbackId ?? 'feedback-1', eventId: 'event-1', created: true);
       }
 
-      // The detail page's summary prompt, with the fake ledger; its sheet is the native one.
+      // The prompt in its native mode, as the native detail page mounts it, with the fake ledger. Its
+      // rows are what the page projects; the page itself stays Flutter so the sheet is the only view.
+      var projected = <NativeRow>[];
+      NativeRow row(String id) => projected.singleWhere((row) => row.id == id);
       await tester.pumpWidget(nativeHostApp(Scaffold(
-          body: CustomScrollView(
-              slivers: [SummaryFeedbackPrompt(conversationId: 'conversation-feedback', submitFeedback: submit)]))));
+          body: CustomScrollView(slivers: [
+        SummaryFeedbackPrompt(
+            conversationId: 'conversation-feedback',
+            submitFeedback: submit,
+            onNativePresentation: (rows) => projected = rows),
+      ]))));
       await tester.pump(const Duration(seconds: 1));
-      await tester.tap(find.byKey(const ValueKey('summary_feedback_give_feedback')));
+      await row('detail_summary_feedback').onVisible!(null);
+      await tester.pump(const Duration(seconds: 1));
+      expect(row('detail_summary_feedback_open').enabled, isTrue);
+      // Resolves when the sheet closes.
+      unawaited(Future.sync(() => row('detail_summary_feedback_open').action!(null)));
       await tester.pump();
       await tester.pump(const Duration(seconds: 1));
 
@@ -134,6 +148,7 @@ void main() {
       expect(submitted, [(-1, MobileFeedbackReason.summaryIncomplete)]);
       expect(find.byType(UiKitView), findsNothing);
       expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
     });
 
     testWidgets('the summary template chooser opens natively and reprocesses with the chosen template once',
@@ -171,6 +186,7 @@ void main() {
       expect(owner.reprocessed, ['actions']);
       expect(find.byType(SummarizedAppsBottomSheet), findsNothing);
       expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
     });
   });
 }

@@ -240,18 +240,22 @@ class _AppsListState extends State<_AppsList> {
     );
   }
 
-  /// The native picker. Its rows index the deduplicated apps in display order that this projection
-  /// captured; a row's context menu offers "Set Default" in place of the swipe.
+  /// The native picker. A row's context menu offers "Set Default" in place of the swipe.
+  ///
+  /// Rows index [_nativeAppIds], which only grows: a refetch that re-sorts the list never moves an
+  /// id to another app, so a tap Swift sends before it sees the new order still reaches its app.
   Widget _buildNative(BuildContext context, {required bool isLoading}) {
     final l10n = context.l10n;
     final suggestedApps = widget.provider.cachedSuggestedApps;
     final layout = _layout();
-    final apps = <App>[];
     final ids = <String>{};
     NativeRow? appRow(App app, {required bool available, bool isDefault = false, bool isLastUsed = false}) {
       if (!ids.add(app.id)) return null;
-      final index = apps.length;
-      apps.add(app);
+      var index = _nativeAppIds.indexOf(app.id);
+      if (index < 0) {
+        index = _nativeAppIds.length;
+        _nativeAppIds.add(app.id);
+      }
       final installing = _AppsListState._installingApps[app.id] == true;
       final description = app.description.decodeString.trim().characters;
       return NativeRow(
@@ -333,6 +337,9 @@ class _AppsListState extends State<_AppsList> {
   }
 
   static const _nativeDescriptionLength = 160;
+
+  /// Each app's row index, in the order the native picker first listed it.
+  final List<String> _nativeAppIds = [];
 
   @override
   Widget build(BuildContext context) {

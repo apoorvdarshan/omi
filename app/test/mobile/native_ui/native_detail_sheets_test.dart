@@ -114,8 +114,13 @@ class _TemplateOwner extends ConversationDetailProvider {
   void trackLastUsedSummarizationApp(String appId) {}
   @override
   bool isSuggestedAppAvailable(String appId) => !unavailable.contains(appId);
+  var installs = 0;
   @override
-  Future<bool> enableApp(App app) => install.future;
+  Future<bool> enableApp(App app) {
+    installs++;
+    return install.future;
+  }
+
   @override
   Future<bool> setPreferredSummarizationApp(String appId) async {
     defaults.add(appId);
@@ -176,6 +181,25 @@ void _answerConfirmations(String reply) {
   addTearDown(() => messenger.setMockMethodCallHandler(_config, null));
 }
 
+/// The fixed order product chose for each population, spelled out so a reorder fails here.
+const _reasonOrder = {
+  FeedbackReasonPopulation.summary: [
+    'feedback_reason_summaryInaccurate',
+    'feedback_reason_summaryIncomplete',
+    'feedback_reason_summaryIrrelevant',
+    'feedback_reason_summaryWrongContext',
+    'feedback_reason_summaryOther',
+  ],
+  FeedbackReasonPopulation.recording: [
+    'feedback_reason_recordingMissingAudio',
+    'feedback_reason_recordingPoorTranscription',
+    'feedback_reason_recordingWrongSpeaker',
+    'feedback_reason_recordingDelayedOrStuck',
+    'feedback_reason_recordingFragmentedOrDuplicated',
+    'feedback_reason_recordingOther',
+  ],
+};
+
 void main() {
   setUpAll(() => Env.init(_EnvNoIntercom()));
 
@@ -204,8 +228,7 @@ void main() {
         final reasons = feedbackReasonsFor(population);
         for (final reason in reasons) {
           final submitted = await openFeedback(tester, population);
-          expect(_surface(tester).sections.first.rows.map((row) => row.id),
-              reasons.map((reason) => 'feedback_reason_${reason.name}'));
+          expect(_surface(tester).sections.first.rows.map((row) => row.id), _reasonOrder[population]);
           expect(_row(tester, 'feedback_reason_${reason.name}').title, feedbackReasonLabel(_l10n, reason));
           await _row(tester, 'feedback_reason_${reason.name}').action!(null);
           await tester.pumpAndSettle();
@@ -311,10 +334,16 @@ void main() {
       expect(locked.enabled, isFalse);
       expect(locked.projection['enabled'], isFalse);
       expect(locked.subtitle, _l10n.installingApp);
+      // A second tap while installing starts nothing.
+      unawaited(Future.sync(() => _row(tester, 'template_app:0').action!(null)));
+      await tester.pump();
+      expect(owner.installs, 1);
 
-      owner.install.complete(true);
+      // A failed install unlocks the row and keeps the sheet open.
+      owner.install.complete(false);
       await tester.pumpAndSettle();
-      expect(owner.reprocessed, ['suggested']);
+      expect(_row(tester, 'template_app:0').projection['enabled'], isTrue);
+      expect(owner.reprocessed, isEmpty);
     });
   });
 
@@ -337,6 +366,8 @@ void main() {
       expect(_row(tester, 'template_validation').title, _l10n.nameMustBeAtLeast3Characters);
 
       await _row(tester, 'template_name').action!('Standup');
+      await tester.pump();
+      expect(_row(tester, 'template_validation').title, _l10n.pleaseEnterAppPrompt);
       await _row(tester, 'template_prompt').action!('too short');
       await tester.pump();
       expect(_row(tester, 'template_validation').title, _l10n.promptMustBeAtLeast10Characters);
@@ -422,7 +453,7 @@ void main() {
 
     testWidgets('progress is a valid, clamped fraction with its percentage', (tester) async {
       await _open(tester, (_) => const SizedBox());
-      for (final (input, expected, percent) in [(0.0, 0.0, '0%'), (0.5, 0.5, '50%'), (1.0, 1.0, '100%')]) {
+      for (final (input, expected, percent) in [(0.0, 0.0, ''), (0.5, 0.5, '50%'), (1.0, 1.0, '100%')]) {
         final row = audioSurface(tester, AudioDownloadState.downloading, input)
             .sections
             .single
@@ -430,14 +461,14 @@ void main() {
             .singleWhere((row) => row.id == 'audio_download_progress');
         expect((row.value, row.subtitle, row.valid), (expected, percent, true));
       }
-      for (final input in [double.nan, double.infinity, -0.2, 1.7]) {
+      for (final (input, expected) in [(double.nan, 0.0), (double.infinity, 0.0), (-0.2, 0.0), (1.7, 1.0)]) {
         final row = audioSurface(tester, AudioDownloadState.downloading, input)
             .sections
             .single
             .rows
             .singleWhere((row) => row.id == 'audio_download_progress');
         expect(row.valid, isTrue, reason: '$input');
-        expect(row.value as double, inInclusiveRange(0, 1));
+        expect(row.value, expected);
       }
       final done = audioSurface(tester, AudioDownloadState.success, 1).sections.single.rows;
       expect(done.map((row) => (row.id, row.symbol)), [('audio_download_status', 'checkmark.circle.fill')]);
@@ -446,23 +477,31 @@ void main() {
     });
 
     testWidgets('Cancel runs onCancel once and closes the sheet', (tester) async {
+      NativeTestHost.install();
       await _open(tester, (_) => const SizedBox());
       var cancelled = 0;
-      final handle =
-          AudioDownloadSheetHandle.show(tester.element(find.byType(Scaffold).last), onCancel: () => cancelled++);
-      // The classic sheet's indeterminate ring never settles.
+      final handle = AudioDownloadSheetHandle.show(tester.element(find.byType(Scaffold).last),
+          onCancel: () => cancelled++, nativeContentForTest: true);
       await tester.pump(const Duration(seconds: 1));
       expect(handle.isOpen, isTrue);
-      final cancel = audioSurface(tester, AudioDownloadState.preparing, 0, onCancel: handle.cancel)
-          .sections
-          .single
-          .rows
-          .singleWhere((row) => row.id == 'audio_download_cancel');
+      expect(_surface(tester).loading, isTrue, reason: 'Preparing shows the activity row');
+      final cancel = _row(tester, 'audio_download_cancel');
       expect(cancel.destructive, isTrue);
       await cancel.action!(null);
       await cancel.action!(null);
       await tester.pump(const Duration(seconds: 1));
       expect(cancelled, 1);
+      expect(handle.isOpen, isFalse);
+      expect(find.byType(AudioDownloadNativeSheet), findsNothing);
+    });
+
+    testWidgets('a close before the sheet first builds still closes it', (tester) async {
+      await _open(tester, (_) => const SizedBox());
+      final handle = AudioDownloadSheetHandle.show(tester.element(find.byType(Scaffold).last));
+      handle.close();
+      for (var frame = 0; frame < 4; frame++) {
+        await tester.pump(const Duration(milliseconds: 500));
+      }
       expect(handle.isOpen, isFalse);
       expect(find.byType(AudioDownloadProgressSheet), findsNothing);
     });
