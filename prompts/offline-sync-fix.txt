@@ -1,0 +1,89 @@
+# REVIEW-FIX RUN (read this first; it overrides the setup and work plan below)
+This batch was ALREADY implemented and pushed on branch claude/swiftui-b-offline-sync. An independent static review found the defects listed below (file:line refer to the reviewed commit; re-locate them at the current branch head). Your job: fix them on top of that branch.
+
+Setup override: instead of creating a new branch, run
+  git fetch origin claude/swiftui-b-offline-sync && git switch -c claude/swiftui-b-offline-sync --track origin/claude/swiftui-b-offline-sync
+Then do the Flutter 3.44.5 install and bootstrap exactly as in section 1 of the original instructions below. Every rule in the original instructions (owned files, frozen files, no l10n/ARB edits, flag-off identical, verification) still applies. If a fix needs a file outside your owned list (e.g. a provider), make the smallest safe change only when the defect cannot be fixed otherwise, and say so in the commit body. Verify each finding against the code first; if one is wrong, skip it and say why.
+
+## Defects to fix
+1. LOW - Host test never proves the Manage Storage sheet is native: app/integration_test/native_offline_sync_host_test.dart:106-110 and :134-138 open the sheet, then assert only `nativeProjectedRow(tester, 'storage_clear_all').destructive` / `nativeProjectedRow(tester, 'storage_auto_remove').kind`. `nativeProjectedRow` reads `IosNativeSurface.debugDispatchRows`, which returns the projected rows even after the surface has fallen back to its Flutter `OmiSheetScaffold` (or if `showOmiSheet` took the classic builder). So the spec'd host check "the Manage Storage native sheet opens" would still pass if the sheet silently rendered in Flutter. Fix: after each sheet opens, add `expect(find.byType(UiKitView), findsNWidgets(2), reason: 'The Manage Storage sheet renders natively over the page')`, and assert one UiKitView again after `storage_close`.
+
+2. LOW - Source-grouping unit test passes on a silent classic fallback: app/test/mobile/native_ui/native_offline_sync_test.dart:359-375 ('pending recordings from several sources group by source, otherwise by hour') checks only `_sections(tester)` (widget props) and `nativeProjectedRow` (debugDispatchRows). Both read the projection whether or not the surface rendered, and no other test seeds multi-source pending data with a native assertion. An invalid snapshot in the `sync_source:*` grouping path (for example a duplicate id) would therefore go unnoticed. Fix: add `expect(find.byType(UiKitView), findsOneWidget)` after the first pump and again after the regroup at line 372.
+
+Do NOT change anything else. Do not touch .github/.
+
+## Finish
+Verify exactly as section 6 step 3 of the original instructions (format, analyze, tests incl. every existing test importing a changed file, git diff --check). Commit with title "fix(ios): address review findings in the offline-sync batch" and a body listing each fix, ending with the line "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>". Push with plain `git push` (never force) to claude/swiftui-b-offline-sync. Report the new commit sha and test results.
+
+# ORIGINAL BATCH INSTRUCTIONS (for rules and context)
+You are a senior Flutter/iOS engineer working in the GitHub repository apoorvdarshan/omi (a fork of BasedHardware/omi; the Flutter app is in app/). You run in a Linux cloud sandbox with NO Xcode and NO iOS Simulator. Your job is one Dart-only migration batch of an opt-in SwiftUI presentation for the Omi iOS app. Everything you need is in this prompt and in the repository.
+
+## 1. Setup (do exactly)
+- git fetch origin swiftui/integration && git switch -c claude/swiftui-b-offline-sync origin/swiftui/integration
+- Install Flutter 3.44.5 (mandatory; never use another version): git clone --depth 1 -b 3.44.5 https://github.com/flutter/flutter.git $HOME/flutter-3.44.5 && export PATH=$HOME/flutter-3.44.5/bin:$PATH && flutter --version
+- Bootstrap the app exactly like the "Missing generated files" block in app/test.sh (copy lib/firebase_options_local.dart to lib/firebase_options_dev.dart and lib/firebase_options_prod.dart; write app/.dev.env with "API_BASE_URL=", "USE_WEB_AUTH=true", "USE_AUTH_CUSTOM_TOKEN=true"; copy the prebuilt Google service files as listed there; then flutter pub get and flutter pub run build_runner build --delete-conflicting-outputs). Never commit any of these generated/bootstrap files.
+- Sanity check: cd app && flutter test --no-pub test/mobile/native_ui must pass before you change anything (report if not).
+
+## 2. Background
+The branch adds an opt-in SwiftUI/Liquid Glass presentation behind the compile flag OMI_IOS_SWIFTUI (Dart const iosSwiftUiEnabled; native only when the flag is on AND Platform.isIOS AND supportsIosSwiftUi()). Flutter screens project their state into versioned snapshots of rows (IosNativeSurface, NativeRow, NativeSection, showIosNativeModal, showOmiSheet nativeBuilder, IosNativeEdit, ...) that a SwiftUI renderer draws; callbacks stay in Dart with the existing owners; any invalid row makes the whole screen fall back to the complete Flutter screen. Read first: app/docs/ios-native-ui.md, app/AGENTS.md, all of app/lib/mobile/native_ui/*.dart, and app/ios/Runner/NativeUI/NativeSurfaceContract.swift (to learn exactly which row kinds/values Swift accepts — you cannot run Swift, so mirror its validation rules carefully). Study migrated screens as idioms: app/lib/pages/settings/usage_native.dart, transcription_native.dart, app/lib/pages/conversations/auto_sync_native.dart, app/lib/pages/conversation_detail/native_conversation_detail.dart, app/lib/pages/settings/people.dart, app/lib/pages/action_items/action_items_page.dart, app/lib/pages/chat/page.dart, and the tests in app/test/mobile/native_ui/ (use test/mobile/native_ui/native_test_host.dart and the debug seams IosNativeSurface.debugNativeHostForTest / nativePresentationEnabled / supportsNativePresentation() so tests reach the native paths on a non-iOS machine). Host tests use app/integration_test/support/native_host_harness.dart (runNativeHostSuite, nativeProjectedRow, nativeHostApp).
+
+Your base branch (swiftui/integration) already contains ALL bridge primitives P0-P8: P1 (presentation outcomes, blocking activity HUD, dismissSignal), P2 (native toasts: OmiFeedback routes natively), P3 (one-time secret reveal / sensitive surface), P4 (list selection, bottomBar, reorder, indent, collapsible, swipe), P5 (rich message_ai rendering, chart styles, link whitelist), P6 (NativeGraph knowledge graph), P7 (Shortcuts link capability) and P8 (labelled level control). Learn their exact APIs from the code in app/lib/mobile/native_ui/ and app/docs/ios-native-ui.md; the specs are in /tmp/plan/primitives/P<n>.md (get them with: git fetch origin swiftui-agent-prompts && mkdir -p /tmp/plan && git archive origin/swiftui-agent-prompts plan | tar -x -C /tmp). Use them wherever the batch spec says so. The Swift side of these primitives is still being compiled and verified on a Mac in parallel; that does not affect your Dart-only work (never edit Swift).
+
+## 3. Your batch (authoritative)
+NAME: offline-sync
+# Batch: offline-sync
+
+## Screens
+- Offline Sync (AutoSync) info sheet and Manage Storage sheet
+- Legacy Offline Sync page (SyncPage) with WAL list, filters, grouping, sync/cancel/retry/delete
+- Offline sync storage sheet (legacy)
+- Sync confirmations (custom STT, SD card)
+- Processed conversations after sync (SyncedConversationsPage)
+
+## Owned files (only these may be created/edited)
+- app/lib/pages/conversations/auto_sync_page.dart
+- app/lib/pages/conversations/auto_sync_native.dart
+- app/lib/pages/conversations/sync_page.dart
+- app/lib/pages/conversations/sync_native.dart
+- app/lib/pages/conversations/widgets/offline_sync_storage_sheet.dart
+- app/lib/pages/conversations/widgets/sync_error_card.dart
+- app/lib/pages/conversations/synced_conversations_page.dart
+- app/lib/pages/conversations/widgets/synced_conversation_list_item.dart
+- app/lib/utils/sync_confirmation.dart
+- app/test/mobile/native_ui/native_offline_sync_test.dart
+- app/integration_test/native_offline_sync_host_test.dart
+
+## Instructions
+Common rules: Dart only. SyncProvider, WalService, DeviceProvider.refreshRingStorageStatus, ConnectivityProvider and reProcessConversationServer stay the owners. Only labels, counts and fractions cross the bridge. Projecting status never starts a sync. Flag-off behaviour is unchanged (auto_sync_storage_refresh_test stays green). Uses P0, P2 and P4 (swipe). 1) auto_sync_page.dart: _showInfoSheet becomes a non-alert showIosNativeModal: label rows plus numbered step rows ('1. Upload' and so on, with description subtitles) and the failure footnote; the action is done as the cancel id; null falls back to the classic sheet. Manage storage gets a showOmiSheet nativeBuilder hosting a Consumer<SyncProvider> IosNativeSurface, so counts update live: 'storage_synced' (label safelyBackedUp · N plus 'storage_clear_synced', enabled when N > 0); the same for pending; toggle 'storage_auto_remove' (days subtitle; enabling calls applySyncedCopyRetention); a destructive 'storage_clear_all'. It reuses the buildStorageClearActions closures (pop, native confirm, clear with refreshDeviceStorage, toast). 2) auto_sync_native.dart windowing: project the first 200 WAL rows, then an 'offline_more' row with onVisible that raises the window by 200. This is presentation only and keeps snapshots small during active sync. 3) SyncPage: new part sync_native.dart mirroring auto_sync_native. Toolbar: back and 'sync_manage' (ellipsis, opening the OfflineSyncStorageSheet native builder). Status section: title and subtitle labels using the same phase priority; the Sync button (internet check, then the custom-STT confirmation, then the SD-card confirmation, then syncWals) or a destructive Cancel (confirm, cancelSync, toast); an error label plus retry; a 'conversations created' navigation row to SyncedConversationsPage. Storage navigation rows to LocalStoragePage and PrivateCloudSyncPage. 'sync_filter' is segmented pending, synced or failed with counts, calling setStatusFilter. Lists: one section per source group (pending, more than one source) or per date-hour header. Rows 'sync_wal:<index>' are navigation (subtitle status · time · duration · source; tap goes to WalItemDetailPage), with options {'delete'} unless syncing and swipeTrailing ['delete'], which shows the processing-specific confirm, then deleteWal. Add progress rows ('%, KB/s, ETA') and retry or delete buttons per state, windowed at 200 with onVisible for more. 4) offline_sync_storage_sheet.dart: a nativeBuilder with the same actions and confirmations. 5) sync_confirmation.dart: confirmSyncForCustomStt and the SD-card processing confirmation use showOmiConfirm (native), keeping OmiConfirmDialog only as the fallback. 6) SyncedConversationsPage: sections updated and new; rows 'synced_conversation:<index>' (title conversationRowTitle, generic copy for locked, subtitle timestamp) whose tap calls the existing onConversationTap and opens ConversationDetailPage; a 'reprocess' option and button for updated or discarded rows, with page-level in-flight state (disabled, subtitle while running) calling reProcessConversationServer and then updateSyncedConversation. No new strings.
+
+## Tests
+native_offline_sync_test.dart: port the sync page scenarios to projection assertions (status priority per phase, filter switching, source grouping, delete confirmation copy, the window of 200 rows plus more via onVisible); each storage clear path calls refreshDeviceStorage (extending the buildStorageClearActions coverage); the retention toggle persists and applies; the sync confirmations return the native result; reprocess updates the row and disables it while in flight. Host (native_offline_sync_host_test.dart): seeded WALs with no BLE; the native SyncPage renders; the Manage Storage native sheet opens; AutoSync windowing grows on scroll.
+
+
+## Critic addendum (authoritative; supersedes the batch spec where they conflict)
+- C5: OmiConfirmDialog.show already delegates to showOmiConfirm; do not try to keep it as a separate fallback.
+- Frozen ids checked by host tests: offline_status_title, offline_download, offline_retry, offline_retention in auto_sync_native.dart.
+- Keep frozen AutoSyncPage(), SyncPage(), WalItemDetailPage(wal:) constructors.
+
+## 4. Cross-batch rules (authoritative)
+- Frozen shared files (never edit): app/lib/mobile/native_ui/**, app/lib/ui/feedback/omi_feedback.dart, app/lib/ui/feedback/omi_dialogs.dart, app/lib/ui/components/omi_sheet.dart, all of app/ios/**, app/test/mobile/native_ui/native_surface_projection_test.dart, app/integration_test/native_ui_host_test.dart, app/integration_test/support/native_host_harness.dart, shared test infra (integration_test/visual_audit/fakes.dart, integration_test/journeys/support/hermetic_boot.dart, native_ui_inspection.dart, native_advanced_host_cases.dart, native_remaining_host_cases.dart, shared test/ helpers). Every batch is Dart-only. A missing bridge capability means that row stays on the classic fallback; report it.
+- l10n: never edit ARB files or generated app_localizations files; reuse existing keys.
+- Provider files are read-only. analysis_baseline.json, pubspec.yaml/lock, docs/ios-native-ui*.md are integrator-only. Batches add no packages and must not raise analyzer counts.
+- Frozen cross-batch signatures: openConversationListRow, ProcessingConversationPage(conversation:), DayConversationsPage(date:, fetchConversations:), ConversationMapPage, CapabilityAppsPage/CategoryAppsPage constructors, WalItemDetailPage(wal:), FirmwareUpdate/OmiGlassOtaUpdate constructors, InteractiveDeviceOnboardingWrapper, PaymentsPage, UpdateAppPage, AiAppGeneratorPage, MemoryGraphPage(loadGraph:, trackOpenEvent:), ConversationsPage(requestInitialLoad:, nativeLibrary:), conversationRowTitle, LiveCaptureCard.formatElapsed, DailySummaryDetailPage(summaryId:, summary:), MemoriesPage(asRoot:), ChatPage(isPivotBottom:, autoStartVoice:, initialDraft:), UsagePage(showUpgradeDialog:), showGlobalSearch(context, initialQuery:), HomeRecordButtonState.performPrimaryAction/showOptions, DeviceSettings(), ConnectDevicePage(), AutoSyncPage(), SyncPage(). You may add optional named parameters but never remove or rename existing ones.
+- Existing default-build tests must stay green without edits. Extractions must preserve behaviour because the default build runs the same code.
+- Validation traps: never let real-world data produce an invalid snapshot (clamp numbers, truncate labels, omit degenerate controls).
+- Every showOmiSheet nativeBuilder fallback body must be wrapped in OmiSheetScaffold (see lib/pages/conversations/widgets/move_to_folder_sheet.dart).
+- showIosNativeModal null means "use the Flutter path"; cancel is a non-null result with action null. Handle both.
+- Temporary sandbox files you create must be deleted on dispose, session change and stale completion.
+
+## 5. Hard rules
+Every feature, state (loading/empty/error/locked/offline), action, analytics event, copy and navigation path of each Flutter screen stays reachable and equivalent with the flag on; mutations stay with the existing Dart owners; no app-auth tokens or secrets cross the bridge; real-world data must never produce an invalid snapshot (clamp/truncate/omit); invalid rows fall back to the complete Flutter screen; account-session fencing; flag-off and Android behaviour must stay identical (gate every native path); no new packages; no ARB/l10n edits (reuse existing keys); edit ONLY your batch's owned files plus its new test files; never edit Swift/iOS files, app/lib/mobile/native_ui/**, omi_feedback.dart, omi_dialogs.dart, omi_sheet.dart or shared test infrastructure. If a needed bridge capability is missing, keep that piece on the classic Flutter path and report it. Keep every app/lib Dart file under 1500 lines. Match surrounding style.
+
+## 6. Work plan
+1. For every screen in the batch, read the complete Flutter screen and list every feature/state/action/analytics call/string; then implement the native projection with existing primitives, keeping the Flutter screen as fallback.
+2. Write the Dart tests named in the spec, and the host test target app/integration_test/native_offline_sync_host_test.dart using runNativeHostSuite (screenshot names 'native-offline-sync-<screen>-dark'); you cannot run host tests here — make them compile (flutter analyze) and keep them simple and deterministic.
+3. Verify until green: dart format --line-length 120 on changed files; flutter analyze <changed files and tests> (no errors, no new warnings/infos); flutter test --no-pub <your tests> test/mobile/native_ui <every existing test importing a file you changed>; git diff --check.
+4. Independent review: launch three reviewer subagents if the Agent/Task tool is available (otherwise do three separate passes yourself): (a) feature parity vs the Flutter screens, (b) rules/safety/ownership/fallback/session fencing/only-owned-files, (c) tests and verification. Fix every real finding and re-verify.
+5. Commit only your owned files and new tests (never bootstrap files): message title "feat(ios): <what this batch makes native, <= 72 chars>", blank line, 2-5 plain sentences (what is native now, what stays Flutter and why, how verified, that host tests still need a Simulator run), blank line, "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>".
+6. Push: git push -u origin claude/swiftui-b-offline-sync. Never push any other branch, never force-push, never open a pull request.
+7. Final answer: branch name, commit SHA, screens done, anything kept on Flutter and why, tests added, verification output summary, and open issues.
