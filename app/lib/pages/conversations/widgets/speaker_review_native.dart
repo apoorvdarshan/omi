@@ -20,6 +20,14 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// The meter level a native row may carry (0..3); anything else draws no meter.
 int? _nativeLevel(int? level) => level?.clamp(0, 3);
 
+/// What the Flutter chip announces beside the name: pinned, and the voice-match level. The native
+/// meter is decorative, so the row says it in words.
+String _nativeMatchDescription(BuildContext context, GeneratedSpeakerTagCandidate candidate) => [
+      if (candidate.pinned) context.l10n.peopleFilterPinned,
+      if (candidate.matchLevel != null)
+        context.l10n.voiceMatchMeterLabel(voiceMatchLabel(context, candidate.matchLevel!.clamp(1, 3))),
+    ].join(', ');
+
 /// The longest literal text a native label carries; longer server text is shortened.
 String _nativeText(String text, [int limit = 500]) {
   final characters = text.characters;
@@ -51,10 +59,11 @@ class _NativeSpeakerReviewState extends State<NativeSpeakerReview> {
     });
   }
 
+  /// Pops this sheet only while it is the top route, never a picker or modal opened above it.
   void _pop() {
-    if (_closing || !mounted) return;
+    if (_closing || !mounted || ModalRoute.of(context)?.isCurrent != true) return;
     _closing = true;
-    Navigator.of(context).maybePop();
+    Navigator.of(context).pop();
   }
 
   void _close(SpeakerTagPromptsProvider provider) {
@@ -215,6 +224,7 @@ class _NativeSpeakerReviewState extends State<NativeSpeakerReview> {
             [
               for (final (index, c) in candidates.indexed)
                 NativeRow('speaker_review_candidate:$index', c.name,
+                    subtitle: _nativeMatchDescription(context, c),
                     level: _nativeLevel(c.matchLevel),
                     symbol: c.pinned ? 'pin' : null,
                     enabled: enabled,
@@ -299,9 +309,13 @@ class _NativeSpeakerPickerState extends State<NativeSpeakerPicker> {
     final q = _query.trim();
     final lower = q.toLowerCase();
     bool matches(String name) => lower.isEmpty || name.toLowerCase().contains(lower);
-    final closest = candidates.where((c) => matches(c.name)).toList();
+    // Rows are keyed by person id, so a tap that lands after the filter changed still names that person.
+    final seen = <String>{};
+    final closest = candidates.where((c) => matches(c.name) && c.personId.isNotEmpty && seen.add(c.personId)).toList();
     final closestIds = {for (final c in closest) c.personId};
-    final everyone = people.where((p) => matches(p.name) && !closestIds.contains(p.id)).toList()
+    final everyone = people
+        .where((p) => matches(p.name) && !closestIds.contains(p.id) && p.id.isNotEmpty && seen.add(p.id))
+        .toList()
       ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     final exact = people.any((p) => p.name.toLowerCase() == lower);
     final canAdd = q.length >= 2 && q.length <= 40 && !exact;
@@ -311,7 +325,9 @@ class _NativeSpeakerPickerState extends State<NativeSpeakerPicker> {
       searchValue: _query,
       searchPlaceholder: l10n.peopleSearchPlaceholder,
       toolbar: [
-        NativeRow('speaker_picker_close', l10n.close, symbol: 'xmark', action: (_) => Navigator.of(context).maybePop()),
+        NativeRow('speaker_picker_close', l10n.close, symbol: 'xmark', action: (_) {
+          if (!_picked) Navigator.of(context).maybePop();
+        }),
       ],
       sections: [
         if (widget.offerMeAndNotAPerson && q.isEmpty)
@@ -333,8 +349,9 @@ class _NativeSpeakerPickerState extends State<NativeSpeakerPicker> {
           NativeSection(
               'speaker_picker_closest',
               [
-                for (final (index, c) in closest.indexed)
-                  NativeRow('speaker_picker_closest:$index', c.name,
+                for (final c in closest)
+                  NativeRow('speaker_picker_closest:${c.personId}', c.name,
+                      subtitle: _nativeMatchDescription(context, c),
                       level: _nativeLevel(c.matchLevel),
                       symbol: c.pinned ? 'pin' : 'person',
                       action: (_) => _pick(SpeakerPickerChoice.person(c.personId, c.name))),
@@ -344,8 +361,8 @@ class _NativeSpeakerPickerState extends State<NativeSpeakerPicker> {
           NativeSection(
               'speaker_picker_everyone',
               [
-                for (final (index, p) in everyone.indexed)
-                  NativeRow('speaker_picker_person:$index', p.name,
+                for (final p in everyone)
+                  NativeRow('speaker_picker_person:${p.id}', p.name,
                       symbol: 'person.crop.circle', action: (_) => _pick(SpeakerPickerChoice.person(p.id, p.name))),
               ],
               title: l10n.everyoneHeader),

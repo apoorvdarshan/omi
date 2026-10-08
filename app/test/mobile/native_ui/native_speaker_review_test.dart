@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -209,6 +210,26 @@ void main() {
       expect(wave.points.every((point) => (point['y'] as double) >= 0 && (point['y'] as double) <= 1), isTrue);
     });
 
+    testWidgets('each answer button sends its answer through the provider', (tester) async {
+      NativeFeedbackHost.debugActiveForTest = true;
+      addTearDown(() => NativeFeedbackHost.debugActiveForTest = false);
+      _Config.install();
+      for (final (kind, id, wire) in [
+        ('confirm_person', 'yes', 'person'),
+        ('owner_check', 'not_me', 'not_me'),
+        ('owner_check', 'not_a_person', 'not_a_person'),
+        ('identify', 'skip', 'skip'),
+      ]) {
+        final review = await _pumpReview(tester, [_prompt('q-$id', kind)], people: [_person('p1', 'Sam')]);
+        expect(await _send(tester, review.host, 'speaker_review_answer:$id'), isTrue);
+        await NativeTestHost.settle(tester);
+        await tester.pumpAndSettle();
+        expect(review.answers.single.answer, wire, reason: id);
+        if (id == 'yes') expect(review.answers.single.personId, 'p1');
+        await tester.pumpWidget(const SizedBox());
+      }
+    });
+
     testWidgets('a candidate index answers with the projected candidate; a stale index is refused', (tester) async {
       NativeFeedbackHost.debugActiveForTest = true;
       addTearDown(() => NativeFeedbackHost.debugActiveForTest = false);
@@ -226,6 +247,15 @@ void main() {
 
       expect(await _send(tester, review.host, 'speaker_review_candidate:7'), isFalse);
       expect(review.provider.pending, isNull);
+      // A projection of an earlier prompt answers nothing once the prompt moved on.
+      final earlier = _rows(tester);
+      final current = review.provider.current;
+      review.provider.prompts = [_prompt('q0', 'identify'), ...review.provider.prompts];
+      expect(review.provider.current, isNot(same(current)));
+      await earlier.firstWhere((row) => row.id == 'speaker_review_candidate:0').action!(null);
+      expect(review.provider.pending, isNull);
+      review.provider.prompts = review.provider.prompts.sublist(1);
+      await NativeTestHost.settle(tester);
 
       expect(await _send(tester, review.host, 'speaker_review_candidate:1'), isTrue);
       await NativeTestHost.settle(tester);
@@ -297,18 +327,23 @@ void main() {
           fallback: const Text('flutter picker'),
         );
 
-    testWidgets('excludes the ruled-out person and optimistic people, and picks by projected index', (tester) async {
+    testWidgets('excludes the ruled-out person and optimistic people, and picks by person id', (tester) async {
       final host = NativeTestHost.install();
       final result = await openPicker(tester, picker());
       final titles = _rows(tester).map((row) => row.title).toList();
       expect(titles, isNot(contains('Sam')));
       expect(titles, isNot(contains('Pending')));
-      expect(_ids(tester, 'speaker_picker_closest:'), ['speaker_picker_closest:0']);
+      expect(_ids(tester, 'speaker_picker_closest:'), ['speaker_picker_closest:p2']);
+      expect(_rows(tester).firstWhere((row) => row.id == 'speaker_picker_closest:p2').subtitle,
+          '${_l10n.peopleFilterPinned}, ${_l10n.voiceMatchMeterLabel(_l10n.voiceMatchPossible)}');
       expect(_rows(tester).where((row) => row.id.startsWith('speaker_picker_person:')).map((row) => row.title),
           ['Bea', 'Zoe']);
       expect(_ids(tester, 'speaker_picker_me'), hasLength(1));
 
-      expect(await _send(tester, host, 'speaker_picker_person:1'), isTrue);
+      // Rows are keyed by person id, so a filter change between projection and tap never redirects it.
+      expect(await _send(tester, host, '_search', 'zo'), isTrue);
+      await NativeTestHost.settle(tester);
+      expect(await _send(tester, host, 'speaker_picker_person:p3'), isTrue);
       await tester.pumpAndSettle();
       final choice = await result;
       expect(choice?.personId, 'p3');
@@ -324,6 +359,9 @@ void main() {
         ('M', _l10n.newPersonEllipsis),
         ('zoe', _l10n.newPersonEllipsis),
         ('x' * 41, _l10n.newPersonEllipsis),
+        ('  M  ', _l10n.newPersonEllipsis),
+        ('Al', _l10n.addNamedPersonAction('Al')),
+        ('x' * 40, _l10n.addNamedPersonAction('x' * 40)),
         ('Maya', _l10n.addNamedPersonAction('Maya')),
       ]) {
         expect(await _send(tester, host, '_search', query), isTrue);
@@ -348,7 +386,9 @@ void main() {
             'action': 'save',
             'values': {'name': name}
           };
-      config.presentations.addAll([(_) => save('   '), (_) => save('A'), (_) => save(' Maya ')]);
+      // 40 characters the field accepts, but 42 UTF-16 units: over the same limit _NameDialog applies.
+      config.presentations
+          .addAll([(_) => save('   '), (_) => save('A'), (_) => save('${'x' * 38}👍👍'), (_) => save(' Maya ')]);
       final named = showSpeakerTagNameDialog(context);
       await tester.pumpAndSettle();
       expect(await named, 'Maya');
@@ -357,6 +397,7 @@ void main() {
       expect(rows(config.presented[0]).map((row) => row['id']), ['name']);
       expect(rows(config.presented[1]).last['title'], _l10n.pleaseEnterName);
       expect(rows(config.presented[2]).last['title'], _l10n.nameMustBeBetweenCharacters);
+      expect(rows(config.presented[3]).last['title'], _l10n.nameMustBeBetweenCharacters);
       expect(rows(config.presented[0]).first['maximumLength'], 40);
 
       config.presentations.add((_) => save('x' * 41));
@@ -402,18 +443,18 @@ void main() {
       expect(await _send(tester, host, 'voice_match_play:2'), isTrue);
       expect(played.single, same(matches[2]));
 
-      final staleRows = _rows(tester);
       expect(await _send(tester, host, 'voice_match_yes:1'), isTrue);
       await tester.pumpAndSettle();
       expect(answered.single.$1, same(matches[1]));
       expect(answered.single.$2, isTrue);
+      expect(_ids(tester, 'voice_match_yes:'), ['voice_match_yes:0', 'voice_match_yes:2'],
+          reason: 'ids stay the original positions, never shifting to another match');
 
-      // The projection that still showed 'b' at index 1 now resolves to nothing.
-      await staleRows.firstWhere((row) => row.id == 'voice_match_no:1').action!(null);
-      await staleRows.firstWhere((row) => row.id == 'voice_match_no:2').action!(null);
+      // A tap from the snapshot that still showed 'b' is a no-op, not an answer for 'c'.
+      expect(await _send(tester, host, 'voice_match_no:1'), isFalse);
       expect(answered, hasLength(1));
 
-      expect(await _send(tester, host, 'voice_match_no:1'), isTrue);
+      expect(await _send(tester, host, 'voice_match_no:2'), isTrue);
       await tester.pumpAndSettle();
       expect(answered.last.$1, same(matches[2]));
       expect(answered.last.$2, isFalse);
@@ -422,6 +463,43 @@ void main() {
       expect(answered.map((answer) => answer.$1), [matches[1], matches[2], matches[0]]);
       await closed;
       expect(find.byType(EarlierVoiceMatchesList), findsNothing);
+    });
+  });
+
+  group('native earlier voice matches saving', () {
+    testWidgets('while an answer saves, Yes says so and both answers are disabled; a failure keeps the match',
+        (tester) async {
+      final host = NativeTestHost.install();
+      final matches = [_match('a'), _match('b')];
+      final pending = Completer<bool>();
+      var calls = 0;
+      await tester.pumpWidget(_app(EarlierVoiceMatchesList(
+        personName: 'Maya',
+        matches: matches,
+        native: true,
+        onAnswer: (match, same) {
+          calls++;
+          return pending.future;
+        },
+      )));
+      await NativeTestHost.settle(tester);
+      NativeRow row(String id) => _rows(tester).firstWhere((row) => row.id == id);
+      expect(_rows(tester).where((row) => row.id.startsWith('voice_match_when:')), hasLength(2));
+      final sections = tester.widget<IosNativeSurface>(find.byType(IosNativeSurface)).sections;
+      expect(sections.map((section) => section.footer.isNotEmpty), [true, false]);
+
+      expect(await _send(tester, host, 'voice_match_yes:0'), isTrue);
+      await NativeTestHost.settle(tester);
+      expect(row('voice_match_yes:0').subtitle, _l10n.saving);
+      expect(row('voice_match_yes:0').projection['enabled'], isFalse);
+      expect(row('voice_match_no:0').projection['enabled'], isFalse);
+      expect(await _send(tester, host, 'voice_match_no:0'), isFalse);
+      expect(calls, 1);
+
+      pending.complete(false);
+      await tester.pumpAndSettle();
+      expect(row('voice_match_yes:0').subtitle, isEmpty);
+      expect(_ids(tester, 'voice_match_yes:'), ['voice_match_yes:0', 'voice_match_yes:1']);
     });
   });
 
@@ -438,13 +516,17 @@ void main() {
           translations: const [],
         );
 
-    Future<List<NativeRow>> project(WidgetTester tester, ConversationSpeakers speakers) async {
+    Future<List<NativeRow>> project(WidgetTester tester, ConversationSpeakers speakers, {bool named = false}) async {
       final conversation = ServerConversation(
         id: 'c-native-heading',
         createdAt: DateTime(2026, 9, 30, 12),
         structured: Structured('Title', 'Summary'),
         status: ConversationStatus.completed,
-        transcriptSegments: [segment('own', 0, isUser: true), segment('a', 1), segment('b', 2, personId: 'p1')],
+        transcriptSegments: [
+          segment('own', 0, isUser: true),
+          segment('a', 1, personId: named ? 'p1' : null),
+          segment('b', 2, personId: 'p1')
+        ],
         speakerResolution: speakers,
       );
       final detail = ConversationDetailProvider(fetchConversation: (_) async => conversation)
@@ -483,6 +565,12 @@ void main() {
       expect(heading.title, 'Transcript · 3 speakers');
       expect(heading.valid, isTrue);
       expect(rows.where((row) => row.id == 'detail_unresolved_notice'), isEmpty);
+    });
+
+    testWidgets('no unresolved notice when every other voice is named', (tester) async {
+      final rows = await project(tester, const ConversationSpeakers(status: 'unavailable'), named: true);
+      expect(rows.where((row) => row.id == 'detail_unresolved_notice'), isEmpty);
+      expect(find.byKey(const Key('transcript_unresolved_speakers_notice')), findsNothing);
     });
 
     testWidgets('the unresolved-speakers notice appears only with an unnamed voice and opens the explanation',
@@ -525,7 +613,9 @@ void main() {
       expect(feed.map((action) => action.id).take(5),
           ['feed_open:item-1', 'feed_up:item-1', 'feed_down:item-1', 'feed_dismiss:item-1', 'feed_stop:item-1']);
       expect(feed.map((action) => action.id).toSet(), hasLength(10));
-      expect(action('feed_open:item-1').title, 'Revisit Your Commitment\nYour saved task is ready to revisit.');
+      expect(
+          action('feed_open:item-1').title, 'For You · Revisit Your Commitment\nYour saved task is ready to revisit.');
+      expect(action('feed_dismiss:item-2').title, '${_l10n.dismiss} · Revisit Your Commitment');
       expect(h.events.where((e) => e.action == 'shown'), hasLength(2), reason: 'each projected card counts once');
 
       await action('feed_up:item-1').perform();
@@ -533,6 +623,13 @@ void main() {
       expect(h.outbox.feedback['item-1'], 'thumbs_up');
       expect(action('feed_up:item-1').symbol, 'hand.thumbsup.fill');
       expect(h.events.where((e) => e.action == 'opened'), isEmpty, reason: 'feedback never opens the card');
+      final recorded = h.events.length;
+      await action('feed_up:item-1').perform();
+      await tester.pumpAndSettle();
+      expect(h.events, hasLength(recorded), reason: 'a selected thumb is not recorded again');
+      await action('feed_down:item-1').perform();
+      await tester.pumpAndSettle();
+      expect(h.outbox.feedback['item-1'], 'thumbs_down');
 
       await action('feed_open:item-1').perform();
       await tester.pumpAndSettle();
@@ -549,6 +646,30 @@ void main() {
       expect(h.events.last.action, 'producer_disabled');
       expect(feed, isEmpty);
       expect(h.events.where((e) => e.action == 'shown'), hasLength(2), reason: 'rebuilds never repeat an impression');
+    });
+
+    testWidgets('no impression while the app is not in the foreground', (tester) async {
+      final h = OutcomeHarness();
+      addTearDown(h.outbox.dispose);
+      await h.bind();
+      // Inactive still draws frames, so the feed builds while impressions wait for the foreground.
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      addTearDown(() => tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed));
+      var feed = <NativeHomeAction>[];
+      await tester.pumpWidget(_app(HomeForYou(
+        outbox: h.outbox,
+        load: (_) async => ApiSuccess(feedResponse(items: [feedItem()])),
+        nativeBuilder: (context, actions) {
+          feed = actions;
+          return const SizedBox();
+        },
+      )));
+      await tester.pumpAndSettle();
+      expect(feed, isNotEmpty);
+      expect(h.events.where((e) => e.action == 'shown'), isEmpty);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(h.events.where((e) => e.action == 'shown'), hasLength(1));
     });
   });
 }

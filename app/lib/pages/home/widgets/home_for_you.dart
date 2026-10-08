@@ -2,12 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/proactivity.dart';
 import 'package:omi/backend/schema/gen/proactivity_wire.g.dart';
 import 'package:omi/mobile/native_ui/ios_native_home.dart';
+import 'package:omi/providers/home_provider.dart';
 import 'package:omi/services/proactivity/proactivity_outbox.dart';
 import 'package:omi/services/proactivity/proactivity_push.dart';
 import 'package:omi/services/proactivity/proactivity_runtime.dart';
@@ -124,8 +126,14 @@ class HomeForYouState extends State<HomeForYou> with WidgetsBindingObserver {
       .toList();
 
   /// Each card as Home actions identified by the item id, so a changed feed never redirects a tap.
-  List<NativeHomeAction> _nativeFeed(BuildContext context, List<GeneratedProactivityFeedItem> items) =>
-      [for (final item in items) ..._nativeCard(context, item, _ownerEpoch)];
+  /// An empty or repeated id would duplicate a Home control id, which Swift refuses for the whole Home.
+  List<NativeHomeAction> _nativeFeed(BuildContext context, List<GeneratedProactivityFeedItem> items) {
+    final seen = <String>{};
+    return [
+      for (final item in items)
+        if (item.id.isNotEmpty && seen.add(item.id)) ..._nativeCard(context, item, _ownerEpoch),
+    ];
+  }
 
   List<NativeHomeAction> _nativeCard(BuildContext context, GeneratedProactivityFeedItem item, int ownerEpoch) {
     final l10n = context.l10n;
@@ -135,21 +143,24 @@ class HomeForYouState extends State<HomeForYou> with WidgetsBindingObserver {
 
     final feedback = _outbox.feedback[item.id] ?? item.feedback;
     return [
-      NativeHomeAction('feed_open:${item.id}', item.body.isEmpty ? item.title : '${item.title}\n${item.body}',
-          'sparkles', () => _open(item, ownerEpoch)),
+      // Home alerts have no section heading, so the open row carries it, and each action names its card.
       NativeHomeAction(
-          'feed_up:${item.id}', l10n.helpful, feedback == 'thumbs_up' ? 'hand.thumbsup.fill' : 'hand.thumbsup',
-          () async {
+          'feed_open:${item.id}',
+          [l10n.forYou, item.title].join(' · ') + (item.body.isEmpty ? '' : '\n${item.body}'),
+          'sparkles',
+          () => _open(item, ownerEpoch)),
+      NativeHomeAction('feed_up:${item.id}', '${l10n.helpful} · ${item.title}',
+          feedback == 'thumbs_up' ? 'hand.thumbsup.fill' : 'hand.thumbsup', () async {
         if (feedback != 'thumbs_up') record(ProactivityAction.thumbsUp);
       }),
-      NativeHomeAction('feed_down:${item.id}', l10n.notHelpful,
+      NativeHomeAction('feed_down:${item.id}', '${l10n.notHelpful} · ${item.title}',
           feedback == 'thumbs_down' ? 'hand.thumbsdown.fill' : 'hand.thumbsdown', () async {
         if (feedback != 'thumbs_down') record(ProactivityAction.thumbsDown);
       }),
-      NativeHomeAction('feed_dismiss:${item.id}', l10n.dismiss, 'xmark', () async {
+      NativeHomeAction('feed_dismiss:${item.id}', '${l10n.dismiss} · ${item.title}', 'xmark', () async {
         record(ProactivityAction.dismissed);
       }),
-      NativeHomeAction('feed_stop:${item.id}', l10n.stopThese, 'nosign', () async {
+      NativeHomeAction('feed_stop:${item.id}', '${l10n.stopThese} · ${item.title}', 'nosign', () async {
         record(ProactivityAction.producerDisabled, producer: item.producer);
       }),
     ];
@@ -165,6 +176,7 @@ class HomeForYouState extends State<HomeForYou> with WidgetsBindingObserver {
       if (!mounted ||
           !_outbox.isCurrent(ownerEpoch) ||
           !(ModalRoute.of(context)?.isCurrent ?? true) ||
+          (context.read<HomeProvider?>()?.selectedIndex ?? HomeProvider.homeTab) != HomeProvider.homeTab ||
           !(lifecycle == null || lifecycle == AppLifecycleState.resumed)) {
         return;
       }

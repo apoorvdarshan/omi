@@ -108,8 +108,10 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
       expect(prompts.pending?.answer, SpeakerTagAnswer.me, reason: 'staged while the native Undo toast is up');
       expect(nativeProjectedRow(tester, 'speaker_review_answered').kind, 'label');
-      // The toast's Undo window closes on its own; the answer then commits once.
-      await tester.pump(const Duration(seconds: 7));
+      // Inside the 5 s Undo window: the native toast floats above the sheet.
+      await checkNativeHost(tester, 'native-speaker-review-voice-matches-toast-dark');
+      // The harness waits past the Undo window, which closes on its own; the answer then commits once.
+      await tester.pump(const Duration(seconds: 2));
       await tester.pump(const Duration(seconds: 1));
       expect(answers.single.answer, 'me');
       expect(tester.takeException(), isNull);
@@ -150,12 +152,14 @@ void main() {
       addTearDown(outcome.dispose);
       var projected = <NativeRow>[];
       final people = [_person('p1', 'Maya')];
+      final peopleProvider = PeopleProvider(loadPeople: () async => PeopleListResponse(people: people))
+        ..people = people;
+      addTearDown(peopleProvider.dispose);
       await tester.pumpWidget(nativeHostApp(Scaffold(body: TranscriptWidgets(onNativePresentation: (sections) {
         projected = sections.expand((section) => section.rows).toList();
       })), providers: [
         ChangeNotifierProvider<ConversationDetailProvider>.value(value: detail),
-        ChangeNotifierProvider<PeopleProvider>.value(
-            value: PeopleProvider(loadPeople: () async => PeopleListResponse(people: people))..people = people),
+        ChangeNotifierProvider<PeopleProvider>.value(value: peopleProvider),
         ChangeNotifierProvider<SpeakerTagOutcomeController>.value(value: outcome),
       ]));
       outcome.follow(personId: 'p1', personName: 'Maya', linesLabeled: 1);

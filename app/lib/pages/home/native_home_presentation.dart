@@ -53,7 +53,8 @@ extension _NativeHomePresentation on _HomePageState {
                     NativeHomeAction('record', phoneRecording ? l10n.stopRecording : l10n.startRecording,
                         phoneRecording ? 'stop.fill' : 'record.circle', () async {
                       // The one-time tip describes the Flutter button's arrow; native Home offers the options
-                      // as their own control, so the tip is marked as shown instead.
+                      // as their own control, so the tip is marked as shown instead. The key must match
+                      // HomeRecordButtonState._optionsTipKey.
                       SharedPreferencesUtil().saveBool('v2/homeRecordOptionsTipShown', true);
                       await _nativeRecordKey.currentState?.performPrimaryAction();
                     }, enabled: capture.recordingState != RecordingState.initialising),
