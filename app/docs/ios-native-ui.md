@@ -48,6 +48,12 @@ containment. Both Runner targets compile the same renderer.
 - `com.omi.native_ui/config`: `isSupported` gates the OS before constructing a native view;
   `present`/`dismissPresentation` own temporary system alerts and SwiftUI input sheets. Explicit
   selection returns validated input to the current Dart owner; cancellation returns no mutation.
+  `presentActivity` shows a blocking activity overlay in the same single slot; callers dismiss it
+  before awaiting any route or sheet, and it ends on its own after 120 s. Swift reports 'action',
+  'cancel' and 'dismissed' itself, and 'programmatic' when it closes a presentation for
+  `dismissPresentation`. Dart sends that only for its own reason (a dismissal signal or activity
+  dismissal: 'programmatic'; a session change: 'invalidated'; an unmounted caller: 'unmounted') and
+  reports that reason in place of Swift's reply.
 - `com.omi.native_ui/home/<view id>`: localized Home/read snapshots and existing read/navigation
   callbacks (`detail`, `open`, `browse`, `refresh`, `loadMore`, capture and chrome actions).
 - `com.omi.native_ui/surface/<view id>`: typed lists, forms, chat and charts; `update`/`invalidate`/bounded explicit `captureImage`
@@ -113,6 +119,12 @@ containment. Both Runner targets compile the same renderer.
 - Offline Sync uses the same extracted status-priority calculation for native and original cards.
   Retry/cancel/download/import/storage/retention commands continue through the existing owners;
   merely projecting status does not initiate sync or alter recordings.
+- List interactions (`NativeSelection`, `bottomBar`, `NativeSection.reorder`/`collapsible`, row `indent` and
+  `swipeLeading`/`swipeTrailing`) render in list mode only. `_selection` and `_reorder:<section>` carry the complete
+  desired id list, validated against the current projection; owners apply it idempotently, and Swift shows it
+  optimistically until a newer snapshot or a refusal. Swipes repeat context-menu options; collapsing is presentation
+  only. Owners exit their selection mode when their route pops or is disposed; native code only drops its
+  optimistic state on invalidation.
 - Copy, dates and speaker names come from the current localization and formatting primitives.
   System/Dark/Light follows `AppearanceProvider`; native code does not store a second choice.
   The embedded UIKit host applies that choice to its traits too, including live changes and

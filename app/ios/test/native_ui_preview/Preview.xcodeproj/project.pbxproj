@@ -8,11 +8,17 @@
 
 /* Begin PBXBuildFile section */
 		8D7C57364A2ED53EA49C0BCB /* NativeModalPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A30C505397D10684DB54592 /* NativeModalPresenter.swift */; };
+		4B8ED32606AA52FD60C48C3C /* NativeToastPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7AE9569D962FC2F33E70895 /* NativeToastPresenter.swift */; };
 		008CA96741DBE8D32F73B59F /* SafeFoundationSinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 645CC78FE98DE80A5C3A3203 /* SafeFoundationSinks.swift */; };
 		2C62D3AB2B45A141921699F0 /* NativeGlass.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2C8C0EA0179610FE3BD6292 /* NativeGlass.swift */; };
 		409C0AAB325C309B7954B495 /* native_home_v1.json in Resources */ = {isa = PBXBuildFile; fileRef = AE1159B5206DEF2789FB7D8F /* native_home_v1.json */; };
 		56C0B1375C778BC5A4C533BA /* NativeSurfaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F312B2548DBC6DA768DA3267 /* NativeSurfaceView.swift */; };
 		B0887F2695D874F315F5FCBD /* NativeReaderComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 232D127408C8C64C5674E080 /* NativeReaderComponents.swift */; };
+		EC7A73E8ECA01E5E37D37F82 /* NativeListInteractions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59C5E0B802754555CE9AB7F5 /* NativeListInteractions.swift */; };
+		02A93217FE28686B223535B8 /* NativeGraphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DCDD9E5B7BE8B7282BDA64A /* NativeGraphView.swift */; };
+		2220E372D12AEA59EA92A516 /* NativeGraphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DCDD9E5B7BE8B7282BDA64A /* NativeGraphView.swift */; };
+		4954043709421EBA7FF731A5 /* NativeSurfaceContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2F8E25709F7288D41E8E22 /* NativeSurfaceContract.swift */; };
+		3C7C1E7FCB8DEE113B6DB11E /* SafeFoundationSinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 645CC78FE98DE80A5C3A3203 /* SafeFoundationSinks.swift */; };
 		6099496A98CDE6FB652CA40F /* PreviewUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4D27B1031DDE8583F2CA747 /* PreviewUITests.swift */; };
 		67FEC9CAB30F258C23D08B31 /* PreviewApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51CDC6B151864D7EF2E98348 /* PreviewApp.swift */; };
 		769111CF47973A6347C4FE86 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F7D65CD2BBD03EF907D6979B /* Foundation.framework */; };
@@ -34,6 +40,7 @@
 
 /* Begin PBXFileReference section */
 		9A30C505397D10684DB54592 /* NativeModalPresenter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NativeModalPresenter.swift; path = ../../Runner/NativeUI/NativeModalPresenter.swift; sourceTree = "<group>"; };
+		F7AE9569D962FC2F33E70895 /* NativeToastPresenter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NativeToastPresenter.swift; path = ../../Runner/NativeUI/NativeToastPresenter.swift; sourceTree = "<group>"; };
 		2E81D51895F8F245493AA2D3 /* NativeHomeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NativeHomeView.swift; path = "../../Runner/NativeUI/NativeHomeView.swift"; sourceTree = "<group>"; };
 		305A2D310765A3436C743E7D /* Preview.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Preview.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		51CDC6B151864D7EF2E98348 /* PreviewApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PreviewApp.swift; sourceTree = "<group>"; };
@@ -46,6 +53,8 @@
 		D2C8C0EA0179610FE3BD6292 /* NativeGlass.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NativeGlass.swift; path = "../../Runner/NativeUI/NativeGlass.swift"; sourceTree = "<group>"; };
 		F312B2548DBC6DA768DA3267 /* NativeSurfaceView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NativeSurfaceView.swift; path = "../../Runner/NativeUI/NativeSurfaceView.swift"; sourceTree = "<group>"; };
 		232D127408C8C64C5674E080 /* NativeReaderComponents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NativeReaderComponents.swift; path = ../../Runner/NativeUI/NativeReaderComponents.swift; sourceTree = "<group>"; };
+		59C5E0B802754555CE9AB7F5 /* NativeListInteractions.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NativeListInteractions.swift; path = ../../Runner/NativeUI/NativeListInteractions.swift; sourceTree = "<group>"; };
+		9DCDD9E5B7BE8B7282BDA64A /* NativeGraphView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NativeGraphView.swift; path = ../../Runner/NativeUI/NativeGraphView.swift; sourceTree = "<group>"; };
 		F7D65CD2BBD03EF907D6979B /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
@@ -75,6 +84,7 @@
 				7E0CAA848A84D944D181BC20 /* Products */,
 				62FF4F68C0A9500DB2205941 /* Frameworks */,
 				55EC5BD0A7A6C752FE4A955E /* NativeHomeContract.swift */,
+				F7AE9569D962FC2F33E70895 /* NativeToastPresenter.swift */,
 				2E81D51895F8F245493AA2D3 /* NativeHomeView.swift */,
 				51CDC6B151864D7EF2E98348 /* PreviewApp.swift */,
 				AE1159B5206DEF2789FB7D8F /* native_home_v1.json */,
@@ -84,6 +94,8 @@
 				BA2F8E25709F7288D41E8E22 /* NativeSurfaceContract.swift */,
 				F312B2548DBC6DA768DA3267 /* NativeSurfaceView.swift */,
 				232D127408C8C64C5674E080 /* NativeReaderComponents.swift */,
+				59C5E0B802754555CE9AB7F5 /* NativeListInteractions.swift */,
+				9DCDD9E5B7BE8B7282BDA64A /* NativeGraphView.swift */,
 			);
 			sourceTree = "<group>";
 		};
@@ -204,6 +216,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				6099496A98CDE6FB652CA40F /* PreviewUITests.swift in Sources */,
+				2220E372D12AEA59EA92A516 /* NativeGraphView.swift in Sources */,
+				4954043709421EBA7FF731A5 /* NativeSurfaceContract.swift in Sources */,
+				3C7C1E7FCB8DEE113B6DB11E /* SafeFoundationSinks.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -212,6 +227,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				8D7C57364A2ED53EA49C0BCB /* NativeModalPresenter.swift in Sources */,
+				4B8ED32606AA52FD60C48C3C /* NativeToastPresenter.swift in Sources */,
 				FD56A2E7C665843711B4ED8A /* NativeHomeContract.swift in Sources */,
 				851BC53CF881B6950C353656 /* NativeHomeView.swift in Sources */,
 				67FEC9CAB30F258C23D08B31 /* PreviewApp.swift in Sources */,
@@ -220,6 +236,8 @@
 				E83BDDB1C883CAD7AD90461F /* NativeSurfaceContract.swift in Sources */,
 				56C0B1375C778BC5A4C533BA /* NativeSurfaceView.swift in Sources */,
 				B0887F2695D874F315F5FCBD /* NativeReaderComponents.swift in Sources */,
+				EC7A73E8ECA01E5E37D37F82 /* NativeListInteractions.swift in Sources */,
+				02A93217FE28686B223535B8 /* NativeGraphView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

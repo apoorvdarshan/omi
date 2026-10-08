@@ -12,17 +12,33 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 import 'ios_native_home.dart';
+import 'ios_native_secret.dart';
+import 'native_graph.dart';
 import 'native_read_session.dart';
 import 'native_navigation_chrome.dart';
 
 typedef NativeAction = FutureOr<void> Function(Object? value);
 
+/// The preview flag, or the debug-only hermetic test host ([IosNativeSurface.debugNativeHostForTest]).
+/// Release and profile builds reduce this to [iosSwiftUiEnabled].
+bool get nativePresentationEnabled => iosSwiftUiEnabled || IosNativeSurface.debugNativeHostForTest;
+
+/// [supportsIosSwiftUi], or true on the debug-only hermetic test host. Flag-off and Android builds
+/// answer false without touching a channel.
+Future<bool> supportsNativePresentation() async =>
+    IosNativeSurface.debugNativeHostForTest || await supportsIosSwiftUi();
+
+/// The snapshot version Swift decodes; a debug host test may publish an unsupported one on purpose.
+int get nativeSnapshotVersion => kDebugMode && IosNativeSurface._debugCorruptSnapshot ? 2 : 1;
+
 /// Captures the currently visible native presentation for an explicit share action.
 /// No image is cached here; the existing share owner retains its file and privacy lifecycle.
 class NativeSurfaceController {
-  Future<Uint8List?> Function()? _capture;
+  Future<Uint8List?> Function(String? target)? _capture;
 
-  Future<Uint8List?> captureImage() async => _capture?.call();
+  /// With a [target], renders only that graph row with its current native camera. The target must
+  /// be a current, valid, non-placeholder graph row; otherwise the result is null.
+  Future<Uint8List?> captureImage({String? target}) async => _capture?.call(target);
 }
 
 /// Normalize thumbnails already supplied by the existing image/file owner. Unsupported URLs
@@ -37,6 +53,18 @@ String? nativeImageUri(String? input) {
   if (uri.scheme == 'file' && uri.host.isEmpty && uri.path.startsWith('/')) return value;
   return null;
 }
+
+/// A categorical chart label within the 64-character limit both sides validate. Longer names are
+/// shortened with an ellipsis, so real-world data never makes the whole chart surface invalid.
+String nativeChartLabel(String label) {
+  final characters = label.characters;
+  return characters.length <= 64 ? label : '${characters.take(63)}…';
+}
+
+/// Row kinds the host draws with its own system control, offered through [nativeUiCapabilities].
+/// They are list content: only surface sections carry them, never toolbars, chat, reader,
+/// navigation or modal presentations.
+const nativeHostRowKinds = {'shortcuts_link'};
 
 /// Only presentation values cross the channel. Callbacks stay with their current owner.
 class NativeRow {
@@ -60,8 +88,15 @@ class NativeRow {
     this.imageUri,
     this.level,
     this.maximumValue,
+    this.minimumValue,
+    this.step,
     this.points = const [],
     this.blocks = const [],
+    this.indent,
+    this.swipeLeading = const [],
+    this.swipeTrailing = const [],
+    this.chartStyle,
+    this.graph,
     this.action,
     this.onVisible,
     this.onHidden,
@@ -81,8 +116,25 @@ class NativeRow {
   /// The existing three-band confidence meter; never a probability or a new score.
   final int? level;
   final double? maximumValue;
+
+  /// A 'level' control's lower bound (default 0) and optional grid step; no other kind takes them.
+  final double? minimumValue, step;
   final List<Map<String, Object>> points;
   final List<Map<String, Object>> blocks;
+
+  /// Hierarchy depth in a list, 0..3 (task, navigation, label, toggle and menu rows).
+  final int? indent;
+
+  /// Option ids offered as swipe actions on each edge, at most 3 per edge and never on both
+  /// (task, navigation and menu rows). They dispatch exactly like the context menu's option.
+  final List<String> swipeLeading, swipeTrailing;
+
+  /// 'line' or 'bar' draws a categorical [kind] 'chart': point x is its index and its label names
+  /// the category. Null keeps the existing quantitative line chart.
+  final String? chartStyle;
+
+  /// Present exactly for kind 'graph'.
+  final NativeGraph? graph;
   final Object? value;
   final Map<String, String> options;
   final NativeAction? action, onVisible, onHidden;
@@ -110,8 +162,15 @@ class NativeRow {
         'imageUri': imageUri,
         'level': level,
         'maximumValue': maximumValue,
+        'minimumValue': minimumValue,
+        'step': step,
         'points': points,
         'blocks': blocks,
+        'indent': indent,
+        'swipeLeading': swipeLeading,
+        'swipeTrailing': swipeTrailing,
+        'chartStyle': chartStyle,
+        'graph': graph?.projection,
         'destructive': destructive,
         'enabled': enabled && action != null,
         'visibilityEnabled': onVisible != null,
@@ -120,7 +179,7 @@ class NativeRow {
 
   bool get valid {
     if (blocks.isNotEmpty &&
-        (kind != 'rich_text' ||
+        (!['rich_text', 'message_ai'].contains(kind) ||
             blocks.any((block) =>
                 !['text', 'heading', 'quote', 'code', 'table', 'image', 'rule'].contains(block['kind']) ||
                 block['text'] is! String ||
@@ -139,12 +198,18 @@ class NativeRow {
     }
     if (id.isEmpty || id.startsWith('_') || options.keys.any((id) => id.isEmpty)) return false;
     if (plainText && !['message_ai', 'message_user'].contains(kind)) return false;
+    // A rich AI body is Markdown blocks, never literal text too; one message carries at most 2,000.
+    if ((plainText && blocks.isNotEmpty) || (kind == 'message_ai' && blocks.length > 2000)) return false;
+    if (chartStyle != null && !_validCategoricalChart) return false;
     if (kind != 'keypad' && (keypadMode != null || eraseLabel != null || clearLabel != null)) return false;
     if (level != null && (level! < 0 || level! > 3)) return false;
     if (maximumValue != null &&
-        (!['slider', 'progress', 'image'].contains(kind) || !maximumValue!.isFinite || maximumValue! <= 0)) {
+        (!['slider', 'progress', 'image', 'level'].contains(kind) ||
+            !maximumValue!.isFinite ||
+            kind != 'level' && maximumValue! <= 0)) {
       return false;
     }
+    if ((minimumValue != null || step != null) && kind != 'level') return false;
     if (imageUri != null) {
       final uri = Uri.tryParse(imageUri!);
       if (imageUri!.length > 4096 ||
@@ -182,7 +247,32 @@ class NativeRow {
       return false;
     }
     if (minimumDate != null && !_validDate(minimumDate!)) return false;
+    // A one-time secret carries only its value and the single Copy command.
+    if (kind == 'secret' &&
+        (imageUri != null ||
+            points.isNotEmpty ||
+            blocks.isNotEmpty ||
+            level != null ||
+            maximumValue != null ||
+            keyboard != null ||
+            maximumLength != null ||
+            options.length != 1 ||
+            options['copy']?.isNotEmpty != true)) {
+      return false;
+    }
     if (kind == 'waveform' && points.any((point) => (point['y'] as num).abs() > 1)) return false;
+    if (indent != null && (indent! < 0 || indent! > 3 || !_nativeListKinds.contains(kind))) return false;
+    if ((swipeLeading.isNotEmpty || swipeTrailing.isNotEmpty) &&
+        (!['task', 'navigation', 'menu'].contains(kind) ||
+            swipeLeading.length > 3 ||
+            swipeTrailing.length > 3 ||
+            swipeLeading.toSet().length != swipeLeading.length ||
+            swipeTrailing.toSet().length != swipeTrailing.length ||
+            swipeLeading.any(swipeTrailing.contains) ||
+            [...swipeLeading, ...swipeTrailing].any((id) => !options.containsKey(id)))) {
+      return false;
+    }
+    if ((kind == 'graph') != (graph != null) || graph?.valid == false) return false;
     return switch (kind) {
       'image' => value == null &&
           imageUri != null &&
@@ -195,6 +285,7 @@ class NativeRow {
           (value as num).isFinite &&
           (value as num) >= 0 &&
           (value as num) <= maximumValue!,
+      'level' => _acceptsLevel(value),
       'keypad' => value is String &&
           (value as String).length <= 10000 &&
           ['dialer', 'dtmf'].contains(keypadMode) &&
@@ -209,6 +300,19 @@ class NativeRow {
           options.keys.every((key) => RegExp(r'^#[0-9A-Fa-f]{6}$').hasMatch(key)),
       'text' => value is String && (value as String).characters.length <= (maximumLength ?? 10000),
       'date' => value is String && ((value as String).isEmpty || _validDate(value as String)),
+      'secret' => value is String && nativeSecretValid(value as String),
+      // The system owns the Shortcuts link's tap, so it carries no value, command or media.
+      'shortcuts_link' => value == null &&
+          options.isEmpty &&
+          symbol == null &&
+          action == null &&
+          imageUri == null &&
+          points.isEmpty &&
+          blocks.isEmpty,
+      // An interactive graph holds '' or the selected node id; nothing is highlighted without one.
+      'graph' => graph!.interactive
+          ? value is String && (value == '' ? graph!.highlighted.isEmpty : graph!.nodeIds.contains(value as String))
+          : value == null,
       'label' ||
       'button' ||
       'navigation' ||
@@ -224,12 +328,39 @@ class NativeRow {
     };
   }
 
+  /// Categories in index order (x = 0..n-1), each named by a label of at most 64 characters.
+  bool get _validCategoricalChart =>
+      kind == 'chart' &&
+      ['line', 'bar'].contains(chartStyle) &&
+      points.isNotEmpty &&
+      points.length <= 10000 &&
+      points.indexed.every((entry) =>
+          entry.$2['x'] is num &&
+          entry.$2['x'] == entry.$1 &&
+          entry.$2['y'] is num &&
+          (entry.$2['y'] as num).isFinite &&
+          entry.$2['label'] is String &&
+          (entry.$2['label'] as String).characters.length <= 64);
+
   static bool _validDate(String value) {
     final milliseconds = int.tryParse(value);
     return milliseconds != null && milliseconds.abs() <= 8640000000000000;
   }
 
+  /// A finite number within [minimumValue] (default 0) and [maximumValue], on the [step] grid when
+  /// one is set. A degenerate range, step or grid of more than 1000 steps accepts nothing.
+  bool _acceptsLevel(Object? input) {
+    final minimum = minimumValue ?? 0.0, maximum = maximumValue, step = this.step;
+    if (maximum == null || !minimum.isFinite || !maximum.isFinite || maximum <= minimum) return false;
+    if (input is! num || !input.isFinite || input < minimum || input > maximum) return false;
+    if (step == null) return true;
+    if (!step.isFinite || step <= 0 || step > maximum - minimum || (maximum - minimum) / step > 1000) return false;
+    final steps = (input - minimum) / step;
+    return (steps - steps.roundToDouble()).abs() < 1e-6;
+  }
+
   bool accepts(Object? input) => switch (kind) {
+        'level' => _acceptsLevel(input),
         'slider' => input is num && input.isFinite && input >= 0 && maximumValue != null && input <= maximumValue!,
         'keypad' => input is String &&
             (options.containsKey(input) || keypadMode == 'dialer' && ['+', 'erase', 'clear'].contains(input)),
@@ -237,12 +368,21 @@ class NativeRow {
         'task' => input is bool || input is String && options.containsKey(input),
         'choice' || 'segmented' || 'color' || 'menu' => input is String && options.containsKey(input),
         'navigation' || 'transcript' || 'rich_text' => input == null || input is String && options.containsKey(input),
+        // The trailing action, or a link from the row's whitelist; any other URL never reaches the owner.
+        'message_ai' => input == null || input is String && options.containsKey(input),
         'date' =>
           input is String && _validDate(input) && (minimumDate == null || int.parse(input) >= int.parse(minimumDate!)),
         'text' => input is String && input.characters.length <= (maximumLength ?? 10000),
+        'secret' => input == 'copy',
+        'graph' => graph?.interactive == true
+            ? input is String && (input.isEmpty || graph!.nodeIds.contains(input))
+            : input == null,
         _ => input == null,
       };
 }
+
+/// Rows a list may indent, and the only rows a reorderable section may hold.
+const _nativeListKinds = ['task', 'navigation', 'label', 'toggle', 'menu'];
 
 /// Dispatches only commands from the current provider projection.
 Future<void> dispatchNativeAction(
@@ -251,22 +391,67 @@ Future<void> dispatchNativeAction(
   required Iterable<NativeRow> rows,
   NativeAction? refresh,
   NativeAction? search,
+  NativeSelection? selection,
+  Iterable<NativeSection> sections = const [],
 }) async {
   if (!isActive()) throw PlatformException(code: 'native_session_ended');
   if (call.method != 'action' || call.arguments is! Map) throw PlatformException(code: 'invalid_native_action');
   final args = call.arguments as Map;
   final id = args['id'];
   final value = args['value'];
+  Object? payload = value;
   NativeAction? action;
   if (id == '_refresh' && value == null) action = refresh;
   if (id == '_search' && value is String && value.length <= 10000) action = search;
+  // A selection or an order is the complete desired list of current ids; owners diff it idempotently.
+  final ids = _nativeIdList(value);
+  if (id == '_selection' && selection != null && ids != null && ids.every(selection.selectable.contains)) {
+    action = selection.action;
+    payload = ids;
+  }
+  for (final section in sections) {
+    if (id != '_reorder:${section.id}' || section.reorder == null || ids == null) continue;
+    final current = section.rows.map((row) => row.id).toSet();
+    if (ids.length == section.rows.length && ids.every(current.contains)) {
+      action = section.reorder;
+      payload = ids;
+    }
+  }
   for (final row in rows) {
     if (id == '_visible:${row.id}' && value == null) action = row.onVisible;
     if (id == '_hidden:${row.id}' && value == null) action = row.onHidden;
     if (row.valid && row.id == id && row.enabled && row.accepts(value)) action = row.action;
   }
   if (action == null) throw PlatformException(code: 'invalid_native_action');
-  await action(value);
+  await action(payload);
+}
+
+/// [value] as at most 10000 unique ids, or null when it is anything else.
+List<String>? _nativeIdList(Object? value) {
+  if (value is! List || value.length > 10000 || value.any((id) => id is! String)) return null;
+  final ids = List<String>.from(value);
+  return ids.toSet().length == ids.length ? ids : null;
+}
+
+/// Multi-selection over section rows, shown with the system edit-mode circles. Swift sends the complete
+/// desired set as '_selection'; [action] receives it as a List<String> and diffs it against the owner's
+/// state idempotently. Selected rows are never mutated natively. The owner exits its selection mode when
+/// its route pops or is disposed; the native side only drops its optimistic set on invalidation.
+class NativeSelection {
+  const NativeSelection({required this.selected, required this.selectable, required this.action});
+  final Set<String> selected, selectable;
+  final NativeAction action;
+
+  Map<String, Object?> get projection => {
+        'selected': selected.toList()..sort(),
+        'selectable': selectable.toList()..sort(),
+      };
+
+  bool validFor(Iterable<NativeSection> sections) {
+    if (selectable.length > 10000) return false;
+    final ids = sections.expand((section) => section.rows).map((row) => row.id).toSet();
+    return selectable.every(ids.contains) && selected.every(selectable.contains);
+  }
 }
 
 class NativeChat {
@@ -290,15 +475,27 @@ class NativeChat {
 }
 
 class NativeSection {
-  const NativeSection(this.id, this.rows, {this.title = '', this.footer = ''});
+  const NativeSection(this.id, this.rows, {this.title = '', this.footer = '', this.reorder, this.collapsible = false});
   final String id, title, footer;
   final List<NativeRow> rows;
+
+  /// Receives '_reorder:<id>' as an exact permutation of [rows]' ids (a List<String>).
+  final NativeAction? reorder;
+
+  /// The titled header expands and collapses the rows natively; nothing is sent to the owner.
+  final bool collapsible;
   Map<String, Object?> get projection => {
         'id': id,
         'title': title,
         'footer': footer,
         'rows': rows.map((row) => row.projection).toList(),
+        'reorderable': reorder != null,
+        'collapsible': collapsible,
       };
+
+  bool get valid =>
+      (!collapsible || title.isNotEmpty) &&
+      (reorder == null || rows.every((row) => _nativeListKinds.contains(row.kind)));
 }
 
 /// A reading surface shares the existing timeline owner. Scroll commands are
@@ -339,6 +536,8 @@ class NativeReader {
 }
 
 /// Shared native list/form renderer. Each page supplies its existing callbacks and provider state.
+/// A snapshot Swift refuses, or a view without a renderer, restores [fallback] for good: the State
+/// never retries, and its route keeps a later surface with the same [title] on the fallback too.
 class IosNativeSurface extends StatefulWidget {
   const IosNativeSurface({
     super.key,
@@ -362,7 +561,36 @@ class IosNativeSurface extends StatefulWidget {
     this.reader,
     this.controller,
     this.navigation,
+    this.loadingLabel,
+    this.sensitive = false,
+    this.selection,
+    this.bottomBar = const [],
   });
+
+  /// Debug-only: while set, every native snapshot (surfaces and Home) carries an unsupported version,
+  /// so a host test proves that Swift's rejection restores the complete Flutter presentation.
+  static bool get debugCorruptSnapshotForTest => kDebugMode && _debugCorruptSnapshot;
+  static set debugCorruptSnapshotForTest(bool value) {
+    assert(kDebugMode, 'debugCorruptSnapshotForTest is a debug-only seam');
+    _debugCorruptSnapshot = value;
+  }
+
+  static bool _debugCorruptSnapshot = false;
+
+  /// Debug-only: hermetic widget tests treat the host as a supported iOS renderer, so surfaces and
+  /// presentations exercise their channel contracts against mocked channels.
+  static bool get debugNativeHostForTest => kDebugMode && _debugNativeHost;
+  static set debugNativeHostForTest(bool value) {
+    assert(kDebugMode, 'debugNativeHostForTest is a debug-only seam');
+    _debugNativeHost = value;
+  }
+
+  static bool _debugNativeHost = false;
+
+  /// The rows the mounted surface [state] dispatches, in projection order, including those its
+  /// [NativeNavigationChrome] adds, so a host test looks a row up exactly as Swift's command would.
+  @visibleForTesting
+  static List<NativeRow> debugDispatchRows(State<IosNativeSurface> state) => (state as _IosNativeSurfaceState)._rows;
 
   final NativeSurfaceController? controller;
 
@@ -372,6 +600,18 @@ class IosNativeSurface extends StatefulWidget {
   final NativeReader? reader;
   final String title, empty, searchValue, searchPlaceholder;
   final String? errorMessage;
+
+  /// Names what is loading; defaults to the generic loading copy.
+  final String? loadingLabel;
+
+  /// Holds a one-time secret: the only surface that may carry a 'secret' row. Swift redacts it while
+  /// the app is inactive, and [NativeSurfaceController.captureImage] never captures it.
+  final bool sensitive;
+
+  /// List mode only: rows the system edit mode can select, and the actions pinned below the list
+  /// (at most 6: one count label, buttons and menus). Bottom-bar rows dispatch like toolbar rows.
+  final NativeSelection? selection;
+  final List<NativeRow> bottomBar;
   final List<NativeSection> sections;
   final List<NativeRow> toolbar;
   final Widget fallback;
@@ -387,25 +627,88 @@ class IosNativeSurface extends StatefulWidget {
   State<IosNativeSurface> createState() => _IosNativeSurfaceState();
 }
 
+/// Route-scoped memory of Swift's rejections. A parent that swaps between its classic and native
+/// trees (a selection mode, for example) mounts a new surface; the marker keeps that surface on its
+/// fallback instead of retrying a refused snapshot. Page storage belongs to the enclosing route, so
+/// the marker is released with the route.
+bool _rejectionMarked(BuildContext context, String title) =>
+    PageStorage.maybeOf(context)?.readState(context, identifier: ('omi.native_ui.rejected', title)) == true;
+
+void _markRejection(BuildContext context, String title) =>
+    PageStorage.maybeOf(context)?.writeState(context, true, identifier: ('omi.native_ui.rejected', title));
+
 class _IosNativeSurfaceState extends State<IosNativeSurface> {
-  late final Future<bool> _supported = supportsIosSwiftUi();
+  late final Future<bool> _supported = supportsNativePresentation();
   late final NativeReadSession _session;
   StreamSubscription<int>? _auth;
   MethodChannel? _channel;
   int _revision = 0;
   bool _scheduled = false;
+
+  /// Swift refused a snapshot, or the current view has no renderer. The complete Flutter surface
+  /// then stays for this State's lifetime (and, through the route marker, for its successors).
+  bool _rejected = false;
   List<NativeSection> get _sections => [...?NativeNavigationChrome.of(context)?.sections, ...widget.sections];
   List<NativeRow> get _toolbar => [...?NativeNavigationChrome.of(context)?.toolbar, ...widget.toolbar];
   Widget _fallback() => NativeNavigationChrome.of(context)?.wrapFallback?.call(widget.fallback) ?? widget.fallback;
+
+  /// Every row this surface validates and dispatches, navigation chrome included.
+  List<NativeRow> get _rows => [
+        ..._toolbar,
+        ..._sections.expand((section) => section.rows),
+        ...?widget.chat?.actions,
+        ...?widget.reader?.actions,
+        if (widget.navigation != null) widget.navigation!,
+        ...widget.bottomBar,
+      ];
+
+  /// A secret row appears only once, in a section of a sensitive surface; a sensitive surface is
+  /// never public, chat, reader, navigation, a selection or a fill graph. Anything else keeps the
+  /// complete Flutter surface.
+  bool get _sensitiveValid {
+    bool secret(NativeRow row) => row.kind == 'secret';
+    final secrets = _sections.expand((section) => section.rows).where(secret).length;
+    if (_toolbar.any(secret) ||
+        widget.chat?.actions.any(secret) == true ||
+        widget.reader?.actions.any(secret) == true ||
+        widget.navigation?.kind == 'secret' ||
+        widget.bottomBar.any(secret) ||
+        secrets > 1 ||
+        secrets == 1 && !widget.sensitive) {
+      return false;
+    }
+    return !widget.sensitive ||
+        !widget.publicSurface &&
+            widget.chat == null &&
+            widget.reader == null &&
+            widget.navigation == null &&
+            widget.selection == null &&
+            !_sections.any((section) => section.rows.any((row) => row.graph?.layout == 'fill'));
+  }
+
+  /// A bottom bar, a selection and reorderable sections render in list mode only, and a selection
+  /// excludes reordering; anything else keeps the complete Flutter surface.
+  bool get _listInteractionsValid {
+    final bottomBar = widget.bottomBar;
+    final reorderable = _sections.any((section) => section.reorder != null);
+    final listMode = widget.chat == null && widget.reader == null && widget.navigation == null;
+    return _sections.every((section) => section.valid) &&
+        bottomBar.length <= 6 &&
+        bottomBar.every((row) => ['label', 'button', 'menu'].contains(row.kind)) &&
+        bottomBar.where((row) => row.kind == 'label').length <= 1 &&
+        (listMode || bottomBar.isEmpty && widget.selection == null && !reorderable) &&
+        (widget.selection == null || !reorderable && widget.selection!.validFor(_sections));
+  }
 
   @override
   void initState() {
     super.initState();
     widget.controller?._capture = _captureImage;
-    if (!iosSwiftUiEnabled) {
+    if (!nativePresentationEnabled) {
       _session = NativeReadSession(isCurrent: () => false);
       return;
     }
+    _rejected = _rejectionMarked(context, widget.title);
     final owner = AuthService.instance.captureSessionSnapshot();
     var publicOwnerValid = true;
     final publicSurface = widget.publicSurface;
@@ -431,16 +734,31 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
     }
   }
 
-  Future<Uint8List?> _captureImage() async {
+  Future<Uint8List?> _captureImage(String? target) async {
+    if (widget.sensitive) return null;
     final channel = _channel;
     if (channel == null || !mounted || !_session.active) return null;
-    final image = await channel.invokeMethod<Uint8List>('captureImage');
+    if (target != null &&
+        !_sections
+            .expand((section) => section.rows)
+            .any((row) => row.id == target && row.kind == 'graph' && row.valid && row.graph?.placeholder == false)) {
+      return null;
+    }
+    final Uint8List? image;
+    try {
+      image = await channel.invokeMethod<Uint8List>('captureImage', target == null ? null : {'target': target});
+    } on PlatformException {
+      return null;
+    } on MissingPluginException {
+      // The view was torn down while the share owner waited; there is nothing to capture.
+      return null;
+    }
     if (!mounted || !_session.active || !identical(channel, _channel)) return null;
     return image != null && image.length <= 16 * 1024 * 1024 ? image : null;
   }
 
   Map<String, Object?> _snapshot() => {
-        'version': 1,
+        'version': nativeSnapshotVersion,
         'revision': _revision++,
         'title': widget.title,
         'largeTitle': widget.largeTitle,
@@ -458,25 +776,26 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
         'refreshEnabled': widget.onRefresh != null,
         'error': widget.errorMessage ?? context.l10n.connectionErrorDesc,
         'retry': context.l10n.retry,
-        'loadingLabel': context.l10n.loading,
+        'loadingLabel': widget.loadingLabel ?? context.l10n.loading,
         'chat': widget.chat?.projection,
         'reader': widget.reader?.projection,
         'navigation': widget.navigation?.projection,
+        'sensitive': widget.sensitive,
+        'selection': widget.selection?.projection,
+        'bottomBar': widget.bottomBar.map((row) => row.projection).toList(),
+        'expandLabel': context.l10n.expand,
+        'collapseLabel': context.l10n.collapseAction,
       };
 
   Future<Object?> _handle(MethodCall call) async {
     await dispatchNativeAction(
       call,
       isActive: () => _session.active && mounted,
-      rows: [
-        ..._toolbar,
-        ..._sections.expand((section) => section.rows),
-        ...?widget.chat?.actions,
-        ...?widget.reader?.actions,
-        if (widget.navigation != null) widget.navigation!,
-      ],
+      rows: _rows,
       refresh: widget.onRefresh,
       search: widget.search,
+      selection: widget.selection,
+      sections: _sections,
     );
     if (mounted && _session.active) _schedule();
     return null;
@@ -500,9 +819,22 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
         _session.active ? 'update' : 'invalidate',
         _session.active ? _snapshot() : null,
       );
+    } on PlatformException catch (error) {
+      // Swift refused the snapshot, whatever its revision: never leave a blank native view.
+      if (error.code != 'invalid_native_snapshot') rethrow;
+      _reject();
     } on MissingPluginException {
-      if (mounted && identical(channel, _channel)) rethrow;
+      // A replaced or detached view loses its handler first; only the current view has no renderer.
+      if (identical(channel, _channel)) _reject();
     }
+  }
+
+  void _reject() {
+    if (_rejected) return;
+    _rejected = true;
+    if (mounted) _markRejection(context, widget.title);
+    unawaited(_invalidate());
+    if (mounted) setState(() {});
   }
 
   Future<void> _invalidate() async {
@@ -519,14 +851,10 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
 
   @override
   Widget build(BuildContext context) {
-    final rows = [
-      ..._toolbar,
-      ..._sections.expand((section) => section.rows),
-      ...?widget.chat?.actions,
-      ...?widget.reader?.actions,
-      if (widget.navigation != null) widget.navigation!,
-    ];
-    if (!iosSwiftUiEnabled ||
+    final rows = _rows;
+    if (!nativePresentationEnabled ||
+        _rejected ||
+        !_sensitiveValid ||
         widget.navigation != null &&
             (widget.navigation!.id != 'main_destination' ||
                 widget.navigation!.kind != 'segmented' ||
@@ -540,9 +868,18 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
                 widget.onRefresh != null) ||
         widget.chat != null && widget.reader != null ||
         widget.reader?.validFor(_sections) == false ||
+        !_listInteractionsValid ||
         rows.any((row) => !row.valid) ||
+        [
+          ..._toolbar,
+          ...?widget.chat?.actions,
+          ...?widget.reader?.actions,
+          if (widget.navigation != null) widget.navigation!,
+          ...widget.bottomBar,
+        ].any((row) => nativeHostRowKinds.contains(row.kind)) ||
         rows.map((row) => row.id).toSet().length != rows.length ||
-        _sections.map((section) => section.id).toSet().length != _sections.length) {
+        _sections.map((section) => section.id).toSet().length != _sections.length ||
+        !_graphsValid) {
       unawaited(_invalidate());
       return _fallback();
     }
@@ -566,7 +903,7 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
           creationParamsCodec: const StandardMessageCodec(),
           onPlatformViewCreated: (id) {
             final channel = MethodChannel('com.omi.native_ui/surface/$id');
-            if (!mounted || !_session.active) {
+            if (!mounted || !_session.active || _rejected) {
               unawaited(_invalidateDetached(channel));
               return;
             }
@@ -592,6 +929,28 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
               );
       },
     );
+  }
+
+  /// Graph rows render only in sections. A fill graph owns a non-scrolling stage: at most one per
+  /// snapshot, with no search, chat, reader, navigation, selection, bottom bar or refresh, and only
+  /// label and button rows around it. The toolbar is unrestricted. NativeSurfaceContract.swift
+  /// applies the same rules.
+  bool get _graphsValid {
+    final sectionRows = _sections.expand((section) => section.rows).toList();
+    if (_rows.where((row) => row.kind == 'graph').length != sectionRows.where((row) => row.kind == 'graph').length) {
+      return false;
+    }
+    final fills = sectionRows.where((row) => row.graph?.layout == 'fill').length;
+    if (fills > 1) return false;
+    return fills == 0 ||
+        widget.search == null &&
+            widget.onRefresh == null &&
+            widget.chat == null &&
+            widget.reader == null &&
+            widget.navigation == null &&
+            widget.selection == null &&
+            widget.bottomBar.isEmpty &&
+            sectionRows.every((row) => row.graph?.layout == 'fill' || row.kind == 'label' || row.kind == 'button');
   }
 
   Future<void> _invalidateDetached(MethodChannel channel) async {

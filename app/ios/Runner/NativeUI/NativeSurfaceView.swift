@@ -1,6 +1,9 @@
 import SwiftUI
 import Charts
 import ImageIO
+#if compiler(>=6.4)
+import AppIntents
+#endif
 
 @available(iOS 16.0, *)
 @MainActor
@@ -10,8 +13,22 @@ final class NativeSurfaceState: ObservableObject {
     @Published private(set) var pending: Set<String> = []
     @Published private(set) var actionFailed = false
     @Published private(set) var completedChatSend = 0
+    /// List interactions apply at once. A newer snapshot replaces them unless their command is still
+    /// pending, and a refused command reverts to the owner's snapshot.
+    @Published private(set) var optimisticSelection: Set<String>?
+    @Published private(set) var optimisticOrders: [String: [String]] = [:]
+    /// Each graph row's native camera. It resets when the row's sorted node-id set changes and is
+    /// never sent to Dart.
+    @Published private(set) var graphCameras: [String: NativeGraphCamera] = [:]
+    /// The size each graph row was last drawn at, for a row-scoped capture.
+    private(set) var graphSizes: [String: CGSize] = [:]
+    private var graphNodeIds: [String: [String]] = [:]
     private var pendingEdits: Set<String> = []
     private var failedEdits: Set<String> = []
+    /// Counts refused selections and orders, so an action that waited on one never acts on a state the user did not see.
+    private var listCommandFailures = 0
+    /// Selections and orders shown optimistically whose command task has not started yet.
+    private var startingListCommands: Set<String> = []
     private var editWaiters: [CheckedContinuation<Void, Never>] = []
     private var latestEdits: [String: String] = [:]
     private(set) var sentDraft: String?
@@ -26,6 +43,7 @@ final class NativeSurfaceState: ObservableObject {
         self.snapshot = snapshot
         self.perform = perform
         _ = revision.accept(snapshot.revision)
+        retainGraphCameras(snapshot)
     }
 
     func update(_ snapshot: NativeSurfaceSnapshot) {
@@ -34,8 +52,23 @@ final class NativeSurfaceState: ObservableObject {
         latestEdits = latestEdits.filter { editable.contains($0.key) }
         let current = Set(snapshot.allRows.map(\.id))
         failedEdits = failedEdits.filter { current.contains($0) }
-        queued = queued.filter { current.contains($0.key) || $0.key == "_search" && snapshot.searchEnabled }
+        queued = queued.filter { current.contains($0.key) || $0.key == "_search" && snapshot.searchEnabled
+            || snapshot.offersListCommand($0.key) }
+        // A queued selection keeps only rows that are still selectable, so Dart never refuses it as stale.
+        if let ids = queued["_selection"] as? [String], let selection = snapshot.selection {
+            queued["_selection"] = Set(ids).intersection(selection.selectable).sorted()
+        }
+        for (id, value) in queued where id.hasPrefix("_reorder:") {
+            let sectionID = String(id.dropFirst("_reorder:".count))
+            let rows = snapshot.sections.first { $0.id == sectionID }?.rows.map(\.id) ?? []
+            if let ids = value as? [String], ids.count == rows.count, Set(ids) == Set(rows) { continue }
+            queued.removeValue(forKey: id)
+        }
         queuedKeys = queuedKeys.filter { current.contains($0.key) }
+        let sending = pending.union(startingListCommands)
+        if !sending.contains("_selection") { optimisticSelection = nil }
+        optimisticOrders = optimisticOrders.filter { sending.contains("_reorder:\($0.key)") }
+        retainGraphCameras(snapshot)
         self.snapshot = snapshot
     }
 
@@ -45,17 +78,52 @@ final class NativeSurfaceState: ObservableObject {
         queuedKeys.removeAll()
         latestEdits.removeAll()
         failedEdits.removeAll()
+        optimisticSelection = nil
+        optimisticOrders.removeAll()
+        startingListCommands.removeAll()
         sentDraft = nil
         finishEditWaiters()
+        graphCameras.removeAll()
+        graphSizes.removeAll()
+        graphNodeIds.removeAll()
         snapshot = snapshot.withoutContent()
     }
 
+    func graphCamera(for row: NativeSurfaceRow) -> NativeGraphCamera {
+        graphCameras[row.id] ?? NativeGraphCamera(zoom: row.graph?.zoom ?? 1)
+    }
+
+    func setGraphCamera(_ camera: NativeGraphCamera, for id: String) {
+        guard valid, graphNodeIds[id] != nil, camera.zoom.isFinite else { return }
+        graphCameras[id] = camera
+    }
+
+    func setGraphSize(_ size: CGSize, for id: String) {
+        guard valid, graphNodeIds[id] != nil else { return }
+        graphSizes[id] = size
+    }
+
+    private func retainGraphCameras(_ snapshot: NativeSurfaceSnapshot) {
+        var nodeIds: [String: [String]] = [:]
+        for row in snapshot.sections.flatMap(\.rows) {
+            if let graph = row.graph { nodeIds[row.id] = graph.nodes.map(\.id).sorted() }
+        }
+        let previous = graphNodeIds
+        graphNodeIds = nodeIds
+        graphSizes = graphSizes.filter { nodeIds[$0.key] != nil }
+        let cameras = graphCameras.filter { nodeIds[$0.key] != nil && nodeIds[$0.key] == previous[$0.key] }
+        if cameras != graphCameras { graphCameras = cameras }
+    }
+
     func send(_ id: String, value: Any? = nil) async {
+        startingListCommands.remove(id)
         guard valid else { return }
         let isKeypad = snapshot.allRows.contains { $0.id == id && $0.kind == "keypad" }
+        // A selection or order is a desired state: the latest wins, and other actions wait for it.
+        let isListCommand = id == "_selection" || id.hasPrefix("_reorder:")
         let isEdit = snapshot.allRows.contains {
-            $0.id == id && ["text", "toggle", "choice", "segmented", "color", "date", "slider"].contains($0.kind)
-        } || isKeypad
+            $0.id == id && ["text", "toggle", "choice", "segmented", "color", "date", "slider", "level"].contains($0.kind)
+        } || isKeypad || isListCommand
         if let text = value as? String, snapshot.allRows.contains(where: { $0.id == id && $0.kind == "text" }) {
             latestEdits[id] = text
         }
@@ -72,10 +140,11 @@ final class NativeSurfaceState: ObservableObject {
             if pendingEdits.isEmpty { finishEditWaiters() }
         }
         if !isEdit && !id.hasPrefix("_visible:") {
+            let listFailures = listCommandFailures
             if !pendingEdits.isEmpty { await withCheckedContinuation { editWaiters.append($0) } }
             guard valid else { return }
             let isCancellation = snapshot.toolbar.contains { $0.id == id && ["xmark", "chevron.left"].contains($0.symbol ?? "") }
-            guard failedEdits.isEmpty || isCancellation else { actionFailed = true; return }
+            guard (failedEdits.isEmpty && listFailures == listCommandFailures) || isCancellation else { actionFailed = true; return }
         }
         if id == "chat_send" { sentDraft = latestEdits["chat_draft"] ?? snapshot.chat?.draft }
         actionFailed = false
@@ -87,23 +156,82 @@ final class NativeSurfaceState: ObservableObject {
                 if valid && id == "chat_send" { completedChatSend += 1 }
             }
             catch {
-                if valid && (!isEdit || snapshot.allRows.contains(where: { $0.id == id })) {
+                if valid && (!isEdit || snapshot.allRows.contains(where: { $0.id == id }) || snapshot.offersListCommand(id)) {
                     actionFailed = true
-                    if isEdit { failedEdits.insert(id) }
+                    // A refused selection or order reverts to the owner's state, so later actions still apply.
+                    if isEdit && !isListCommand { failedEdits.insert(id) }
                 }
                 if isKeypad { queuedKeys.removeValue(forKey: id); break }
+                if isListCommand { listCommandFailures += 1; queued.removeValue(forKey: id); dropOptimistic(id); break }
             }
             if isKeypad, var keys = queuedKeys[id], !keys.isEmpty {
                 next = keys.removeFirst()
                 queuedKeys[id] = keys.isEmpty ? nil : keys
             } else { next = queued.removeValue(forKey: id) }
         } while valid && next != nil
+        // An owner that answered while the command was pending already shows the desired state;
+        // otherwise its next snapshot replaces the optimistic one.
+        if isListCommand && showsOptimistic(id) { dropOptimistic(id) }
     }
+
+    /// The selection shown: the pending choice, otherwise the owner's, always within the selectable rows.
+    var selectedIDs: Set<String> {
+        guard let selection = snapshot.selection else { return [] }
+        return (optimisticSelection ?? Set(selection.selected)).intersection(selection.selectable)
+    }
+
+    func select(_ ids: Set<String>) {
+        guard valid, let selection = snapshot.selection else { return }
+        let next = ids.intersection(selection.selectable)
+        guard next != selectedIDs else { return }
+        optimisticSelection = next
+        startingListCommands.insert("_selection")
+        Task { await send("_selection", value: next.sorted()) }
+    }
+
+    /// The rows in their pending order, when it is still a permutation of the owner's rows.
+    func rows(of section: NativeSurfaceSnapshot.Section) -> [NativeSurfaceRow] {
+        guard let order = optimisticOrders[section.id], order.count == section.rows.count else { return section.rows }
+        let rows = Dictionary(section.rows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let ordered = order.compactMap { rows[$0] }
+        return ordered.count == section.rows.count && Set(order).count == order.count ? ordered : section.rows
+    }
+
+    /// Sends the complete new order of a reorderable section; it shows at once.
+    func move(_ section: NativeSurfaceSnapshot.Section, from source: IndexSet, to destination: Int) {
+        guard valid, section.reorderable == true else { return }
+        var ids = rows(of: section).map(\.id)
+        ids.move(fromOffsets: source, toOffset: destination)
+        guard ids != rows(of: section).map(\.id) else { return }
+        optimisticOrders[section.id] = ids
+        startingListCommands.insert("_reorder:\(section.id)")
+        Task { await send("_reorder:\(section.id)", value: ids) }
+    }
+
+    private func dropOptimistic(_ id: String) {
+        if id == "_selection" { optimisticSelection = nil }
+        else if id.hasPrefix("_reorder:") { optimisticOrders.removeValue(forKey: String(id.dropFirst("_reorder:".count))) }
+    }
+
+    /// Whether the current snapshot already shows the optimistic selection or order of [id].
+    private func showsOptimistic(_ id: String) -> Bool {
+        if id == "_selection" {
+            guard let selection = optimisticSelection else { return true }
+            return Set(snapshot.selection?.selected ?? []) == selection
+        }
+        let sectionID = String(id.dropFirst("_reorder:".count))
+        guard let order = optimisticOrders[sectionID] else { return true }
+        return snapshot.sections.first { $0.id == sectionID }?.rows.map(\.id) == order
+    }
+
     private func finishEditWaiters() {
         let waiters = editWaiters
         editWaiters.removeAll()
         for waiter in waiters { waiter.resume() }
     }
+
+    /// Whether the owner refused this row's latest edit; a level control then drops its optimistic value.
+    func editFailed(_ id: String) -> Bool { failedEdits.contains(id) }
 
     func draft(for row: NativeSurfaceRow) -> String {
         if pendingEdits.contains(row.id) || failedEdits.contains(row.id) {
@@ -124,6 +252,7 @@ struct NativeSurfaceView: View {
     @State private var readerDragging = false
     @State private var readerUserScroll = false
     @State private var readerTopId: String?
+    @State private var collapsedSections: Set<String> = []
 
     var body: some View {
         Group {
@@ -134,6 +263,7 @@ struct NativeSurfaceView: View {
             }
         }
         .tint(.primary)
+        .modifier(NativeSensitiveCover(enabled: state.snapshot.sensitive == true))
         .preferredColorScheme(state.snapshot.appearance == "system" ? nil
             : state.snapshot.appearance == "dark" ? .dark : .light)
         .environment(\.locale, Locale(identifier: state.snapshot.locale))
@@ -142,7 +272,7 @@ struct NativeSurfaceView: View {
         .onChange(of: state.snapshot.searchValue) { value in
             if !state.pending.contains("_search") { search = value }
         }
-        .onChange(of: state.valid) { valid in if !valid { search = "" } }
+        .onChange(of: state.valid) { valid in if !valid { search = ""; collapsedSections = [] } }
     }
 
     /// TabView owns its system tab bar, including Liquid Glass on iOS 26+ and
@@ -195,7 +325,9 @@ struct NativeSurfaceView: View {
     }
 
     @ViewBuilder private var content: some View {
-        if let reader = state.snapshot.reader {
+        if let stage = state.snapshot.fillGraphRow {
+            graphStage(stage)
+        } else if let reader = state.snapshot.reader {
             if state.snapshot.searchEnabled {
                 readerView(reader).searchable(text: $search, prompt: state.snapshot.searchPlaceholder)
                     .onChange(of: search) { value in Task { await state.send("_search", value: value) } }
@@ -211,7 +343,11 @@ struct NativeSurfaceView: View {
     }
 
     private var list: some View {
-        List {
+        let selectable = Set(state.snapshot.selection?.selectable ?? [])
+        let selection = state.snapshot.selection.map { _ in
+            Binding(get: { state.selectedIDs }, set: { state.select($0) })
+        }
+        return List(selection: selection) {
             Section {
                 if state.snapshot.loading {
                     ProgressView(state.snapshot.loadingLabel).accessibilityIdentifier("native-surface-loading")
@@ -230,20 +366,64 @@ struct NativeSurfaceView: View {
             }.id("native-surface-status")
             ForEach(state.snapshot.sections) { section in
                 Section {
-                    ForEach(section.rows) { row in
-                        rowView(row).onAppear {
-                            if row.visibilityEnabled == true { Task { await state.send("_visible:\(row.id)") } }
-                        }
+                    if !collapsedSections.contains(section.id) {
+                        ForEach(state.rows(of: section)) { row in
+                            listRow(row, in: section, selectable: selectable).onAppear {
+                                if row.visibilityEnabled == true { Task { await state.send("_visible:\(row.id)") } }
+                            }
+                        }.onMove(perform: mover(for: section))
                     }
                 } header: {
-                    if !section.title.isEmpty { Text(section.title) }
+                    if section.collapsible == true && !section.title.isEmpty {
+                        NativeCollapsibleHeader(title: section.title, collapsed: collapsedSections.contains(section.id),
+                                                expandLabel: state.snapshot.expandLabel ?? "",
+                                                collapseLabel: state.snapshot.collapseLabel ?? "") {
+                            if collapsedSections.contains(section.id) { collapsedSections.remove(section.id) }
+                            else { collapsedSections.insert(section.id) }
+                        }.accessibilityIdentifier("\(section.id)_header")
+                    } else if !section.title.isEmpty { Text(section.title) }
                 } footer: {
                     if !section.footer.isEmpty { Text(section.footer) }
                 }
             }
         }
         .listStyle(.insetGrouped)
+        .environment(\.editMode, .constant(state.snapshot.editsList ? .active : .inactive))
         .refreshable { if state.snapshot.refreshEnabled { await state.send("_refresh") } }
+        .safeAreaInset(edge: .bottom) {
+            if let bar = state.snapshot.bottomBar, !bar.isEmpty {
+                NativeBottomBar {
+                    ForEach(bar.filter { $0.kind == "label" }) { row in rowView(row) }
+                } buttons: {
+                    ForEach(bar.filter { $0.kind != "label" }) { row in
+                        rowView(row, compact: true).modifier(NativeGlassButtonStyle(menu: row.kind == "menu"))
+                    }
+                }
+            }
+        }
+    }
+
+    /// Only a reorderable section offers the system reorder controls.
+    private func mover(for section: NativeSurfaceSnapshot.Section) -> ((IndexSet, Int) -> Void)? {
+        guard section.reorderable == true else { return nil }
+        return { source, destination in state.move(section, from: source, to: destination) }
+    }
+
+    /// A selectable or reorderable row is static: the system edit mode owns its tap and drag, so it
+    /// has no buttons, context menu or swipes. Other rows keep their control.
+    @ViewBuilder private func listRow(_ row: NativeSurfaceRow, in section: NativeSurfaceSnapshot.Section,
+                                      selectable: Set<String>) -> some View {
+        Group {
+            if section.reorderable == true || selectable.contains(row.id) {
+                actionLabel(row).frame(minHeight: 44).accessibilityIdentifier(row.id)
+            } else if state.snapshot.selection != nil {
+                rowView(row).modifier(NativeSelectionDisabled())
+            } else {
+                rowView(row).modifier(NativeSwipeActions(row: row, enabled: !state.snapshot.editsList && row.enabled) { option in
+                    Task { await state.send(row.id, value: option) }
+                })
+            }
+        }.modifier(NativeIndent(level: row.indent ?? 0))
     }
 
     @ViewBuilder private func rowView(_ row: NativeSurfaceRow, compact: Bool = false) -> some View {
@@ -300,12 +480,16 @@ struct NativeSurfaceView: View {
                         Image(systemName: row.value?.bool == true ? "checkmark.circle.fill" : "circle")
                             .font(.title2).frame(minWidth: 44, minHeight: 44)
                     }.accessibilityLabel(row.title).accessibilityAddTraits(row.value?.bool == true ? .isSelected : [])
-                    Button { Task { await state.send(row.id, value: "open") } } label: { label(row) }
-                        .contextMenu {
-                            ForEach(row.options) { option in
-                                Button(option.title) { Task { await state.send(row.id, value: option.id) } }
-                            }
+                    // The title opens the task only when its owner offers 'open'; otherwise it is static text.
+                    Group {
+                        if row.options.contains(where: { $0.id == "open" }) {
+                            Button { Task { await state.send(row.id, value: "open") } } label: { label(row) }
+                        } else { label(row) }
+                    }.contextMenu {
+                        ForEach(row.options) { option in
+                            Button(option.title) { Task { await state.send(row.id, value: option.id) } }
                         }
+                    }
                 }.buttonStyle(.plain)
             case "choice":
                 if row.optionSearch != nil {
@@ -355,7 +539,9 @@ struct NativeSurfaceView: View {
             case "chart":
                 VStack(alignment: .leading, spacing: 12) {
                     Text(row.title).font(.headline)
-                    if let points = row.points, points.count > 1 {
+                    if row.chartStyle != nil, let points = row.points, !points.isEmpty {
+                        NativeCategoricalChart(row: row, points: points)
+                    } else if let points = row.points, points.count > 1 {
                         Chart(points) { point in
                             LineMark(x: .value(row.subtitle, point.x), y: .value(row.title, point.y))
                         }.frame(height: 150)
@@ -371,6 +557,8 @@ struct NativeSurfaceView: View {
                     .accessibilityLabel(row.title)
             case "slider":
                 NativePlaybackSlider(row: row, state: state)
+            case "level":
+                NativeLevelRow(row: row, state: state)
             case "progress":
                 VStack(alignment: .leading, spacing: 8) {
                     label(row)
@@ -385,14 +573,105 @@ struct NativeSurfaceView: View {
                 NativeZoomImage(row: row)
             case "text":
                 NativeTextRow(row: row, state: state)
+            case "graph":
+                // Only cards reach a list; a fill graph owns the stage instead.
+                if let graph = row.graph {
+                    Button { Task { await state.send(row.id) } } label: {
+                        NativeGraphView(row: row, graph: graph, camera: .constant(state.graphCamera(for: row)),
+                                        resized: { size in state.setGraphSize(size, for: row.id) })
+                        .frame(height: CGFloat(graph.height ?? 0))
+                        .overlay(alignment: .bottomTrailing) {
+                            Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                .font(.footnote).foregroundStyle(.tertiary).padding(10).accessibilityHidden(true)
+                        }
+                        .contentShape(Rectangle())
+                    }.buttonStyle(.plain).accessibilityLabel(row.title)
+                        .listRowInsets(EdgeInsets())
+                }
             case "keypad":
                 NativeKeypadRow(row: row, state: state)
-            case "label": label(row).textSelection(.enabled)
+            case "secret":
+                NativeSecretRow(row: row, state: state)
+            case "shortcuts_link":
+                NativeShortcutsLinkRow(row: row)
+            case "label":
+                if let symbol = row.symbol {
+                    Label { label(row) } icon: {
+                        Image(systemName: symbol).foregroundStyle(row.destructive ? Color.red : Color.primary)
+                    }.textSelection(.enabled)
+                } else { label(row).textSelection(.enabled) }
             default: action(row, compact: compact)
             }
         }
-        .disabled(!row.enabled && !["label", "rich_text", "image", "progress", "chart", "waveform", "message_ai", "message_user"].contains(row.kind) || (state.pending.contains(row.id) && !["text", "keypad", "slider"].contains(row.kind)))
+        .disabled(!row.enabled && !["label", "rich_text", "image", "progress", "chart", "waveform", "message_ai", "message_user", "secret", "shortcuts_link"].contains(row.kind) || (state.pending.contains(row.id) && !["text", "keypad", "slider"].contains(row.kind)))
         .accessibilityIdentifier(row.id)
+    }
+
+    /// A fill graph's non-scrolling stage: label rows in snapshot order, the graph filling the rest
+    /// with its loading, failed and empty status on top, then button rows as glass buttons.
+    private func graphStage(_ graphRow: NativeSurfaceRow) -> some View {
+        let rows = state.snapshot.sections.flatMap(\.rows)
+        let buttons = rows.filter { $0.kind == "button" }
+        return VStack(spacing: 12) {
+            ForEach(rows.filter { $0.kind == "label" }) { row in
+                rowView(row).fixedSize(horizontal: false, vertical: true).padding(.horizontal, 20)
+                    .onAppear { stageRowAppeared(row) }
+            }
+            if let graph = graphRow.graph {
+                NativeGraphView(row: graphRow, graph: graph, camera: Binding(get: { state.graphCamera(for: graphRow) },
+                                                                          set: { state.setGraphCamera($0, for: graphRow.id) }),
+                                stage: true,
+                                select: graphSelection(graphRow, graph),
+                                resized: { size in state.setGraphSize(size, for: graphRow.id) })
+                .frame(maxWidth: .infinity, minHeight: 120, maxHeight: .infinity)
+                .layoutPriority(-1)
+                .overlay { graphStatus(graph) }
+            }
+            if !buttons.isEmpty {
+                NativeGlassControls {
+                    VStack(spacing: 8) {
+                        ForEach(buttons) { row in
+                            Button(role: row.destructive ? .destructive : nil) { Task { await state.send(row.id) } } label: {
+                                Group {
+                                    if let symbol = row.symbol { Label(row.title, systemImage: symbol) } else { Text(row.title) }
+                                }.frame(maxWidth: .infinity, minHeight: 44)
+                            }
+                            .modifier(NativeGlassButtonStyle())
+                            .disabled(!row.enabled || state.pending.contains(row.id))
+                            .accessibilityIdentifier(row.id)
+                            .onAppear { stageRowAppeared(row) }
+                        }
+                    }
+                }.padding(.horizontal, 20)
+            }
+        }.padding(.vertical, 12)
+    }
+
+    /// Stage rows report visibility as list rows do.
+    private func stageRowAppeared(_ row: NativeSurfaceRow) {
+        if row.visibilityEnabled == true { Task { await state.send("_visible:\(row.id)") } }
+    }
+
+    /// An interactive graph sends a tapped node id, or "" for the background; otherwise nothing.
+    private func graphSelection(_ row: NativeSurfaceRow, _ graph: NativeSurfaceRow.Graph) -> ((String) -> Void)? {
+        guard graph.interactive, row.enabled else { return nil }
+        return { id in Task { await state.send(row.id, value: id) } }
+    }
+
+    /// A placeholder that is neither loading nor failed shows the surface's empty copy.
+    @ViewBuilder private func graphStatus(_ graph: NativeSurfaceRow.Graph) -> some View {
+        if state.snapshot.loading {
+            graphStatusCard { ProgressView(state.snapshot.loadingLabel).accessibilityIdentifier("native-surface-loading") }
+        } else if state.snapshot.failed || state.actionFailed {
+            graphStatusCard { Text(state.snapshot.error).accessibilityIdentifier("native-surface-error") }
+        } else if graph.placeholder && !state.snapshot.empty.isEmpty {
+            graphStatusCard { Text(state.snapshot.empty).accessibilityIdentifier("native-surface-empty") }
+        }
+    }
+
+    private func graphStatusCard<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        content().multilineTextAlignment(.center).padding(16)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16)).padding(20)
     }
 
     private func readerView(_ projection: NativeSurfaceSnapshot.Reader) -> some View {
@@ -582,12 +861,16 @@ struct NativeSurfaceView: View {
         HStack {
             if row.kind == "message_user" { Spacer(minLength: 30) }
             VStack(alignment: .leading, spacing: 8) {
-                Group {
-                    if row.plainText == true { Text(verbatim: row.title) }
-                    else { Text(.init(row.title)) }
-                }.textSelection(.enabled)
+                // A rich body shares the reader's blocks and whitelisted links; its link options never
+                // add a trailing button, which only an explicit symbol requests.
+                if !(row.blocks ?? []).isEmpty { NativeRichTextView(row: row, state: state, query: "") } else {
+                    Group {
+                        if row.plainText == true { Text(verbatim: row.title) }
+                        else { Text(.init(row.title)) }
+                    }.textSelection(.enabled)
+                }
                 if !row.subtitle.isEmpty { Text(row.subtitle).font(.caption).foregroundStyle(.secondary) }
-                if row.enabled {
+                if row.enabled && ((row.blocks ?? []).isEmpty || row.symbol != nil) {
                     Button { Task { await state.send(row.id) } } label: {
                         Image(systemName: row.symbol ?? "ellipsis").frame(minWidth: 44, minHeight: 44)
                     }.accessibilityLabel(row.subtitle)
@@ -722,6 +1005,24 @@ private struct NativeKeypadGlass: ViewModifier {
     }
 }
 
+/// Apple's Shortcuts link for this app. The system owns the tap, so no command reaches Dart; the
+/// contract rejects the kind wherever the Siri toolchain did not compile this branch.
+@available(iOS 16.0, *)
+private struct NativeShortcutsLinkRow: View {
+    let row: NativeSurfaceRow
+
+    var body: some View {
+        #if compiler(>=6.4)
+        ShortcutsLink()
+            .shortcutsLinkStyle(.automatic)
+            .frame(maxWidth: .infinity, minHeight: 50)
+            .accessibilityIdentifier(row.id)
+        #else
+        EmptyView()
+        #endif
+    }
+}
+
 @available(iOS 16.0, *)
 private struct NativeSearchableChoice: View {
     let row: NativeSurfaceRow
@@ -825,6 +1126,107 @@ private struct NativeThumbnail: View {
     }
 }
 
+/// A labelled, discrete setting level; unlike the playback 'slider', it never sends while dragging.
+/// Releasing commits one grid value to the existing Dart owner. The optimistic value stays until the
+/// owner's next snapshot, and a refused commit reverts it.
+@available(iOS 16.0, *)
+@MainActor
+private struct NativeLevelRow: View {
+    let row: NativeSurfaceRow
+    @ObservedObject var state: NativeSurfaceState
+    @State private var local: Double?
+    @State private var origin: Double?
+    @State private var editing = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(row.title).fixedSize(horizontal: false, vertical: true).layoutPriority(1)
+                Spacer(minLength: 8)
+                Text(valueLabel).monospacedDigit().foregroundStyle(.secondary).fixedSize()
+            }
+            Slider(value: Binding(get: { current }, set: { local = $0 }), in: bounds,
+                   step: step ?? (bounds.upperBound - bounds.lowerBound) / 100,
+                   onEditingChanged: { began in
+                       editing = began
+                       // A refused value is never the origin a cancelled drag returns to.
+                       if began { origin = state.editFailed(row.id) ? nil : local; return }
+                       // After a refusal, committing the owner's value again clears the failed edit.
+                       if let value = local,
+                          snapped(value) != (origin ?? row.value?.number) || state.editFailed(row.id) { commit(value) }
+                       else { local = origin }
+                   })
+        }
+        .frame(minHeight: 44)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(row.title)
+        .accessibilityValue(valueLabel)
+        .accessibilityAdjustableAction { direction in
+            guard row.enabled, !state.pending.contains(row.id) else { return }
+            let amount = step ?? (bounds.upperBound - bounds.lowerBound) / 10
+            let next: Double
+            switch direction {
+            case .increment: next = snapped(current + amount)
+            case .decrement: next = snapped(current - amount)
+            default: return
+            }
+            if next != current || state.editFailed(row.id) { commit(next) }
+        }
+        .onChange(of: state.snapshot.revision) { _ in
+            if !editing && !state.pending.contains(row.id) { local = nil }
+        }
+    }
+
+    /// The validated range; a degenerate row (never decoded) renders 0...1 instead of trapping.
+    private var bounds: ClosedRange<Double> {
+        let lower = row.minimumValue ?? 0
+        let upper = row.maximumValue ?? lower + 1
+        return lower.isFinite && upper.isFinite && upper > lower ? lower...upper : 0...1
+    }
+
+    /// The owner's grid step, when it is usable for the current bounds.
+    private var step: Double? {
+        guard let step = row.step, step.isFinite, step > 0,
+              step <= bounds.upperBound - bounds.lowerBound else { return nil }
+        return step
+    }
+
+    private var current: Double { local ?? row.value?.number ?? bounds.lowerBound }
+
+    /// The owner's localized label, or the unit-less local number while it differs from the snapshot.
+    private var valueLabel: String {
+        guard let local else { return row.subtitle }
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: state.snapshot.locale)
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 2
+        return formatter.string(from: NSNumber(value: local)) ?? String(local)
+    }
+
+    /// The nearest grid value inside the bounds; the maximum counts only when it lies on the grid.
+    private func snapped(_ value: Double) -> Double {
+        let clamped = min(max(value, bounds.lowerBound), bounds.upperBound)
+        guard let step else { return clamped }
+        let steps = ((clamped - bounds.lowerBound) / step).rounded()
+        let candidate = bounds.lowerBound + steps * step
+        guard candidate > bounds.upperBound else { return candidate }
+        let range = (bounds.upperBound - bounds.lowerBound) / step
+        return abs(range - steps) < 1e-6 ? bounds.upperBound : bounds.lowerBound + (steps - 1) * step
+    }
+
+    private func commit(_ value: Double) {
+        let committed = snapped(value)
+        let revision = state.snapshot.revision
+        local = committed
+        Task {
+            await state.send(row.id, value: committed)
+            // A queued commit returns at once; only the send that ran settles the optimistic value.
+            guard !editing, !state.pending.contains(row.id) else { return }
+            if state.editFailed(row.id) || state.snapshot.revision != revision { local = nil }
+        }
+    }
+}
+
 @available(iOS 16.0, *)
 private struct NativeTextRow: View {
     let row: NativeSurfaceRow
@@ -883,5 +1285,59 @@ private struct NativeChatMessageFramesPreference: PreferenceKey {
     static var defaultValue: [String: CGRect] { [:] }
     static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
         value.merge(nextValue(), uniquingKeysWith: { _, latest in latest })
+    }
+}
+
+/// A one-time secret. Copying goes only through the explicit Copy command to the Dart clipboard
+/// owner, so the value offers no system text selection. While the surface is redacted for privacy,
+/// the value leaves the view (and accessibility) entirely.
+@available(iOS 16.0, *)
+private struct NativeSecretRow: View {
+    let row: NativeSurfaceRow
+    @ObservedObject var state: NativeSurfaceState
+    @Environment(\.redactionReasons) private var redaction
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(row.title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            // VoiceOver spells the key out, so it can be transcribed character by character.
+            Text(verbatim: redaction.contains(.privacy) ? "" : row.value?.text ?? "")
+                .speechSpellsOutCharacters()
+                .font(.body.monospaced())
+                .privacySensitive()
+                .fixedSize(horizontal: false, vertical: true)
+            if !row.subtitle.isEmpty { Text(row.subtitle).font(.footnote).foregroundStyle(.secondary) }
+            Button { Task { await state.send(row.id, value: "copy") } } label: {
+                Label(row.options.first(where: { $0.id == "copy" })?.title ?? "", systemImage: "doc.on.doc")
+            }.buttonStyle(.bordered).controlSize(.large).disabled(!row.enabled)
+        }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// A sensitive surface keeps its secret out of the app-switcher snapshot: while the app is inactive,
+/// its content is redacted for privacy under a material. The cover takes no touches; an inactive app
+/// receives none.
+@available(iOS 16.0, *)
+private struct NativeSensitiveCover: ViewModifier {
+    let enabled: Bool
+    @State private var inactive = false
+
+    func body(content: Content) -> some View {
+        content
+            .redacted(reason: enabled && inactive ? .privacy : [])
+            .overlay {
+                if enabled && inactive {
+                    Rectangle().fill(.ultraThinMaterial).ignoresSafeArea()
+                        .allowsHitTesting(false).accessibilityHidden(true)
+                }
+            }
+            // A surface that appears while the app is already inactive starts redacted.
+            .onAppear { inactive = UIApplication.shared.applicationState != .active }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
+                inactive = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+                inactive = false
+            }
     }
 }

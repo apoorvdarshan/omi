@@ -8,8 +8,10 @@ final class NativeSurfaceViewFactory: NSObject, @preconcurrency FlutterPlatformV
     init(messenger: FlutterBinaryMessenger) { self.messenger = messenger }
     func createArgsCodec() -> FlutterMessageCodec & NSObjectProtocol { FlutterStandardMessageCodec.sharedInstance() }
     func create(withFrame frame: CGRect, viewIdentifier viewId: Int64, arguments args: Any?) -> FlutterPlatformView {
-        guard #available(iOS 16.0, *), let args,
-              let snapshot = try? NativeSurfaceSnapshot.decode(args) else { return UnavailableNativeSurface() }
+        guard #available(iOS 16.0, *) else { return UnavailableNativeSurface() }
+        guard let args, let snapshot = try? NativeSurfaceSnapshot.decode(args) else {
+            return RejectedNativeSurface(id: viewId, messenger: messenger)
+        }
         return NativeSurfacePlatformView(frame: frame, id: viewId, snapshot: snapshot, messenger: messenger)
     }
 }
@@ -17,6 +19,29 @@ final class NativeSurfaceViewFactory: NSObject, @preconcurrency FlutterPlatformV
 private final class UnavailableNativeSurface: NSObject, FlutterPlatformView {
     private let content = UIView()
     func view() -> UIView { content }
+}
+
+/// A refused creation snapshot never becomes a blank native view: every update reports the
+/// rejection, so Dart restores its complete Flutter surface.
+@MainActor
+private final class RejectedNativeSurface: NSObject, @preconcurrency FlutterPlatformView {
+    private let content = UIView()
+    private let channel: FlutterMethodChannel
+
+    init(id: Int64, messenger: FlutterBinaryMessenger) {
+        channel = FlutterMethodChannel(name: "com.omi.native_ui/surface/\(id)", binaryMessenger: messenger)
+        super.init()
+        channel.setMethodCallHandler { call, result in
+            switch call.method {
+            case "update": result(FlutterError(code: "invalid_native_snapshot", message: nil, details: nil))
+            case "invalidate", "captureImage": result(nil)
+            default: result(FlutterMethodNotImplemented)
+            }
+        }
+    }
+
+    func view() -> UIView { content }
+    deinit { channel.setMethodCallHandler(nil) }
 }
 
 @available(iOS 16.0, *)
@@ -55,6 +80,21 @@ private final class NativeSurfacePlatformView: NSObject, @preconcurrency Flutter
                     result(nil)
                 case "invalidate": state.invalidate(); result(nil)
                 case "captureImage":
+                    // A one-time secret is never captured, whatever the caller asks.
+                    if state.snapshot.sensitive == true { result(nil); return }
+                    // A row-scoped capture renders only that graph, at its last drawn size and current camera.
+                    if let arguments = call.arguments, !(arguments is NSNull) {
+                        guard state.valid, let container, let target = (arguments as? [String: Any])?["target"] as? String,
+                              let row = state.snapshot.sections.flatMap(\.rows).first(where: { $0.id == target }),
+                              let graph = row.graph, !graph.placeholder,
+                              let size = state.graphSizes[target] else { result(nil); return }
+                        let dark = state.snapshot.appearance == "system"
+                            ? container.traitCollection.userInterfaceStyle == .dark : state.snapshot.appearance == "dark"
+                        let data = NativeGraphCapture.png(graph, camera: state.graphCamera(for: row), size: size,
+                                                          colorScheme: dark ? .dark : .light)
+                        result(data.map { FlutterStandardTypedData(bytes: $0) })
+                        return
+                    }
                     guard state.valid, let container, container.window != nil else { result(nil); return }
                     let bounds = container.bounds
                     let scale = container.traitCollection.displayScale

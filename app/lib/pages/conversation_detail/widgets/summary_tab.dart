@@ -8,6 +8,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/mobile/native_ui/ios_native_modal.dart';
 import 'package:omi/mobile/native_ui/native_rich_text.dart';
+import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/conversation_detail/conversation_summary_selection.dart';
 import 'package:omi/pages/conversation_detail/maps_util.dart';
 import 'package:omi/backend/http/api/users.dart';
@@ -19,10 +20,12 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/app_review_prompt.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:visibility_detector/visibility_detector.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 
 import 'conversation_screenshots_section.dart';
@@ -36,6 +39,14 @@ class SummaryTab extends StatefulWidget {
   final bool reviewEnabled;
   final ValueChanged<List<NativeSection>>? onNativePresentation;
   final VoidCallback? onNativeInteraction;
+
+  /// Restores the complete classic page, which then edits the selection in place, when the native
+  /// summary editor is unavailable.
+  final ValueChanged<ConversationSummarySelection>? onNativeUnavailable;
+
+  /// Classic only: a selection handed over by an unavailable native editor, whose in-place editor
+  /// opens once without counting another start.
+  final ConversationSummarySelection? editRequest;
   final String searchQuery;
   final int currentResultIndex;
   final VoidCallback? onTapWhenSearchEmpty;
@@ -45,6 +56,8 @@ class SummaryTab extends StatefulWidget {
       this.reviewEnabled = false,
       this.onNativePresentation,
       this.onNativeInteraction,
+      this.onNativeUnavailable,
+      this.editRequest,
       this.searchQuery = '',
       this.currentResultIndex = -1,
       this.onTapWhenSearchEmpty});
@@ -143,6 +156,7 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                         discarded
                             ? const SliverToBoxAdapter(child: ReprocessDiscardedWidget())
                             : GetAppsWidgets(
+                                editRequest: widget.editRequest,
                                 searchQuery: widget.searchQuery,
                                 currentResultIndex: widget.currentResultIndex,
                                 canStartEditing: () {

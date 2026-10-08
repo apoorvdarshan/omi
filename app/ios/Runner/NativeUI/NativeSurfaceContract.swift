@@ -47,6 +47,70 @@ struct NativeSurfaceRow: Decodable, Equatable, Identifiable {
         }
     }
     let blocks: [RichBlock]?
+    /// List interactions: hierarchy depth and the option ids offered as swipe actions.
+    let indent: Int?
+    let swipeLeading: [String]?
+    let swipeTrailing: [String]?
+    /// "line" or "bar": a categorical chart whose point x is its index and whose label names it.
+    let chartStyle: String?
+    /// A knowledge graph, present exactly for kind "graph". native_graph.dart applies the same rules;
+    /// lengths count UTF-16 units on both sides.
+    struct Graph: Decodable, Equatable {
+        struct Node: Decodable, Equatable, Identifiable {
+            let id: String; let label: String; let type: String
+            let x: Double; let y: Double; let z: Double; let fixed: Bool
+        }
+        struct Edge: Decodable, Equatable { let source: String; let target: String; let label: String }
+        let nodes: [Node]
+        let edges: [Edge]
+        let highlighted: [String]
+        let zoom: Double
+        let interactive: Bool
+        let layout: String
+        let height: Double?
+        let placeholder: Bool
+        let accent: String
+
+        static let nodeTypes: Set<String> = ["user", "person", "place", "organization", "thing", "concept"]
+
+        var valid: Bool {
+            let hex = Set("0123456789abcdefABCDEF".unicodeScalars)
+            let accentScalars = Array(accent.unicodeScalars)
+            guard accentScalars.count == 7, accentScalars[0] == "#", accentScalars.dropFirst().allSatisfy(hex.contains),
+                  zoom.isFinite, (0.05...5).contains(zoom) else { return false }
+            switch layout {
+            case "card":
+                guard let height, height.isFinite, (100...600).contains(height), !interactive else { return false }
+            case "fill":
+                guard height == nil else { return false }
+            default: return false
+            }
+            if placeholder { return nodes.isEmpty && edges.isEmpty && highlighted.isEmpty && !interactive }
+            guard (1...1024).contains(nodes.count), edges.count <= 4096 else { return false }
+            var ids = Set<String>()
+            var fixed = 0
+            for node in nodes {
+                guard (1...256).contains(node.id.utf16.count), ids.insert(node.id).inserted,
+                      node.label.utf16.count <= 256, Self.nodeTypes.contains(node.type),
+                      [node.x, node.y, node.z].allSatisfy({ $0.isFinite && abs($0) <= 1e6 }) else { return false }
+                if node.fixed {
+                    fixed += 1
+                    guard fixed == 1, node.type == "user", node.x == 0, node.y == 0, node.z == 0 else { return false }
+                }
+            }
+            var triples = Set<[String]>()
+            for edge in edges {
+                guard edge.source != edge.target, ids.contains(edge.source), ids.contains(edge.target),
+                      edge.label.utf16.count <= 128,
+                      triples.insert([edge.source, edge.target, edge.label]).inserted else { return false }
+            }
+            return highlighted.count <= 5 && Set(highlighted).count == highlighted.count && Set(highlighted).isSubset(of: ids)
+        }
+    }
+    let graph: Graph?
+    /// A 'level' control's lower bound (default 0) and optional grid step; no other kind takes them.
+    let minimumValue: Double?
+    let step: Double?
 
     func replacingValue(_ value: Value?) -> Self {
         Self(id: id, title: title, kind: kind, subtitle: subtitle, value: value,
@@ -55,7 +119,24 @@ struct NativeSurfaceRow: Decodable, Equatable, Identifiable {
              optionSearch: optionSearch, optionClose: optionClose, keypadMode: keypadMode,
              eraseLabel: eraseLabel, clearLabel: clearLabel, plainText: plainText, imageUri: imageUri,
              level: level, maximumValue: maximumValue, visibilityEnabled: visibilityEnabled,
-             visibilityHiddenEnabled: visibilityHiddenEnabled, points: points, blocks: blocks)
+             visibilityHiddenEnabled: visibilityHiddenEnabled, points: points, blocks: blocks,
+             indent: indent, swipeLeading: swipeLeading, swipeTrailing: swipeTrailing,
+             chartStyle: chartStyle,
+             graph: graph,
+             minimumValue: minimumValue, step: step)
+    }
+
+    /// Mirrors NativeRow.accepts in Dart: a finite number within minimumValue (default 0) and
+    /// maximumValue, on the step grid when one is set. A degenerate range or grid accepts nothing.
+    func acceptsLevel(_ number: Double) -> Bool {
+        let minimum = minimumValue ?? 0
+        guard kind == "level", let maximumValue, minimum.isFinite, maximumValue.isFinite, maximumValue > minimum,
+              number.isFinite, number >= minimum, number <= maximumValue else { return false }
+        guard let step else { return true }
+        guard step.isFinite, step > 0, step <= maximumValue - minimum,
+              (maximumValue - minimum) / step <= 1000 else { return false }
+        let steps = (number - minimum) / step
+        return abs(steps - steps.rounded()) < 1e-6
     }
 
 
@@ -65,6 +146,9 @@ struct NativeSurfaceRow: Decodable, Equatable, Identifiable {
         case "slider", "progress":
             guard case let .number(number) = value, let maximumValue else { return false }
             return number.isFinite && maximumValue.isFinite && maximumValue > 0 && (0...maximumValue).contains(number)
+        case "level":
+            guard case let .number(number) = value else { return false }
+            return acceptsLevel(number)
         case "keypad":
             guard case let .text(text) = value else { return false }
             return text.count <= 10000 && ["dialer", "dtmf"].contains(keypadMode ?? "")
@@ -78,6 +162,16 @@ struct NativeSurfaceRow: Decodable, Equatable, Identifiable {
             guard case let .text(text) = value else { return false }
             return text.isEmpty || Double(text).map { $0.isFinite && abs($0) <= 8640000000000000 } == true
         case "text": if case let .text(text) = value { return text.count <= (maximumLength ?? 10000) }; return false
+        case "secret":
+            guard case let .text(text) = value else { return false }
+            return (1...4096).contains(text.unicodeScalars.count)
+                && text.unicodeScalars.allSatisfy { (0x21...0x7E).contains($0.value) }
+        case "graph":
+            // An interactive graph holds "" or the selected node id; nothing is highlighted without one.
+            guard let graph else { return false }
+            guard graph.interactive else { return value == nil }
+            guard case let .text(text) = value else { return false }
+            return text.isEmpty ? graph.highlighted.isEmpty : graph.nodes.contains { $0.id == text }
         default: return value == nil
         }
     }
@@ -102,6 +196,13 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
         let title: String
         let footer: String
         let rows: [NativeSurfaceRow]
+        let reorderable: Bool?
+        let collapsible: Bool?
+    }
+    /// Multi-selection over section rows; the owner receives the complete desired set.
+    struct Selection: Decodable, Equatable {
+        let selected: [String]
+        let selectable: [String]
     }
     struct Chat: Decodable, Equatable {
         let draft: String; let placeholder: String; let followup: String
@@ -138,15 +239,25 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
     let error: String
     let retry: String
     let loadingLabel: String
+    /// Holds a one-time secret; its single 'secret' row is redacted while the app is inactive.
+    let sensitive: Bool?
+    let selection: Selection?
+    let bottomBar: [NativeSurfaceRow]?
+    let expandLabel: String?
+    let collapseLabel: String?
 
     var allRows: [NativeSurfaceRow] {
-        toolbar + sections.flatMap(\.rows) + (chat?.actions ?? []) + (reader?.actions ?? []) + (navigation.map { [$0] } ?? [])
+        let content: [NativeSurfaceRow] = toolbar + sections.flatMap(\.rows)
+        let actions: [NativeSurfaceRow] = (chat?.actions ?? []) + (reader?.actions ?? [])
+        let chrome: [NativeSurfaceRow] = (navigation.map { [$0] } ?? []) + (bottomBar ?? [])
+        return content + actions + chrome
     }
 
     func replacingValue(id: String, value: NativeSurfaceRow.Value) -> Self {
         let sections = sections.map { section in
             Section(id: section.id, title: section.title, footer: section.footer,
-                    rows: section.rows.map { $0.id == id ? $0.replacingValue(value) : $0 })
+                    rows: section.rows.map { $0.id == id ? $0.replacingValue(value) : $0 },
+                    reorderable: section.reorderable, collapsible: section.collapsible)
         }
         let reader = reader.map { reader in
             Reader(currentId: reader.currentId, targetId: reader.targetId, request: reader.request,
@@ -159,14 +270,18 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
                     appearance: appearance, largeTitle: largeTitle, locale: locale, direction: direction,
                     loading: loading, failed: failed, empty: empty, sections: sections, toolbar: toolbar,
                     searchEnabled: searchEnabled, searchValue: searchValue, searchPlaceholder: searchPlaceholder,
-                    refreshEnabled: refreshEnabled, error: error, retry: retry, loadingLabel: loadingLabel)
+                    refreshEnabled: refreshEnabled, error: error, retry: retry, loadingLabel: loadingLabel,
+                    sensitive: sensitive,
+                    selection: selection, bottomBar: bottomBar?.map { $0.id == id ? $0.replacingValue(value) : $0 },
+                    expandLabel: expandLabel, collapseLabel: collapseLabel)
     }
 
     func withoutContent() -> Self {
         Self(reader: nil, navigation: nil, chat: nil, version: version, revision: revision, title: "", appearance: appearance, largeTitle: false, locale: locale,
              direction: direction, loading: false, failed: false, empty: "", sections: [], toolbar: [],
              searchEnabled: false, searchValue: "", searchPlaceholder: "", refreshEnabled: false,
-             error: error, retry: retry, loadingLabel: loadingLabel)
+             error: error, retry: retry, loadingLabel: loadingLabel, sensitive: false,
+             selection: nil, bottomBar: nil, expandLabel: nil, collapseLabel: nil)
     }
 
     static func decode(_ input: Any) throws -> Self {
@@ -194,13 +309,17 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
               ["ltr", "rtl"].contains(snapshot.direction), !snapshot.locale.isEmpty,
               Set(snapshot.sections.map(\.id)).count == snapshot.sections.count,
               Set(ids).count == ids.count, !ids.contains(where: { $0.isEmpty || $0.hasPrefix("_") }),
+              snapshot.hostKindsOnlyInSections,
+              snapshot.hasValidGraphs,
               rows.allSatisfy({ row in
-                  ["label", "button", "navigation", "transcript", "rich_text", "image", "toggle", "task", "choice", "segmented", "color", "text", "menu", "date", "message_user", "message_ai", "chart", "waveform", "keypad", "slider", "progress"].contains(row.kind)
+                  (["label", "button", "navigation", "transcript", "rich_text", "image", "toggle", "task", "choice", "segmented", "color", "text", "menu", "date", "message_user", "message_ai", "chart", "waveform", "keypad", "slider", "progress", "secret", "graph", "level"].contains(row.kind)
+                      || NativeUICapabilities.compiledKinds.contains(row.kind))
+                      && row.hasValidHostKind
                       && Set(row.options.map(\.id)).count == row.options.count
                       && row.options.allSatisfy({ !$0.id.isEmpty })
                       && row.hasValidValue
-                      && ((row.blocks ?? []).isEmpty || (row.kind == "rich_text" && row.blocks?.allSatisfy(\.valid) == true))
-                      && (row.maximumValue == nil || ["slider", "progress", "image"].contains(row.kind))
+                      && row.hasValidRichBody && row.hasValidChartStyle
+                      && (row.maximumValue == nil || ["slider", "progress", "image", "level"].contains(row.kind))
                       && (row.plainText != true || ["message_ai", "message_user"].contains(row.kind))
                       && (row.kind == "keypad" || (row.keypadMode == nil && row.eraseLabel == nil && row.clearLabel == nil))
                       && row.hasValidImageURI
@@ -214,18 +333,241 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
                       && (row.points ?? []).allSatisfy { $0.x.isFinite && $0.y.isFinite }
                       && (row.kind != "waveform" || (row.points ?? []).allSatisfy { abs($0.y) <= 1 })
                       && Set((row.points ?? []).map(\.x)).count == (row.points ?? []).count
-              }) else { throw ContractError.invalidSnapshot }
+                      && (row.kind == "graph") == (row.graph != nil) && row.graph?.valid != false
+              }),
+              rows.allSatisfy({ $0.hasValidListInteractions }),
+              snapshot.hasValidListInteractions else { throw ContractError.invalidSnapshot }
+        // A one-time secret appears at most once, as a section row of a sensitive snapshot; a sensitive
+        // snapshot is never chat, reader, navigation, a selection or a fill graph. Dart applies the same
+        // rules before publishing.
+        let secrets = snapshot.sections.flatMap(\.rows).filter { $0.kind == "secret" }
+        let controls = snapshot.toolbar + (snapshot.chat?.actions ?? []) + (snapshot.reader?.actions ?? [])
+            + (snapshot.navigation.map { [$0] } ?? []) + (snapshot.bottomBar ?? [])
+        guard !controls.contains(where: { $0.kind == "secret" }), secrets.count <= 1,
+              secrets.isEmpty || snapshot.sensitive == true,
+              snapshot.sensitive != true || (snapshot.chat == nil && snapshot.reader == nil && snapshot.navigation == nil
+                  && snapshot.selection == nil && snapshot.fillGraphRow == nil),
+              secrets.allSatisfy(\.hasOnlySecretFields) else { throw ContractError.invalidSnapshot }
+        // Bounds and steps belong to the level control only, as in NativeRow.valid.
+        guard rows.allSatisfy({ ($0.minimumValue == nil && $0.step == nil) || $0.kind == "level" }) else {
+            throw ContractError.invalidSnapshot
+        }
         return snapshot
     }
+
+    /// Mirrors IosNativeSurface: a bottom bar, a selection and reorderable sections render in list
+    /// mode only, and a selection excludes reordering.
+    var hasValidListInteractions: Bool {
+        let bottomBar = bottomBar ?? []
+        let reorderable = sections.contains { $0.reorderable == true }
+        let listMode = chat == nil && reader == nil && navigation == nil
+        let sectionsValid = sections.allSatisfy { section in
+            (section.collapsible != true || !section.title.isEmpty)
+                && (section.reorderable != true || section.rows.allSatisfy { Self.listKinds.contains($0.kind) })
+        }
+        let selectionValid = selection.map { selection in
+            let rowIds = Set(sections.flatMap(\.rows).map(\.id))
+            let selectable = Set(selection.selectable)
+            return !reorderable && selection.selectable.count <= 10000
+                && selectable.count == selection.selectable.count && Set(selection.selected).count == selection.selected.count
+                && selectable.isSubset(of: rowIds) && Set(selection.selected).isSubset(of: selectable)
+        } != false
+        return sectionsValid && selectionValid && bottomBar.count <= 6
+            && bottomBar.allSatisfy { ["label", "button", "menu"].contains($0.kind) }
+            && bottomBar.filter { $0.kind == "label" }.count <= 1
+            && (listMode || (bottomBar.isEmpty && selection == nil && !reorderable))
+    }
+
+    /// Rows a list may indent, and the only rows a reorderable section may hold.
+    static let listKinds = ["task", "navigation", "label", "toggle", "menu"]
+
+    /// Whether '_selection' or '_reorder:<section id>' still addresses this projection, so a queued
+    /// or failed list command survives a newer snapshot.
+    func offersListCommand(_ id: String) -> Bool {
+        if id == "_selection" { return selection != nil }
+        guard id.hasPrefix("_reorder:") else { return false }
+        let sectionID = String(id.dropFirst("_reorder:".count))
+        return sections.contains { $0.id == sectionID && $0.reorderable == true }
+    }
+
+    /// The system edit mode owns the list while selecting or while a section can be reordered.
+    var editsList: Bool { selection != nil || sections.contains { $0.reorderable == true } }
     enum ContractError: Error { case invalidSnapshot }
+
+    /// Host-provided rows are list content; toolbars, chat, reader, navigation and the bottom bar never carry them.
+    var hostKindsOnlyInSections: Bool {
+        let actions: [NativeSurfaceRow] = (chat?.actions ?? []) + (reader?.actions ?? [])
+        let chrome: [NativeSurfaceRow] = toolbar + actions + (navigation.map { [$0] } ?? []) + (bottomBar ?? [])
+        return !chrome.contains(where: { NativeUICapabilities.hostKinds.contains($0.kind) })
+    }
+}
+
+/// Row kinds the host renders with system UI, answered on the config channel as 'capabilities'.
+/// Only the Siri toolchain (the gate SiriBridge uses) links the Shortcuts link; anything compiled
+/// with a stable toolchain, including the Preview and the contract test, reports none and rejects it.
+enum NativeUICapabilities {
+    static let hostKinds: Set<String> = ["shortcuts_link"]
+
+    static let compiledKinds: Set<String> = {
+        #if compiler(>=6.4)
+        return NativeUICapabilities.hostKinds
+        #else
+        return []
+        #endif
+    }()
+
+    static var current: [String] {
+        guard #available(iOS 16.0, *) else { return [] }
+        return compiledKinds.sorted()
+    }
+}
+
+extension NativeSurfaceSnapshot {
+    /// The fill graph that owns this snapshot's stage, if any.
+    var fillGraphRow: NativeSurfaceRow? { sections.flatMap(\.rows).first { $0.graph?.layout == "fill" } }
+}
+
+private extension NativeSurfaceSnapshot {
+    /// Graph rows render only in sections. A fill graph owns a non-scrolling stage: at most one per
+    /// snapshot, with no search, chat, reader, navigation, selection, bottom bar or refresh, and only
+    /// label and button rows around it. The toolbar is unrestricted. ios_native_surface.dart applies the same rules.
+    var hasValidGraphs: Bool {
+        let sectionRows = sections.flatMap(\.rows)
+        guard allRows.filter({ $0.kind == "graph" }).count == sectionRows.filter({ $0.kind == "graph" }).count else { return false }
+        let fills = sectionRows.filter { $0.graph?.layout == "fill" }.count
+        guard fills <= 1 else { return false }
+        return fills == 0 || (!searchEnabled && !refreshEnabled && chat == nil && reader == nil && navigation == nil
+            && selection == nil && (bottomBar ?? []).isEmpty
+            && sectionRows.allSatisfy { $0.graph?.layout == "fill" || ["label", "button"].contains($0.kind) })
+    }
 }
 
 private extension NativeSurfaceRow {
+    /// The secret's value and exactly one 'copy' command; no image, chart, rich or text-entry fields.
+    var hasOnlySecretFields: Bool {
+        options.count == 1 && options.first?.id == "copy" && !(options.first?.title ?? "").isEmpty
+            && imageUri == nil && level == nil && (points ?? []).isEmpty && (blocks ?? []).isEmpty
+            && maximumValue == nil && keyboard == nil && maximumLength == nil
+    }
+
+    var hasValidListInteractions: Bool {
+        if let indent, !(0...3).contains(indent) || !NativeSurfaceSnapshot.listKinds.contains(kind) { return false }
+        let leading = swipeLeading ?? [], trailing = swipeTrailing ?? []
+        guard !leading.isEmpty || !trailing.isEmpty else { return true }
+        let options = Set(self.options.map(\.id))
+        return ["task", "navigation", "menu"].contains(kind) && leading.count <= 3 && trailing.count <= 3
+            && Set(leading).count == leading.count && Set(trailing).count == trailing.count
+            && Set(leading).isDisjoint(with: trailing) && Set(leading + trailing).isSubset(of: options)
+    }
+
+    /// A Shortcuts link carries no value, command, options, symbol or media; the system owns its tap.
+    var hasValidHostKind: Bool {
+        guard kind == "shortcuts_link" else { return true }
+        return options.isEmpty && symbol == nil && !enabled && imageUri == nil
+            && (points ?? []).isEmpty && (blocks ?? []).isEmpty
+    }
+
     var hasValidImageURI: Bool {
         guard let imageUri else { return true }
         guard imageUri.count <= 4096, let url = URL(string: imageUri),
               url.user == nil, url.password == nil else { return false }
         return (url.scheme == "https" && !(url.host ?? "").isEmpty)
             || (url.isFileURL && (url.host ?? "").isEmpty && url.path.hasPrefix("/"))
+    }
+}
+
+private extension NativeSurfaceRow {
+    /// Reader and AI reply bodies share the block rules; a rich body is never literal text too, and
+    /// one AI reply carries at most 2,000 blocks.
+    var hasValidRichBody: Bool {
+        let blocks = blocks ?? []
+        if blocks.isEmpty { return true }
+        guard kind == "rich_text" || kind == "message_ai", plainText != true else { return false }
+        return blocks.allSatisfy(\.valid) && (kind != "message_ai" || blocks.count <= 2000)
+    }
+
+    /// Categories in index order (x = 0..n-1), each named by a label of at most 64 characters.
+    var hasValidChartStyle: Bool {
+        guard let chartStyle else { return true }
+        let points = points ?? []
+        guard kind == "chart", chartStyle == "line" || chartStyle == "bar", (1...10000).contains(points.count) else { return false }
+        return points.indices.allSatisfy { points[$0].x == Double($0) && points[$0].y.isFinite && points[$0].label.count <= 64 }
+    }
+}
+
+/// A blocking activity overlay request from the config channel. Dart applies the same label rule
+/// before it sends one; the presenter refuses anything else and shows nothing.
+struct NativeActivityRequest: Equatable {
+    let id: Int
+    let label: String
+    let appearance: String
+    let locale: String
+    let direction: String
+
+    static func decode(_ input: Any?) throws -> Self {
+        guard let args = input as? [String: Any],
+              let id = args["requestId"] as? Int, id >= 0,
+              let label = args["label"] as? String, !label.isEmpty, label.count <= 200,
+              let appearance = args["appearance"] as? String, ["system", "light", "dark"].contains(appearance),
+              let locale = args["locale"] as? String, !locale.isEmpty,
+              let direction = args["direction"] as? String, ["ltr", "rtl"].contains(direction)
+        else { throw ContractError.invalidRequest }
+        return Self(id: id, label: label, appearance: appearance, locale: locale, direction: direction)
+    }
+    enum ContractError: Error { case invalidRequest }
+}
+
+/// One OmiFeedback toast, as presentation values only. Dart keeps the callbacks; Swift reports how it ended.
+struct NativeToastRequest: Decodable, Equatable {
+    /// Each kind's only duration, matching OmiFeedbackTiming.
+    static let durations = ["confirm": 1500, "info": 4000, "error": 8000, "undo": 5000, "progress": 60000]
+    static let symbols: Set<String> = ["checkmark.circle.fill", "info.circle", "exclamationmark.circle.fill",
+                                       "trash", "person", "tv", "progress"]
+    let requestId: Int
+    let session: String
+    let kind: String
+    let message: String
+    let actionLabel: String?
+    let closeLabel: String?
+    let durationMs: Int
+    let symbol: String
+    let bottomClearance: Double
+    let appearance: String
+    let locale: String
+    let direction: String
+
+    /// The same rules as Dart's NativeToastRequest.valid.
+    func validate() throws {
+        func label(_ value: String?) -> Bool { value.map { (1...40).contains($0.count) } ?? true }
+        guard requestId >= 0, (1...64).contains(session.count),
+              let duration = Self.durations[kind], durationMs == duration,
+              (1...1000).contains(message.count), !message.unicodeScalars.contains("\u{0}"),
+              Self.symbols.contains(symbol), (symbol == "progress") == (kind == "progress"),
+              kind == "undo" ? actionLabel != nil : (kind == "error" || actionLabel == nil),
+              (closeLabel != nil) == (kind == "error"), label(actionLabel), label(closeLabel),
+              bottomClearance.isFinite, (0.0...240.0).contains(bottomClearance),
+              ["system", "light", "dark"].contains(appearance), !locale.isEmpty,
+              ["ltr", "rtl"].contains(direction) else { throw ContractError.invalidToast }
+    }
+
+    static func decode(_ input: Any) throws -> Self {
+        let request = try JSONDecoder().decode(Self.self, from: SafeJSON.data(withJSONObject: input))
+        try request.validate()
+        return request
+    }
+    enum ContractError: Error { case invalidToast }
+}
+
+/// Request ids strictly increase within one Dart process. A request carrying another session token (the
+/// engine restarted) starts a new sequence, so a restarted counter is never refused for good.
+struct NativeToastOrder {
+    private var session: String?
+    private var last = -1
+
+    mutating func accept(_ request: NativeToastRequest) -> Bool {
+        if request.session == session && request.requestId <= last { return false }
+        session = request.session
+        last = request.requestId
+        return true
     }
 }

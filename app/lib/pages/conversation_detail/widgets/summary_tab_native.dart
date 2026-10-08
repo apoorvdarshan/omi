@@ -1,5 +1,28 @@
 part of 'summary_tab.dart';
 
+/// The rich summary rows. A link opens only when it is one of this Markdown's own links, through the
+/// Dart URL owner; the native reader discards every other URL instead of opening it itself.
+@visibleForTesting
+List<NativeRow> nativeSummaryContentRows(String markdown, {Future<bool> Function(Uri url) open = _openSummaryLink}) {
+  final links = nativeRichTextLinks(markdown);
+  return [
+    for (final (index, block) in nativeRichText(markdown).indexed)
+      NativeRow(index == 0 ? 'detail_summary_content' : 'detail_summary_content:$index', nativeRichBlockText(block),
+          kind: 'rich_text',
+          blocks: [block],
+          options: links,
+          action: links.isEmpty
+              ? null
+              : (value) async {
+                  final url = value is String && links.containsKey(value) ? Uri.tryParse(links[value]!) : null;
+                  // A generated summary may only hand off web links; other schemes are ignored.
+                  if (url != null && ['http', 'https'].contains(url.scheme)) await open(url);
+                }),
+  ];
+}
+
+Future<bool> _openSummaryLink(Uri url) => launchUrl(url, mode: LaunchMode.externalApplication);
+
 extension _NativeSummaryPresentation on _SummaryTabState {
   void _acceptNativeContribution(String id, List<NativeRow> rows) {
     if (!mounted) return;
@@ -49,16 +72,25 @@ extension _NativeSummaryPresentation on _SummaryTabState {
                   : showSummarizedAppsSheet(context)));
         }
       } else {
-        for (final (index, block) in nativeRichText(selection.content.decodeString).indexed) {
-          rows.add(NativeRow(
-              index == 0 ? 'detail_summary_content' : 'detail_summary_content:$index', nativeRichBlockText(block),
-              kind: 'rich_text', blocks: [block]));
-        }
+        rows.addAll(nativeSummaryContentRows(selection.content.decodeString));
         if (selection.canEdit(conversation)) {
           rows.add(NativeRow('detail_summary_edit', l10n.edit,
               symbol: 'pencil',
               enabled: !_isEditing && !provider.loadingReprocessConversation,
               action: (_) => _editNativeSummary(selection)));
+        }
+        // The app that wrote this summary opens its page, as in the classic summary. Omi's own summary,
+        // and an app the catalog no longer knows, show no row.
+        final app = selection.isApp && selection.content.isNotEmpty ? provider.findAppById(selection.appId) : null;
+        if (app != null) {
+          final description = app.description.decodeString.trim().characters;
+          rows.add(NativeRow('detail_summary_app', app.name.decodeString,
+              kind: 'navigation',
+              subtitle: description.length > 160 ? '${description.take(160)}…' : description.toString(),
+              imageUri: nativeImageUri(app.getImageUrl()), action: (_) async {
+            PlatformManager.instance.analytics.pageOpened('App Detail');
+            await routeToPage(context, AppDetailPage(app: app));
+          }));
         }
       }
       final geolocation = conversation.discarded ? null : conversation.geolocation;
@@ -106,8 +138,13 @@ extension _NativeSummaryPresentation on _SummaryTabState {
       if (mounted) _nativeRebuild(() => _isEditing = false);
     }
     if (!mounted) return;
-    final text = result?.values['summary_content'];
-    if (result?.action == 'save' &&
+    if (result == null) {
+      // No native editor: the complete page takes over and continues this edit in place.
+      widget.onNativeUnavailable?.call(selection);
+      return;
+    }
+    final text = result.values['summary_content'];
+    if (result.action == 'save' &&
         text is String &&
         text != selection.content &&
         provider.conversationOrNull?.id == conversationId &&
