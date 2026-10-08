@@ -42,8 +42,11 @@ Future<NativeModalResult?> showIosNativeModal(
   }
   if (!context.mounted) return null;
   final rows = [...actions, ...sections.expand((section) => section.rows)];
-  // An unrepresentable request keeps the caller's complete Flutter dialog.
-  if (rows.any((row) => !row.valid) || rows.map((row) => row.id).toSet().length != rows.length) return null;
+  // An unrepresentable request keeps the caller's complete Flutter dialog. A graph needs its surface's
+  // camera and capture owner, so NativeModalPresenter refuses graph rows too.
+  if (rows.any((row) => !row.valid || row.kind == 'graph') || rows.map((row) => row.id).toSet().length != rows.length) {
+    return null;
+  }
   final ticket = _PresentationTicket();
   final owner = AuthService.instance.captureSessionSnapshot();
   var sessionValid = true;
