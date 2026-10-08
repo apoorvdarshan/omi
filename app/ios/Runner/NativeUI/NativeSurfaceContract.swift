@@ -47,6 +47,8 @@ struct NativeSurfaceRow: Decodable, Equatable, Identifiable {
         }
     }
     let blocks: [RichBlock]?
+    /// "line" or "bar": a categorical chart whose point x is its index and whose label names it.
+    let chartStyle: String?
 
     func replacingValue(_ value: Value?) -> Self {
         Self(id: id, title: title, kind: kind, subtitle: subtitle, value: value,
@@ -55,7 +57,8 @@ struct NativeSurfaceRow: Decodable, Equatable, Identifiable {
              optionSearch: optionSearch, optionClose: optionClose, keypadMode: keypadMode,
              eraseLabel: eraseLabel, clearLabel: clearLabel, plainText: plainText, imageUri: imageUri,
              level: level, maximumValue: maximumValue, visibilityEnabled: visibilityEnabled,
-             visibilityHiddenEnabled: visibilityHiddenEnabled, points: points, blocks: blocks)
+             visibilityHiddenEnabled: visibilityHiddenEnabled, points: points, blocks: blocks,
+             chartStyle: chartStyle)
     }
 
 
@@ -199,7 +202,8 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
                       && Set(row.options.map(\.id)).count == row.options.count
                       && row.options.allSatisfy({ !$0.id.isEmpty })
                       && row.hasValidValue
-                      && ((row.blocks ?? []).isEmpty || (row.kind == "rich_text" && row.blocks?.allSatisfy(\.valid) == true))
+                      && ((row.blocks ?? []).isEmpty || (["rich_text", "message_ai"].contains(row.kind) && row.blocks?.allSatisfy(\.valid) == true))
+                      && row.hasValidRichMessage && row.hasValidChartStyle
                       && (row.maximumValue == nil || ["slider", "progress", "image"].contains(row.kind))
                       && (row.plainText != true || ["message_ai", "message_user"].contains(row.kind))
                       && (row.kind == "keypad" || (row.keypadMode == nil && row.eraseLabel == nil && row.clearLabel == nil))
@@ -227,5 +231,22 @@ private extension NativeSurfaceRow {
               url.user == nil, url.password == nil else { return false }
         return (url.scheme == "https" && !(url.host ?? "").isEmpty)
             || (url.isFileURL && (url.host ?? "").isEmpty && url.path.hasPrefix("/"))
+    }
+}
+
+private extension NativeSurfaceRow {
+    /// A rich AI body is Markdown blocks, never literal text too; one message carries at most 2,000.
+    var hasValidRichMessage: Bool {
+        (plainText != true || (blocks ?? []).isEmpty) && (kind != "message_ai" || (blocks ?? []).count <= 2000)
+    }
+
+    /// Categories in index order (x = 0..n-1), each named by a label of at most 64 characters.
+    var hasValidChartStyle: Bool {
+        guard let chartStyle else { return true }
+        let points = points ?? []
+        return kind == "chart" && ["line", "bar"].contains(chartStyle) && (1...10000).contains(points.count)
+            && points.enumerated().allSatisfy { index, point in
+                point.x == Double(index) && point.y.isFinite && point.label.count <= 64
+            }
     }
 }

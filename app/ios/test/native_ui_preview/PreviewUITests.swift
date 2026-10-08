@@ -482,4 +482,60 @@ final class PreviewUITests: XCTestCase {
         XCTAssertFalse(app.buttons["chat_voice_stop"].exists)
     }
 
+    func testRichAIMessageRendersBlocksAndOpensOnlyWhitelistedLinks() {
+        let app = start(["chat", "chat-rich"])
+        // A heading, ordered and nested list items, a quote, code and a table all render in the AI bubble.
+        for text in ["Launch plan", "1.", "Ship the native body", "Keep the owner", "Links stay with Dart",
+                     "let owner = \"Dart\"", "Opens links"] {
+            XCTAssertTrue(app.staticTexts[text].waitForExistence(timeout: 10), text)
+        }
+        // A link whitelist never adds a trailing button; only the retry row's explicit symbol does.
+        XCTAssertEqual(app.buttons.matching(identifier: "chat_rich_ai").count, 0)
+        XCTAssertEqual(app.buttons.matching(identifier: "chat_rich_retry").count, 1)
+        capture(app, "native-chat-rich-ai-message")
+        for link in ["another site", "a plain link", "unlisted note"] {
+            XCTAssertTrue(app.links[link].exists, link)
+            app.links[link].tap()
+            Thread.sleep(forTimeInterval: 2)
+            XCTAssertEqual(app.state, .runningForeground, "\(link) must not open the system browser")
+            XCTAssertEqual(app.staticTexts["preview-last-action"].label, "Preview fixture", link)
+        }
+        app.links["allowed guide"].tap()
+        XCTAssertTrue(app.staticTexts["chat_rich_ai:https://omi.me/allowed"].waitForExistence(timeout: 5))
+        app.buttons["chat_rich_retry"].tap()
+        XCTAssertTrue(app.staticTexts["chat_rich_retry:"].waitForExistence(timeout: 5))
+    }
+
+    func testCategoricalBarChartsKeepLongLabelsSinglePointAndLargeText() {
+        assertCategoricalCharts("chart-bar")
+    }
+
+    func testCategoricalLineChartsKeepLongLabelsSinglePointAndLargeText() {
+        assertCategoricalCharts("chart-line")
+    }
+
+    /// Both categorical charts render at their fixed height from one point on, while the unstyled
+    /// quantitative chart keeps its one-point subtitle; large text keeps every chart reachable.
+    private func assertCategoricalCharts(_ fixture: String) {
+        for large in [false, true] {
+            let app = start(large ? ["surface", fixture, "large"] : ["surface", fixture])
+            let many = app.otherElements["chart_many"]
+            XCTAssertTrue(many.waitForExistence(timeout: 10))
+            XCTAssertEqual(many.label, "Messages per day")
+            XCTAssertEqual(many.frame.height, 200, accuracy: 1)
+            XCTAssertGreaterThan(many.children(matching: .any).count, 0)
+            capture(app, "native-\(fixture)\(large ? "-large-text" : "")")
+            let single = app.otherElements["chart_single"]
+            for _ in 0..<6 where !(single.exists && single.isHittable) { app.swipeUp() }
+            XCTAssertTrue(single.isHittable)
+            XCTAssertEqual(single.label, "Single day")
+            XCTAssertEqual(single.frame.height, 200, accuracy: 1)
+            XCTAssertGreaterThanOrEqual(single.children(matching: .any).count, 1, "The single category is drawn")
+            let legacy = app.staticTexts["Collecting data"]
+            for _ in 0..<6 where !(legacy.exists && legacy.isHittable) { app.swipeUp() }
+            XCTAssertTrue(legacy.exists)
+            XCTAssertFalse(app.otherElements["chart_legacy"].exists)
+            capture(app, "native-\(fixture)-single\(large ? "-large-text" : "")")
+        }
+    }
 }

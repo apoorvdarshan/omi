@@ -1,5 +1,22 @@
 part of 'summary_tab.dart';
 
+/// The rich summary rows. A link opens only when it is one of this Markdown's own links, through the
+/// Dart URL owner; the native reader discards every other URL instead of opening it itself.
+@visibleForTesting
+List<NativeRow> nativeSummaryContentRows(String markdown, {Future<bool> Function(Uri url) open = _openSummaryLink}) {
+  final links = nativeRichTextLinks(markdown);
+  return [
+    for (final (index, block) in nativeRichText(markdown).indexed)
+      NativeRow(index == 0 ? 'detail_summary_content' : 'detail_summary_content:$index', nativeRichBlockText(block),
+          kind: 'rich_text', blocks: [block], options: links, action: (value) async {
+        final url = value is String && links.containsKey(value) ? Uri.tryParse(links[value]!) : null;
+        if (url != null) await open(url);
+      }),
+  ];
+}
+
+Future<bool> _openSummaryLink(Uri url) => launchUrl(url, mode: LaunchMode.externalApplication);
+
 extension _NativeSummaryPresentation on _SummaryTabState {
   void _acceptNativeContribution(String id, List<NativeRow> rows) {
     if (!mounted) return;
@@ -49,11 +66,7 @@ extension _NativeSummaryPresentation on _SummaryTabState {
                   : showSummarizedAppsSheet(context)));
         }
       } else {
-        for (final (index, block) in nativeRichText(selection.content.decodeString).indexed) {
-          rows.add(NativeRow(
-              index == 0 ? 'detail_summary_content' : 'detail_summary_content:$index', nativeRichBlockText(block),
-              kind: 'rich_text', blocks: [block]));
-        }
+        rows.addAll(nativeSummaryContentRows(selection.content.decodeString));
         if (selection.canEdit(conversation)) {
           rows.add(NativeRow('detail_summary_edit', l10n.edit,
               symbol: 'pencil',

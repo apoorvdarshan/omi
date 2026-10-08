@@ -50,6 +50,13 @@ String? nativeImageUri(String? input) {
   return null;
 }
 
+/// A categorical chart label within the 64-character limit both sides validate. Longer names are
+/// shortened with an ellipsis, so real-world data never makes the whole chart surface invalid.
+String nativeChartLabel(String label) {
+  final characters = label.characters;
+  return characters.length <= 64 ? label : '${characters.take(63)}…';
+}
+
 /// Only presentation values cross the channel. Callbacks stay with their current owner.
 class NativeRow {
   const NativeRow(
@@ -74,6 +81,7 @@ class NativeRow {
     this.maximumValue,
     this.points = const [],
     this.blocks = const [],
+    this.chartStyle,
     this.action,
     this.onVisible,
     this.onHidden,
@@ -95,6 +103,10 @@ class NativeRow {
   final double? maximumValue;
   final List<Map<String, Object>> points;
   final List<Map<String, Object>> blocks;
+
+  /// 'line' or 'bar' draws a categorical [kind] 'chart': point x is its index and its label names
+  /// the category. Null keeps the existing quantitative line chart.
+  final String? chartStyle;
   final Object? value;
   final Map<String, String> options;
   final NativeAction? action, onVisible, onHidden;
@@ -124,6 +136,7 @@ class NativeRow {
         'maximumValue': maximumValue,
         'points': points,
         'blocks': blocks,
+        'chartStyle': chartStyle,
         'destructive': destructive,
         'enabled': enabled && action != null,
         'visibilityEnabled': onVisible != null,
@@ -132,7 +145,7 @@ class NativeRow {
 
   bool get valid {
     if (blocks.isNotEmpty &&
-        (kind != 'rich_text' ||
+        (!['rich_text', 'message_ai'].contains(kind) ||
             blocks.any((block) =>
                 !['text', 'heading', 'quote', 'code', 'table', 'image', 'rule'].contains(block['kind']) ||
                 block['text'] is! String ||
@@ -151,6 +164,9 @@ class NativeRow {
     }
     if (id.isEmpty || id.startsWith('_') || options.keys.any((id) => id.isEmpty)) return false;
     if (plainText && !['message_ai', 'message_user'].contains(kind)) return false;
+    // A rich AI body is Markdown blocks, never literal text too; one message carries at most 2,000.
+    if (plainText && blocks.isNotEmpty || kind == 'message_ai' && blocks.length > 2000) return false;
+    if (chartStyle != null && !_validCategoricalChart) return false;
     if (kind != 'keypad' && (keypadMode != null || eraseLabel != null || clearLabel != null)) return false;
     if (level != null && (level! < 0 || level! > 3)) return false;
     if (maximumValue != null &&
@@ -236,6 +252,20 @@ class NativeRow {
     };
   }
 
+  /// Categories in index order (x = 0..n-1), each named by a label of at most 64 characters.
+  bool get _validCategoricalChart =>
+      kind == 'chart' &&
+      ['line', 'bar'].contains(chartStyle) &&
+      points.isNotEmpty &&
+      points.length <= 10000 &&
+      points.indexed.every((entry) =>
+          entry.$2['x'] is num &&
+          entry.$2['x'] == entry.$1 &&
+          entry.$2['y'] is num &&
+          (entry.$2['y'] as num).isFinite &&
+          entry.$2['label'] is String &&
+          (entry.$2['label'] as String).characters.length <= 64);
+
   static bool _validDate(String value) {
     final milliseconds = int.tryParse(value);
     return milliseconds != null && milliseconds.abs() <= 8640000000000000;
@@ -249,6 +279,8 @@ class NativeRow {
         'task' => input is bool || input is String && options.containsKey(input),
         'choice' || 'segmented' || 'color' || 'menu' => input is String && options.containsKey(input),
         'navigation' || 'transcript' || 'rich_text' => input == null || input is String && options.containsKey(input),
+        // The trailing action, or a link from the row's whitelist; any other URL never reaches the owner.
+        'message_ai' => input == null || input is String && options.containsKey(input),
         'date' =>
           input is String && _validDate(input) && (minimumDate == null || int.parse(input) >= int.parse(minimumDate!)),
         'text' => input is String && input.characters.length <= (maximumLength ?? 10000),
