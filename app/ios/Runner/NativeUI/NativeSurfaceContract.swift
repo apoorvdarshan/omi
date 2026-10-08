@@ -156,8 +156,10 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
     let collapseLabel: String?
 
     var allRows: [NativeSurfaceRow] {
-        toolbar + sections.flatMap(\.rows) + (chat?.actions ?? []) + (reader?.actions ?? []) + (navigation.map { [$0] } ?? [])
-            + (bottomBar ?? [])
+        let content: [NativeSurfaceRow] = toolbar + sections.flatMap(\.rows)
+        let actions: [NativeSurfaceRow] = (chat?.actions ?? []) + (reader?.actions ?? [])
+        let chrome: [NativeSurfaceRow] = (navigation.map { [$0] } ?? []) + (bottomBar ?? [])
+        return content + actions + chrome
     }
 
     func replacingValue(id: String, value: NativeSurfaceRow.Value) -> Self {
@@ -235,8 +237,8 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
                       && (row.points ?? []).allSatisfy { $0.x.isFinite && $0.y.isFinite }
                       && (row.kind != "waveform" || (row.points ?? []).allSatisfy { abs($0.y) <= 1 })
                       && Set((row.points ?? []).map(\.x)).count == (row.points ?? []).count
-                      && row.hasValidListInteractions
               }),
+              rows.allSatisfy({ $0.hasValidListInteractions }),
               snapshot.hasValidListInteractions else { throw ContractError.invalidSnapshot }
         return snapshot
     }

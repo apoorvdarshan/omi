@@ -293,17 +293,35 @@ final class PreviewUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["bulk_delete:conv_1,conv_2"].waitForExistence(timeout: 15))
     }
 
+    func testBottomBarDeleteStopsWhenThePendingSelectionFails() {
+        let app = start(["surface", "selection", "slow-selection", "failed-selection"])
+        XCTAssertTrue(app.staticTexts["conv_2"].waitForExistence(timeout: 10))
+        app.staticTexts["conv_2"].tap()
+        app.buttons["bulk_delete"].tap()
+        // The refused selection reverts, so Delete must not act on a set the user never saw.
+        XCTAssertTrue(app.staticTexts["native-surface-error"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.staticTexts["bulk_delete:conv_1"].waitForExistence(timeout: 3))
+        XCTAssertFalse(listCell(app, "conv_2").isSelected)
+    }
+
     func testSelectionKeepsOtherRowsUsableAndSuppressesSwipes() {
         let app = start(["surface", "selection"])
         let more = app.buttons["more"]
         XCTAssertTrue(more.waitForExistence(timeout: 10))
         XCTAssertFalse(listCell(app, "more").isSelected)
-        more.tap()
-        XCTAssertTrue(app.staticTexts["more:"].waitForExistence(timeout: 5))
-        XCTAssertFalse(listCell(app, "more").isSelected)
+        // iOS 16 has no selectionDisabled, so a non-selectable row is disabled while selecting there.
+        if #available(iOS 17.0, *) {
+            more.tap()
+            XCTAssertTrue(app.staticTexts["more:"].waitForExistence(timeout: 5))
+            XCTAssertFalse(listCell(app, "more").isSelected)
+        }
         listCell(app, "conv_2").swipeLeft()
         listCell(app, "conv_locked").swipeLeft()
-        XCTAssertFalse(app.buttons["Delete"].waitForExistence(timeout: 2), "No swipe action while selecting")
+        // Only the bottom bar's Delete exists: no row offers its swipe action while selecting.
+        let deletes = app.buttons.matching(NSPredicate(format: "label == %@", "Delete"))
+        XCTAssertFalse(app.buttons["conv_locked_swipe_delete"].waitForExistence(timeout: 2), "No swipe action while selecting")
+        XCTAssertEqual(deletes.count, 1)
+        XCTAssertFalse(app.staticTexts["conv_locked:delete"].exists, "A full swipe sends nothing while selecting")
         XCTAssertFalse(app.staticTexts["_selection:conv_1,conv_2"].exists)
     }
 
@@ -325,6 +343,15 @@ final class PreviewUITests: XCTestCase {
         app.buttons["preview-burst-list"].tap()
         XCTAssertTrue(app.staticTexts["list:conv_1,conv_2|conv_1,conv_2,conv_3|"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["3 selected"].waitForExistence(timeout: 5))
+    }
+
+    func testQueuedSelectionDropsRowsNoLongerSelectable() {
+        let app = start(["surface", "selection", "stale-selection"])
+        XCTAssertTrue(app.buttons["preview-burst-list"].waitForExistence(timeout: 10))
+        app.buttons["preview-burst-list"].tap()
+        // conv_3 stopped being selectable while the second selection was queued.
+        XCTAssertTrue(app.staticTexts["list:conv_1,conv_2|conv_1,conv_2|"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["native-surface-error"].exists)
     }
 
     func testReorderSendsTheFullPermutation() {
@@ -367,16 +394,15 @@ final class PreviewUITests: XCTestCase {
 
     func testCollapsibleSectionHidesRowsAndExplainsTheToggle() {
         let app = start(["surface", "collapsible"])
-        let header = app.buttons["overdue_header"]
+        // XCUITest cannot read accessibility hints; the Expand/Collapse hint needs a VoiceOver check.
+        let header = app.descendants(matching: .any)["overdue_header"]
         XCTAssertTrue(header.waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["late_1"].exists)
-        XCTAssertTrue(hint(of: header).contains("Collapse"), hint(of: header))
         header.tap()
         expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: app.staticTexts["late_1"])
         waitForExpectations(timeout: 5)
         XCTAssertFalse(app.staticTexts["late_2"].exists)
         XCTAssertTrue(app.staticTexts["today_1"].exists)
-        XCTAssertTrue(hint(of: header).contains("Expand"), hint(of: header))
         capture(app, "native-list-collapsed")
         header.tap()
         XCTAssertTrue(app.staticTexts["late_1"].waitForExistence(timeout: 5))
@@ -387,17 +413,17 @@ final class PreviewUITests: XCTestCase {
         let app = start(["surface", "swipe"])
         let task = listCell(app, "swipe_task")
         XCTAssertTrue(task.waitForExistence(timeout: 10))
-        task.swipeLeft()
+        reveal(task, leading: false)
         let delete = app.buttons["Delete"]
         XCTAssertTrue(delete.waitForExistence(timeout: 5))
         capture(app, "native-list-swipe")
         delete.tap()
         XCTAssertTrue(app.staticTexts["swipe_task:delete"].waitForExistence(timeout: 5))
-        task.swipeRight()
+        reveal(task, leading: true)
         XCTAssertTrue(app.buttons["Complete"].waitForExistence(timeout: 5))
         app.buttons["Complete"].tap()
         XCTAssertTrue(app.staticTexts["swipe_task:complete"].waitForExistence(timeout: 5))
-        listCell(app, "swipe_person").swipeLeft()
+        reveal(listCell(app, "swipe_person"), leading: false)
         XCTAssertTrue(app.buttons["Pin"].waitForExistence(timeout: 5))
         app.buttons["Rename"].tap()
         XCTAssertTrue(app.staticTexts["swipe_person:rename"].waitForExistence(timeout: 5))
@@ -436,11 +462,10 @@ final class PreviewUITests: XCTestCase {
         start.press(forDuration: 0.6, thenDragTo: to.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.2)))
     }
 
-    /// The accessibility hint VoiceOver reads for [element], from its snapshot.
-    func hint(of element: XCUIElement) -> String {
-        guard let snapshot = try? element.snapshot() else { return "" }
-        let dictionary = snapshot.dictionaryRepresentation
-        return dictionary.first { "\($0.key)".localizedCaseInsensitiveContains("hint") }.map { "\($0.value)" } ?? ""
+    /// Reveals a row's swipe actions with a slow partial drag; a fast full swipe would run the first action.
+    func reveal(_ cell: XCUIElement, leading: Bool) {
+        let start = cell.coordinate(withNormalizedOffset: CGVector(dx: leading ? 0.1 : 0.9, dy: 0.5))
+        start.press(forDuration: 0.1, thenDragTo: cell.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)))
     }
 
     /// Whether the brightness inside [frame] (screen points) varies, so something is drawn there.

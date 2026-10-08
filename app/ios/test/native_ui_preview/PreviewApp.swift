@@ -149,6 +149,9 @@ final class PreviewHarness: ObservableObject {
             while !surface.pending.contains(id) { await Task.yield() }
             await surface.send(id, value: second)
             surfaceRaw["revision"] = (surfaceRaw["revision"] as? Int ?? 0) + 1
+            if ProcessInfo.processInfo.arguments.contains("stale-selection") {
+                surfaceRaw["selection"] = ["selected": ["conv_1"], "selectable": ["conv_1", "conv_2"]]
+            }
             surface.update(try! NativeSurfaceSnapshot.decode(surfaceRaw))
             await sending.value
         }
@@ -194,6 +197,9 @@ final class PreviewHarness: ObservableObject {
         }
         if id == "_selection" && ProcessInfo.processInfo.arguments.contains("slow-selection") {
             try await Task.sleep(nanoseconds: 4_000_000_000)
+        }
+        if id == "_selection" && ProcessInfo.processInfo.arguments.contains("failed-selection") {
+            throw NSError(domain: "Fixture", code: 4)
         }
         if id == "_reorder:tasks" && ProcessInfo.processInfo.arguments.contains("failed-reorder") {
             throw NSError(domain: "Fixture", code: 3)
