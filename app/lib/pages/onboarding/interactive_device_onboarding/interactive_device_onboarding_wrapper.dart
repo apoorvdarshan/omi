@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/mobile/native_ui/native_navigation_chrome.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
@@ -16,6 +18,7 @@ import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboa
 import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class InteractiveDeviceOnboardingWrapper extends StatefulWidget {
   // True when re-opened from Settings → Device Tutorial. The flow is always
@@ -144,6 +147,82 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
     Navigator.of(context).pop();
   }
 
+  /// The classic gradient frame every tutorial screen sits on.
+  Widget _classicFrame(Widget child) => Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [OmiColors.surface1, OmiColors.surface0],
+          ),
+        ),
+        child: SafeArea(child: child),
+      );
+
+  /// The classic step chrome: close X and progress dots above [content].
+  Widget _classicStepChrome(Widget content, {Key? key}) => Column(
+        key: key,
+        children: [
+          // Always dismissible: a stuck step (e.g. the mic-test
+          // waiting on a response) must never trap the user. The
+          // tutorial floats over the app, so it leaves by a trailing
+          // close X, never a back chevron (docs/ux-contract.md §1).
+          SizedBox(
+            height: 48,
+            child: Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: OmiCloseButton(
+                key: const Key('device_onboarding_close_button'),
+                onPressed: _skipOnboarding,
+              ),
+            ),
+          ),
+          // Persistent progress indicator — stays fixed and animates the
+          // active dot in place while only the content below transitions.
+          Consumer<DeviceOnboardingProvider>(
+            builder: (_, provider, __) => OnboardingProgressDots(currentStep: provider.currentStep),
+          ),
+          Expanded(child: content),
+        ],
+      );
+
+  Widget _intro() => OnboardingIntroScreen(
+        key: const ValueKey('intro'),
+        onStart: _startTutorial,
+        onSkip: _skipOnboarding,
+      );
+
+  /// Native chrome around the current screen. Each step stays keyed by its index without an
+  /// AnimatedSwitcher, so its State, listeners and timers are exactly the classic ones. A step that
+  /// cannot project restores the complete classic frame, close X and progress dots.
+  Widget _nativeBody(BuildContext context) {
+    final close =
+        NativeRow('device_tutorial_close', context.l10n.close, symbol: 'xmark', action: (_) => _skipOnboarding());
+    if (_showIntro) {
+      return NativeNavigationChrome(
+        toolbar: [close],
+        wrapFallback: (fallback) => NativeNavigationChrome(enabled: false, child: _classicFrame(fallback)),
+        child: _intro(),
+      );
+    }
+    return Consumer<DeviceOnboardingProvider>(builder: (context, provider, _) {
+      const total = DeviceOnboardingProvider.totalSteps;
+      final current = (provider.currentStep + 1).clamp(1, total);
+      return NativeNavigationChrome(
+        toolbar: [close],
+        sections: [
+          NativeSection('device_tutorial_progress', [
+            NativeRow('device_tutorial_step', context.l10n.onboardingStepOf(current, total),
+                kind: 'progress', value: current.toDouble(), maximumValue: total.toDouble()),
+          ]),
+        ],
+        wrapFallback: (fallback) =>
+            NativeNavigationChrome(enabled: false, child: _classicFrame(_classicStepChrome(fallback))),
+        child: _buildStep(provider.currentStep),
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider.value(
@@ -158,49 +237,18 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
           if (didPop) return;
           _skipOnboarding();
         },
-        child: Scaffold(
-          backgroundColor: Colors.transparent,
-          body: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [OmiColors.surface1, OmiColors.surface0],
-              ),
-            ),
-            child: SafeArea(
-              child: AnimatedSwitcher(
-                duration: OmiMotion.of(context).standard,
-                child: _showIntro
-                    ? OnboardingIntroScreen(
-                        key: const ValueKey('intro'),
-                        onStart: _startTutorial,
-                        onSkip: _skipOnboarding,
-                      )
-                    : Column(
-                        key: const ValueKey('steps'),
-                        children: [
-                          // Always dismissible: a stuck step (e.g. the mic-test
-                          // waiting on a response) must never trap the user. The
-                          // tutorial floats over the app, so it leaves by a trailing
-                          // close X, never a back chevron (docs/ux-contract.md §1).
-                          SizedBox(
-                            height: 48,
-                            child: Align(
-                              alignment: AlignmentDirectional.centerEnd,
-                              child: OmiCloseButton(
-                                key: const Key('device_onboarding_close_button'),
-                                onPressed: _skipOnboarding,
-                              ),
-                            ),
-                          ),
-                          // Persistent progress indicator — stays fixed and animates the
-                          // active dot in place while only the content below transitions.
-                          Consumer<DeviceOnboardingProvider>(
-                            builder: (_, provider, __) => OnboardingProgressDots(currentStep: provider.currentStep),
-                          ),
-                          Expanded(
-                            child: Consumer<DeviceOnboardingProvider>(
+        child: nativePresentationEnabled
+            ? Scaffold(backgroundColor: OmiColors.surface0, body: _nativeBody(context))
+            : Scaffold(
+                backgroundColor: Colors.transparent,
+                body: _classicFrame(
+                  AnimatedSwitcher(
+                    duration: OmiMotion.of(context).standard,
+                    child: _showIntro
+                        ? _intro()
+                        : _classicStepChrome(
+                            key: const ValueKey('steps'),
+                            Consumer<DeviceOnboardingProvider>(
                               builder: (context, provider, _) => AnimatedSwitcher(
                                 duration: const Duration(milliseconds: 320),
                                 switchInCurve: Curves.easeOutCubic,
@@ -223,12 +271,9 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
                               ),
                             ),
                           ),
-                        ],
-                      ),
+                  ),
+                ),
               ),
-            ),
-          ),
-        ),
       ),
     );
   }

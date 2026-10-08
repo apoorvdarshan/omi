@@ -1,7 +1,38 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/mobile/native_ui/native_asset_image.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+
+/// Device-supplied text (a transcript, a question, an answer) as a bounded literal native label.
+String deviceTutorialNativeText(String text, {int maximum = 4000}) {
+  final characters = text.characters;
+  return characters.length <= maximum ? text : '${characters.take(maximum)}…';
+}
+
+/// The tutorial's Continue action as a native row; the step keeps its own visibility rule.
+NativeRow deviceTutorialContinueRow(BuildContext context, VoidCallback onComplete, {String? label}) =>
+    NativeRow('dev_tut_continue', label ?? context.l10n.deviceOnboardingContinue, action: (_) => onComplete());
+
+/// Static bundled device artwork for native rows, replacing the classic animated artwork. Null on
+/// the classic path and until the copy is ready; a failed copy simply leaves the row without it.
+mixin DeviceTutorialNativeArtwork<T extends StatefulWidget> on State<T> {
+  final Map<String, String?> _nativeArtwork = {};
+
+  String? nativeArtwork(String asset) {
+    if (!nativePresentationEnabled) return null;
+    if (!_nativeArtwork.containsKey(asset)) {
+      _nativeArtwork[asset] = null;
+      unawaited(nativeAssetImageUri(asset).then((uri) {
+        if (mounted && uri != null) setState(() => _nativeArtwork[asset] = uri);
+      }));
+    }
+    return _nativeArtwork[asset];
+  }
+}
 
 // Persistent, self-animating progress indicator. Rendered once in the wrapper
 // (above the transitioning content) and driven live by provider.currentStep, so
