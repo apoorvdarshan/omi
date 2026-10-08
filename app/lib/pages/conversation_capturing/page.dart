@@ -104,10 +104,10 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
   final Set<String> _closedCarriedSpeakers = {};
 
   /// The native reader keeps the newest line in view until the person drags it away, and again
-  /// once they return to it or ask for the latest line.
-  bool _readerFollowing = true;
+  /// once they return to it or ask for the latest line. A drag suspends following for the capture
+  /// session it happened in only, so a new session starts by following its newest line again.
+  ({String? sessionId})? _readerSuspension;
   int _readerJumps = 0;
-  String? _readerSessionId;
   bool _nativeFinishing = false;
 
   @override
@@ -287,12 +287,16 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
                   : null,
         );
         if (!nativePresentationEnabled) return classic;
+        final stateTitle = conversationStateTitle(context.l10n, displayState,
+            bufferingFor: provider.customSttBufferingDuration, sourceLabel: sourceLabel, showStatus: showStatus);
+        // The native title stays on one line, so a sentence status moves into the status section in
+        // full and the title keeps a short name, as the classic header wraps it instead.
+        final sentenceStatus = showStatus && ConversationStateAppBar.isSentenceStatus(displayState);
         return _buildNativeCapture(
           provider,
-          deviceProvider,
           fallback: classic,
-          title: conversationStateTitle(context.l10n, displayState,
-              bufferingFor: provider.customSttBufferingDuration, sourceLabel: sourceLabel, showStatus: showStatus),
+          title: sentenceStatus ? sourceLabel ?? context.l10n.transcriptionUnavailable : stateTitle,
+          statusText: sentenceStatus ? stateTitle : null,
           emptyText: _liveCaptureEmptyStateText(
             provider,
             connectivity: connectivity,

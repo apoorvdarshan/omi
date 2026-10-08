@@ -5,22 +5,22 @@ part of 'page.dart';
 /// bridge, never audio or photo bytes. A refused snapshot keeps the complete classic page.
 extension _NativeConversationCapturing on _ConversationCapturingPageState {
   Widget _buildNativeCapture(
-    CaptureProvider provider,
-    DeviceProvider deviceProvider, {
+    CaptureProvider provider, {
     required Widget fallback,
     required String title,
     required String emptyText,
+    String? statusText,
   }) {
     final wedge = CaptureWedgeMonitor.instance;
     return ListenableBuilder(
       listenable: wedge,
       builder: (context, _) {
         final l10n = context.l10n;
-        // A new capture session on this page starts by following its newest line again.
-        if (provider.activeCaptureSessionId != _readerSessionId) {
-          _readerSessionId = provider.activeCaptureSessionId;
-          _readerFollowing = true;
-        }
+        final suspension = _readerSuspension;
+        final following = suspension == null || suspension.sessionId != provider.activeCaptureSessionId;
+        final wal = _unsyncedWalStatus(provider);
+        // Uploading shows the classic indicator's spinner: the surface's progress, named as it is.
+        final uploadingLabel = wal != null && wal.uploading && !wal.failed && !wal.retrying ? wal.text : null;
         final timeline = _nativeTimeline(provider);
         final latestId = timeline.isEmpty ? null : timeline.last.id;
         final effectivelyMuted = provider.isPaused || provider.isCallActive;
@@ -31,12 +31,15 @@ extension _NativeConversationCapturing on _ConversationCapturingPageState {
           fallback: fallback,
           // A reader shows no empty copy of its own; the timeline carries it as a row below.
           empty: emptyText,
+          loading: uploadingLabel != null,
+          loadingLabel: uploadingLabel,
           toolbar: [
             NativeRow('capture_back', l10n.back,
                 symbol: 'chevron.left', action: (_) => Navigator.of(context).maybePop()),
           ],
           sections: [
-            NativeSection('capture_status', _nativeStatusRows(provider, wedge)),
+            NativeSection('capture_status',
+                _nativeStatusRows(provider, wedge, wal, uploading: uploadingLabel != null, statusText: statusText)),
             NativeSection('capture_timeline', [
               ...timeline,
               if (timeline.isEmpty && emptyText.isNotEmpty) NativeRow('capture_empty', emptyText, kind: 'label'),
@@ -45,13 +48,13 @@ extension _NativeConversationCapturing on _ConversationCapturingPageState {
           reader: NativeReader(
             targetId: latestId,
             request: provider.segmentsPhotosVersion + _readerJumps,
-            following: _readerFollowing,
+            following: following,
             footer: [
-              if (latestId != null && !_readerFollowing)
+              if (latestId != null && !following)
                 NativeRow('capture_latest', l10n.jumpToLatestMessage,
                     symbol: 'arrow.down',
                     action: (_) => _nativeRebuild(() {
-                          _readerFollowing = true;
+                          _readerSuspension = null;
                           _readerJumps++;
                         })),
               // Pause/Resume and Finish, the one stop, as on the classic page.
@@ -72,8 +75,11 @@ extension _NativeConversationCapturing on _ConversationCapturingPageState {
                     kind: 'menu',
                     options: {'suspend': l10n.transcript, latestId: l10n.jumpToLatestMessage}, action: (value) {
                     // A drag stops following; reaching the newest line again resumes it.
-                    final following = value != 'suspend';
-                    if (following != _readerFollowing) _nativeRebuild(() => _readerFollowing = following);
+                    final suspend = value == 'suspend';
+                    if (suspend == following) {
+                      _nativeRebuild(
+                          () => _readerSuspension = suspend ? (sessionId: provider.activeCaptureSessionId) : null);
+                    }
                   }),
           ),
         );
@@ -92,14 +98,21 @@ extension _NativeConversationCapturing on _ConversationCapturingPageState {
     }
   }
 
-  /// The recovery prompt, the unsynced-audio indicator and the carried-speaker note, as the classic
-  /// page shows them above the transcript.
-  List<NativeRow> _nativeStatusRows(CaptureProvider provider, CaptureWedgeMonitor wedge) {
+  /// The full sentence status the one-line title cannot hold, the recovery prompt, the
+  /// unsynced-audio indicator and the carried-speaker note, as the classic page shows them above the
+  /// transcript.
+  List<NativeRow> _nativeStatusRows(
+    CaptureProvider provider,
+    CaptureWedgeMonitor wedge,
+    UnsyncedWalStatus? wal, {
+    required bool uploading,
+    String? statusText,
+  }) {
     final l10n = context.l10n;
     final episode = wedge.visiblePrompt;
-    final wal = _unsyncedWalStatus(provider);
     final carried = _carriedSpeaker(provider);
     return [
+      if (statusText != null) NativeRow('capture_state', statusText, kind: 'label', symbol: 'exclamationmark.circle'),
       if (episode != null)
         NativeRow('capture_recovery', captureRecoveryText(l10n, episode),
             symbol: 'exclamationmark.triangle',
@@ -108,8 +121,11 @@ extension _NativeConversationCapturing on _ConversationCapturingPageState {
               wedge.markPromptShown();
               return actOnCaptureRecovery(wedge, episode);
             }),
-      if (wal != null) ...[
-        // A failure that says "tap to retry" is tappable, as the classic indicator is.
+      // While uploading, the surface's progress carries the indicator's text; the queue stays here.
+      if (wal != null && uploading) ...[
+        if (wal.backlog case final backlog?) NativeRow('capture_wal_backlog', backlog, kind: 'label'),
+      ] else if (wal != null)
+        // A failure that says "tap to retry" is the one retry, tappable as the classic indicator is.
         NativeRow('capture_wal', wal.text,
             kind: wal.retryable ? 'button' : 'label',
             action: wal.retryable ? (_) => provider.retryFailedSessionWalUploads() : null,
@@ -118,13 +134,7 @@ extension _NativeConversationCapturing on _ConversationCapturingPageState {
                 ? 'exclamationmark.icloud'
                 : wal.retrying
                     ? 'arrow.clockwise.icloud'
-                    : wal.uploading
-                        ? 'icloud.and.arrow.up'
-                        : 'internaldrive'),
-        if (wal.retryable)
-          NativeRow('capture_wal_retry', l10n.retry,
-              symbol: 'arrow.clockwise', action: (_) => provider.retryFailedSessionWalUploads()),
-      ],
+                    : 'internaldrive'),
       if (carried != null) ...[
         NativeRow('capture_carried', l10n.speakerLabelText('carried', carried.person.name),
             kind: 'label', symbol: 'arrow.uturn.forward'),
@@ -190,7 +200,11 @@ extension _NativeConversationCapturing on _ConversationCapturingPageState {
         names.forSegment(segment, person: person),
         if (likely) l10n.speakerLabelText('likely', ''),
         OmiDuration.offset(segment.start),
-        if (suggested != null) l10n.speakerSuggestionChip(suggested.name),
+        // The chip's question and what answering it does, which its options answer.
+        if (suggested != null) ...[
+          l10n.speakerTagPromptIsThisPerson(suggested.name),
+          l10n.speakerSuggestionAppliesToSpeaker,
+        ],
       ].join(' · '),
       options: {
         if (canIdentify) 'identify': l10n.identifySpeaker,

@@ -87,6 +87,10 @@ class _FakeCapture extends CaptureProvider {
   BtDevice? device;
   int version = 0;
   List<Wal> unsynced = [];
+  int inFlight = 0;
+  ({int pending, int total}) backlog = (pending: 0, total: 0);
+  MessageServiceStatusEvent? transcriptionFailure;
+  String? session;
   int finishes = 0;
   Completer<void>? finishGate;
   final assigned = <(int, String, List<String>)>[];
@@ -113,9 +117,13 @@ class _FakeCapture extends CaptureProvider {
   @override
   List<Wal> get unsyncedSessionWals => unsynced;
   @override
-  int get inFlightAudioSeconds => 0;
+  int get inFlightAudioSeconds => inFlight;
   @override
-  ({int pending, int total}) get sessionTranscriptionBacklogCounts => (pending: 0, total: 0);
+  ({int pending, int total}) get sessionTranscriptionBacklogCounts => backlog;
+  @override
+  MessageServiceStatusEvent? get terminalTranscriptionFailure => transcriptionFailure;
+  @override
+  String? get activeCaptureSessionId => session;
   @override
   String? get topConversationId => 'live-conversation';
   @override
@@ -320,7 +328,8 @@ void main() {
     expect(home.selectedIndex, HomeProvider.homeTab);
   });
 
-  testWidgets('unsynced audio is named as the classic indicator names it, with retry when retryable', (tester) async {
+  testWidgets('unsynced audio is named as the classic indicator names it, tappable once when retryable',
+      (tester) async {
     final wal = Wal(
         timerStart: 1,
         codec: BleAudioCodec.opus,
@@ -331,16 +340,53 @@ void main() {
         filePath: 'a.bin');
     await pumpCapture(tester, seed: (capture) => capture.unsynced = [wal]);
     expect(row(tester, 'capture_wal')!.title, _l10n.audioSavedLocally('1m 15s'));
-    expect(row(tester, 'capture_wal_retry'), isNull);
+    expect(row(tester, 'capture_wal')!.kind, 'label');
+    expect(surface(tester).loading, false);
 
     wal.retryCount = walMaxAutoRetries;
     capture.change(() {});
     await NativeTestHost.settle(tester);
     expect(row(tester, 'capture_wal')!.title, _l10n.audioUploadFailedTapRetry('1m 15s'));
-    await send(tester, 'capture_wal_retry');
-    expect(capture.walRetries, 1);
+    expect(row(tester, 'capture_wal')!.kind, 'button');
+    // The indicator itself is the one retry, as on the classic page.
+    expect(rows(tester).where((row) => row.id.startsWith('capture_wal')).map((row) => row.id), ['capture_wal']);
     await send(tester, 'capture_wal');
-    expect(capture.walRetries, 2);
+    expect(capture.walRetries, 1);
+  });
+
+  testWidgets('uploading audio shows the classic spinner as the surface progress, with its queue', (tester) async {
+    await pumpCapture(tester, seed: (capture) {
+      capture.inFlight = 20;
+      capture.backlog = (pending: 1, total: 3);
+    });
+    expect(surface(tester).loading, true);
+    expect(surface(tester).loadingLabel, _l10n.uploadingAudioForTranscription('20s'));
+    expect(row(tester, 'capture_wal'), isNull, reason: 'the progress already carries the text');
+    expect(row(tester, 'capture_wal_backlog')!.title, _l10n.transcriptionsPendingFraction(1, 3));
+
+    capture.change(() => capture.inFlight = 0);
+    await NativeTestHost.settle(tester);
+    expect(surface(tester).loading, false);
+    expect(row(tester, 'capture_wal_backlog'), isNull);
+  });
+
+  testWidgets('a sentence status is shown in full in the status section under a short title', (tester) async {
+    await pumpCapture(tester, seed: (capture) {
+      capture.segments = [_segment('a', 'Hello')];
+      capture.transcriptionFailure = MessageServiceStatusEvent(status: 'transcription_unavailable');
+    });
+    expect(surface(tester).title, _l10n.captureSourcePhoneMic);
+    expect(section(tester, 'capture_status').first, 'capture_state');
+    expect(row(tester, 'capture_state')!.title, _l10n.transcriptionUnavailableRecordingContinues);
+
+    capture.change(() => capture.source = null);
+    await NativeTestHost.settle(tester);
+    expect(surface(tester).title, _l10n.transcriptionUnavailable);
+    expect(row(tester, 'capture_state')!.title, _l10n.transcriptionUnavailableRecordingContinues);
+
+    capture.change(() => capture.transcriptionFailure = null);
+    await NativeTestHost.settle(tester);
+    expect(row(tester, 'capture_state'), isNull);
   });
 
   testWidgets('the empty timeline names what this session can produce', (tester) async {
@@ -389,6 +435,14 @@ void main() {
     expect(reader.following, true);
     expect(reader.request, 4);
     expect(row(tester, 'capture_latest'), isNull);
+
+    // A drag suspends following for its own session only: a new session follows again.
+    await send(tester, 'capture_reader_scroll', 'suspend');
+    await NativeTestHost.settle(tester);
+    expect(surface(tester).reader!.following, false);
+    capture.change(() => capture.session = 'next-session');
+    await NativeTestHost.settle(tester);
+    expect(surface(tester).reader!.following, true);
   });
 
   testWidgets('a pinned suggestion offers the chip answers and Yes labels the speaker', (tester) async {
@@ -405,7 +459,8 @@ void main() {
     await NativeTestHost.settle(tester);
     final segment = row(tester, 'capture_segment:0')!;
     expect(segment.options.keys, containsAll(['identify', 'suggestion_accept', 'suggestion_reject']));
-    expect(segment.subtitle, contains(_l10n.speakerSuggestionChip('Maya')));
+    expect(segment.subtitle, contains(_l10n.speakerTagPromptIsThisPerson('Maya')));
+    expect(segment.subtitle, contains(_l10n.speakerSuggestionAppliesToSpeaker));
     expect(row(tester, 'capture_segment:1')!.options.keys, isNot(contains('suggestion_accept')));
     await send(tester, 'capture_segment:0', 'suggestion_accept');
     await tester.pump();
@@ -469,6 +524,8 @@ void main() {
     ));
     await NativeTestHost.settle(tester);
     expect(surface(tester).title, _l10n.processing);
+    expect(surface(tester).loading, true, reason: 'the classic header spins while processing');
+    expect(surface(tester).loadingLabel, _l10n.processing);
     expect(section(tester, 'processing_timeline'), ['processing_segment:0']);
     expect(row(tester, 'processing_segment:0')!.title, 'Words so far');
     expect(row(tester, 'processing_timeout')!.title, _l10n.processingTakingLonger);

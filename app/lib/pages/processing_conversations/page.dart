@@ -172,6 +172,9 @@ class _ProcessingConversationPageState extends State<ProcessingConversationPage>
       title: conversationStateTitle(l10n, CaptureDisplayState.processing),
       fallback: classic,
       empty: l10n.noContentToDisplay,
+      // The classic header's spinner, which also covers a Try again in flight (its row then waits).
+      loading: true,
+      loadingLabel: captureStateLabel(l10n, CaptureDisplayState.processing),
       toolbar: [
         NativeRow('processing_back', l10n.back,
             symbol: 'chevron.left', action: (_) => Navigator.of(context).maybePop()),

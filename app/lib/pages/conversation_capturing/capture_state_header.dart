@@ -17,7 +17,7 @@ String conversationStateTitle(
   if (!showStatus) return sourceLabel ?? '';
   final label = captureStateLabel(l10n, state, bufferingFor: bufferingFor);
   // A sentence status keeps all its room; a source adds to a one-word state only.
-  return sourceLabel == null || ConversationStateAppBar._isSentenceStatus(state)
+  return sourceLabel == null || ConversationStateAppBar.isSentenceStatus(state)
       ? label
       : l10n.captureStatusWithSource(label, sourceLabel);
 }
@@ -48,8 +48,9 @@ class ConversationStateAppBar extends StatelessWidget implements PreferredSizeWi
 
   /// The transcription-outage sentence is far longer than the one-word states,
   /// so it wraps (smaller, up to three lines) instead of ellipsizing away the
-  /// "recording continues" half — the half the reader needs most.
-  static bool _isSentenceStatus(CaptureDisplayState state) => state == CaptureDisplayState.transcriptionUnavailable;
+  /// "recording continues" half — the half the reader needs most. Public so a header that cannot
+  /// wrap its title (the native reader's) can show the sentence in full elsewhere.
+  static bool isSentenceStatus(CaptureDisplayState state) => state == CaptureDisplayState.transcriptionUnavailable;
 
   /// Key for the back button, for tests.
   final Key? backKey;
@@ -70,7 +71,7 @@ class ConversationStateAppBar extends StatelessWidget implements PreferredSizeWi
           ),
         ),
     };
-    final sentenceStatus = _isSentenceStatus(state);
+    final sentenceStatus = isSentenceStatus(state);
     return AppBar(
       automaticallyImplyLeading: false,
       backgroundColor: OmiColors.surface0,
