@@ -10,6 +10,10 @@ final class NativeSurfaceState: ObservableObject {
     @Published private(set) var pending: Set<String> = []
     @Published private(set) var actionFailed = false
     @Published private(set) var completedChatSend = 0
+    /// List interactions apply at once. A newer snapshot replaces them unless their command is still
+    /// pending, and a refused command reverts to the owner's snapshot.
+    @Published private(set) var optimisticSelection: Set<String>?
+    @Published private(set) var optimisticOrders: [String: [String]] = [:]
     private var pendingEdits: Set<String> = []
     private var failedEdits: Set<String> = []
     private var editWaiters: [CheckedContinuation<Void, Never>] = []
@@ -34,8 +38,11 @@ final class NativeSurfaceState: ObservableObject {
         latestEdits = latestEdits.filter { editable.contains($0.key) }
         let current = Set(snapshot.allRows.map(\.id))
         failedEdits = failedEdits.filter { current.contains($0) }
-        queued = queued.filter { current.contains($0.key) || $0.key == "_search" && snapshot.searchEnabled }
+        queued = queued.filter { current.contains($0.key) || $0.key == "_search" && snapshot.searchEnabled
+            || snapshot.offersListCommand($0.key) }
         queuedKeys = queuedKeys.filter { current.contains($0.key) }
+        if !pending.contains("_selection") { optimisticSelection = nil }
+        optimisticOrders = optimisticOrders.filter { pending.contains("_reorder:\($0.key)") }
         self.snapshot = snapshot
     }
 
@@ -45,6 +52,8 @@ final class NativeSurfaceState: ObservableObject {
         queuedKeys.removeAll()
         latestEdits.removeAll()
         failedEdits.removeAll()
+        optimisticSelection = nil
+        optimisticOrders.removeAll()
         sentDraft = nil
         finishEditWaiters()
         snapshot = snapshot.withoutContent()
@@ -53,9 +62,11 @@ final class NativeSurfaceState: ObservableObject {
     func send(_ id: String, value: Any? = nil) async {
         guard valid else { return }
         let isKeypad = snapshot.allRows.contains { $0.id == id && $0.kind == "keypad" }
+        // A selection or order is a desired state: the latest wins, and other actions wait for it.
+        let isListCommand = id == "_selection" || id.hasPrefix("_reorder:")
         let isEdit = snapshot.allRows.contains {
             $0.id == id && ["text", "toggle", "choice", "segmented", "color", "date", "slider"].contains($0.kind)
-        } || isKeypad
+        } || isKeypad || isListCommand
         if let text = value as? String, snapshot.allRows.contains(where: { $0.id == id && $0.kind == "text" }) {
             latestEdits[id] = text
         }
@@ -87,18 +98,72 @@ final class NativeSurfaceState: ObservableObject {
                 if valid && id == "chat_send" { completedChatSend += 1 }
             }
             catch {
-                if valid && (!isEdit || snapshot.allRows.contains(where: { $0.id == id })) {
+                if valid && (!isEdit || snapshot.allRows.contains(where: { $0.id == id }) || snapshot.offersListCommand(id)) {
                     actionFailed = true
-                    if isEdit { failedEdits.insert(id) }
+                    // A refused selection or order reverts to the owner's state, so later actions still apply.
+                    if isEdit && !isListCommand { failedEdits.insert(id) }
                 }
                 if isKeypad { queuedKeys.removeValue(forKey: id); break }
+                if isListCommand { queued.removeValue(forKey: id); dropOptimistic(id); break }
             }
             if isKeypad, var keys = queuedKeys[id], !keys.isEmpty {
                 next = keys.removeFirst()
                 queuedKeys[id] = keys.isEmpty ? nil : keys
             } else { next = queued.removeValue(forKey: id) }
         } while valid && next != nil
+        // An owner that answered while the command was pending already shows the desired state;
+        // otherwise its next snapshot replaces the optimistic one.
+        if isListCommand && showsOptimistic(id) { dropOptimistic(id) }
     }
+
+    /// The selection shown: the pending choice, otherwise the owner's, always within the selectable rows.
+    var selectedIDs: Set<String> {
+        guard let selection = snapshot.selection else { return [] }
+        return (optimisticSelection ?? Set(selection.selected)).intersection(selection.selectable)
+    }
+
+    func select(_ ids: Set<String>) {
+        guard valid, let selection = snapshot.selection else { return }
+        let next = ids.intersection(selection.selectable)
+        guard next != selectedIDs else { return }
+        optimisticSelection = next
+        Task { await send("_selection", value: next.sorted()) }
+    }
+
+    /// The rows in their pending order, when it is still a permutation of the owner's rows.
+    func rows(of section: NativeSurfaceSnapshot.Section) -> [NativeSurfaceRow] {
+        guard let order = optimisticOrders[section.id], order.count == section.rows.count else { return section.rows }
+        let rows = Dictionary(section.rows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let ordered = order.compactMap { rows[$0] }
+        return ordered.count == section.rows.count && Set(order).count == order.count ? ordered : section.rows
+    }
+
+    /// Sends the complete new order of a reorderable section; it shows at once.
+    func move(_ section: NativeSurfaceSnapshot.Section, from source: IndexSet, to destination: Int) {
+        guard valid, section.reorderable == true else { return }
+        var ids = rows(of: section).map(\.id)
+        ids.move(fromOffsets: source, toOffset: destination)
+        guard ids != rows(of: section).map(\.id) else { return }
+        optimisticOrders[section.id] = ids
+        Task { await send("_reorder:\(section.id)", value: ids) }
+    }
+
+    private func dropOptimistic(_ id: String) {
+        if id == "_selection" { optimisticSelection = nil }
+        else if id.hasPrefix("_reorder:") { optimisticOrders.removeValue(forKey: String(id.dropFirst("_reorder:".count))) }
+    }
+
+    /// Whether the current snapshot already shows the optimistic selection or order of [id].
+    private func showsOptimistic(_ id: String) -> Bool {
+        if id == "_selection" {
+            guard let selection = optimisticSelection else { return true }
+            return Set(snapshot.selection?.selected ?? []) == selection
+        }
+        let sectionID = String(id.dropFirst("_reorder:".count))
+        guard let order = optimisticOrders[sectionID] else { return true }
+        return snapshot.sections.first { $0.id == sectionID }?.rows.map(\.id) == order
+    }
+
     private func finishEditWaiters() {
         let waiters = editWaiters
         editWaiters.removeAll()
@@ -124,6 +189,7 @@ struct NativeSurfaceView: View {
     @State private var readerDragging = false
     @State private var readerUserScroll = false
     @State private var readerTopId: String?
+    @State private var collapsedSections: Set<String> = []
 
     var body: some View {
         Group {
@@ -143,6 +209,7 @@ struct NativeSurfaceView: View {
             if !state.pending.contains("_search") { search = value }
         }
         .onChange(of: state.valid) { valid in if !valid { search = "" } }
+        .onChange(of: state.valid) { valid in if !valid { collapsedSections = [] } }
     }
 
     /// TabView owns its system tab bar, including Liquid Glass on iOS 26+ and
@@ -211,7 +278,11 @@ struct NativeSurfaceView: View {
     }
 
     private var list: some View {
-        List {
+        let selectable = Set(state.snapshot.selection?.selectable ?? [])
+        let selection = state.snapshot.selection.map { _ in
+            Binding(get: { state.selectedIDs }, set: { state.select($0) })
+        }
+        return List(selection: selection) {
             Section {
                 if state.snapshot.loading {
                     ProgressView(state.snapshot.loadingLabel).accessibilityIdentifier("native-surface-loading")
@@ -230,20 +301,58 @@ struct NativeSurfaceView: View {
             }.id("native-surface-status")
             ForEach(state.snapshot.sections) { section in
                 Section {
-                    ForEach(section.rows) { row in
-                        rowView(row).onAppear {
-                            if row.visibilityEnabled == true { Task { await state.send("_visible:\(row.id)") } }
-                        }
+                    if !collapsedSections.contains(section.id) {
+                        ForEach(state.rows(of: section)) { row in
+                            listRow(row, in: section, selectable: selectable).onAppear {
+                                if row.visibilityEnabled == true { Task { await state.send("_visible:\(row.id)") } }
+                            }
+                        }.onMove(perform: section.reorderable == true ? { state.move(section, from: $0, to: $1) } : nil)
                     }
                 } header: {
-                    if !section.title.isEmpty { Text(section.title) }
+                    if section.collapsible == true && !section.title.isEmpty {
+                        NativeCollapsibleHeader(title: section.title, collapsed: collapsedSections.contains(section.id),
+                                                expandLabel: state.snapshot.expandLabel ?? "",
+                                                collapseLabel: state.snapshot.collapseLabel ?? "") {
+                            if collapsedSections.contains(section.id) { collapsedSections.remove(section.id) }
+                            else { collapsedSections.insert(section.id) }
+                        }.accessibilityIdentifier("\(section.id)_header")
+                    } else if !section.title.isEmpty { Text(section.title) }
                 } footer: {
                     if !section.footer.isEmpty { Text(section.footer) }
                 }
             }
         }
         .listStyle(.insetGrouped)
+        .environment(\.editMode, .constant(state.snapshot.editsList ? .active : .inactive))
         .refreshable { if state.snapshot.refreshEnabled { await state.send("_refresh") } }
+        .safeAreaInset(edge: .bottom) {
+            if let bar = state.snapshot.bottomBar, !bar.isEmpty {
+                NativeBottomBar {
+                    ForEach(bar.filter { $0.kind == "label" }) { row in rowView(row) }
+                } buttons: {
+                    ForEach(bar.filter { $0.kind != "label" }) { row in
+                        rowView(row, compact: true).modifier(NativeGlassButtonStyle(menu: row.kind == "menu"))
+                    }
+                }
+            }
+        }
+    }
+
+    /// A selectable or reorderable row is static: the system edit mode owns its tap and drag, so it
+    /// has no buttons, context menu or swipes. Other rows keep their control.
+    @ViewBuilder private func listRow(_ row: NativeSurfaceRow, in section: NativeSurfaceSnapshot.Section,
+                                      selectable: Set<String>) -> some View {
+        Group {
+            if section.reorderable == true || selectable.contains(row.id) {
+                actionLabel(row).frame(minHeight: 44).accessibilityIdentifier(row.id)
+            } else if state.snapshot.selection != nil {
+                rowView(row).modifier(NativeSelectionDisabled())
+            } else {
+                rowView(row).modifier(NativeSwipeActions(row: row, enabled: !state.snapshot.editsList && row.enabled) { option in
+                    Task { await state.send(row.id, value: option) }
+                })
+            }
+        }.modifier(NativeIndent(level: row.indent ?? 0))
     }
 
     @ViewBuilder private func rowView(_ row: NativeSurfaceRow, compact: Bool = false) -> some View {

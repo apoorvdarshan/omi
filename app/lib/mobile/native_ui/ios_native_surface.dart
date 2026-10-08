@@ -74,6 +74,9 @@ class NativeRow {
     this.maximumValue,
     this.points = const [],
     this.blocks = const [],
+    this.indent,
+    this.swipeLeading = const [],
+    this.swipeTrailing = const [],
     this.action,
     this.onVisible,
     this.onHidden,
@@ -95,6 +98,13 @@ class NativeRow {
   final double? maximumValue;
   final List<Map<String, Object>> points;
   final List<Map<String, Object>> blocks;
+
+  /// Hierarchy depth in a list, 0..3 (task, navigation, label, toggle and menu rows).
+  final int? indent;
+
+  /// Option ids offered as swipe actions on each edge, at most 3 per edge and never on both
+  /// (task, navigation and menu rows). They dispatch exactly like the context menu's option.
+  final List<String> swipeLeading, swipeTrailing;
   final Object? value;
   final Map<String, String> options;
   final NativeAction? action, onVisible, onHidden;
@@ -124,6 +134,9 @@ class NativeRow {
         'maximumValue': maximumValue,
         'points': points,
         'blocks': blocks,
+        'indent': indent,
+        'swipeLeading': swipeLeading,
+        'swipeTrailing': swipeTrailing,
         'destructive': destructive,
         'enabled': enabled && action != null,
         'visibilityEnabled': onVisible != null,
@@ -195,6 +208,17 @@ class NativeRow {
     }
     if (minimumDate != null && !_validDate(minimumDate!)) return false;
     if (kind == 'waveform' && points.any((point) => (point['y'] as num).abs() > 1)) return false;
+    if (indent != null && (indent! < 0 || indent! > 3 || !_nativeListKinds.contains(kind))) return false;
+    if ((swipeLeading.isNotEmpty || swipeTrailing.isNotEmpty) &&
+        (!['task', 'navigation', 'menu'].contains(kind) ||
+            swipeLeading.length > 3 ||
+            swipeTrailing.length > 3 ||
+            swipeLeading.toSet().length != swipeLeading.length ||
+            swipeTrailing.toSet().length != swipeTrailing.length ||
+            swipeLeading.any(swipeTrailing.contains) ||
+            [...swipeLeading, ...swipeTrailing].any((id) => !options.containsKey(id)))) {
+      return false;
+    }
     return switch (kind) {
       'image' => value == null &&
           imageUri != null &&
@@ -256,6 +280,9 @@ class NativeRow {
       };
 }
 
+/// Rows a list may indent, and the only rows a reorderable section may hold.
+const _nativeListKinds = ['task', 'navigation', 'label', 'toggle', 'menu'];
+
 /// Dispatches only commands from the current provider projection.
 Future<void> dispatchNativeAction(
   MethodCall call, {
@@ -263,22 +290,67 @@ Future<void> dispatchNativeAction(
   required Iterable<NativeRow> rows,
   NativeAction? refresh,
   NativeAction? search,
+  NativeSelection? selection,
+  Iterable<NativeSection> sections = const [],
 }) async {
   if (!isActive()) throw PlatformException(code: 'native_session_ended');
   if (call.method != 'action' || call.arguments is! Map) throw PlatformException(code: 'invalid_native_action');
   final args = call.arguments as Map;
   final id = args['id'];
   final value = args['value'];
+  Object? payload = value;
   NativeAction? action;
   if (id == '_refresh' && value == null) action = refresh;
   if (id == '_search' && value is String && value.length <= 10000) action = search;
+  // A selection or an order is the complete desired list of current ids; owners diff it idempotently.
+  final ids = _nativeIdList(value);
+  if (id == '_selection' && selection != null && ids != null && ids.every(selection.selectable.contains)) {
+    action = selection.action;
+    payload = ids;
+  }
+  for (final section in sections) {
+    if (id != '_reorder:${section.id}' || section.reorder == null || ids == null) continue;
+    final current = section.rows.map((row) => row.id).toSet();
+    if (ids.length == section.rows.length && ids.every(current.contains)) {
+      action = section.reorder;
+      payload = ids;
+    }
+  }
   for (final row in rows) {
     if (id == '_visible:${row.id}' && value == null) action = row.onVisible;
     if (id == '_hidden:${row.id}' && value == null) action = row.onHidden;
     if (row.valid && row.id == id && row.enabled && row.accepts(value)) action = row.action;
   }
   if (action == null) throw PlatformException(code: 'invalid_native_action');
-  await action(value);
+  await action(payload);
+}
+
+/// [value] as at most 10000 unique ids, or null when it is anything else.
+List<String>? _nativeIdList(Object? value) {
+  if (value is! List || value.length > 10000 || value.any((id) => id is! String)) return null;
+  final ids = List<String>.from(value);
+  return ids.toSet().length == ids.length ? ids : null;
+}
+
+/// Multi-selection over section rows, shown with the system edit-mode circles. Swift sends the complete
+/// desired set as '_selection'; [action] receives it as a List<String> and diffs it against the owner's
+/// state idempotently. Selected rows are never mutated natively. The owner exits its selection mode when
+/// its route pops or is disposed; the native side only drops its optimistic set on invalidation.
+class NativeSelection {
+  const NativeSelection({required this.selected, required this.selectable, required this.action});
+  final Set<String> selected, selectable;
+  final NativeAction action;
+
+  Map<String, Object?> get projection => {
+        'selected': selected.toList()..sort(),
+        'selectable': selectable.toList()..sort(),
+      };
+
+  bool validFor(Iterable<NativeSection> sections) {
+    if (selectable.length > 10000) return false;
+    final ids = sections.expand((section) => section.rows).map((row) => row.id).toSet();
+    return selectable.every(ids.contains) && selected.every(selectable.contains);
+  }
 }
 
 class NativeChat {
@@ -302,15 +374,27 @@ class NativeChat {
 }
 
 class NativeSection {
-  const NativeSection(this.id, this.rows, {this.title = '', this.footer = ''});
+  const NativeSection(this.id, this.rows, {this.title = '', this.footer = '', this.reorder, this.collapsible = false});
   final String id, title, footer;
   final List<NativeRow> rows;
+
+  /// Receives '_reorder:<id>' as an exact permutation of [rows]' ids (a List<String>).
+  final NativeAction? reorder;
+
+  /// The titled header expands and collapses the rows natively; nothing is sent to the owner.
+  final bool collapsible;
   Map<String, Object?> get projection => {
         'id': id,
         'title': title,
         'footer': footer,
         'rows': rows.map((row) => row.projection).toList(),
+        'reorderable': reorder != null,
+        'collapsible': collapsible,
       };
+
+  bool get valid =>
+      (!collapsible || title.isNotEmpty) &&
+      (reorder == null || rows.every((row) => _nativeListKinds.contains(row.kind)));
 }
 
 /// A reading surface shares the existing timeline owner. Scroll commands are
@@ -377,6 +461,8 @@ class IosNativeSurface extends StatefulWidget {
     this.controller,
     this.navigation,
     this.loadingLabel,
+    this.selection,
+    this.bottomBar = const [],
   });
 
   /// Debug-only: while set, every native snapshot (surfaces and Home) carries an unsupported version,
@@ -415,6 +501,11 @@ class IosNativeSurface extends StatefulWidget {
 
   /// Names what is loading; defaults to the generic loading copy.
   final String? loadingLabel;
+
+  /// List mode only: rows the system edit mode can select, and the actions pinned below the list
+  /// (at most 6: one count label, buttons and menus). Bottom-bar rows dispatch like toolbar rows.
+  final NativeSelection? selection;
+  final List<NativeRow> bottomBar;
   final List<NativeSection> sections;
   final List<NativeRow> toolbar;
   final Widget fallback;
@@ -462,7 +553,22 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
         ...?widget.chat?.actions,
         ...?widget.reader?.actions,
         if (widget.navigation != null) widget.navigation!,
+        ...widget.bottomBar,
       ];
+
+  /// A bottom bar, a selection and reorderable sections render in list mode only, and a selection
+  /// excludes reordering; anything else keeps the complete Flutter surface.
+  bool get _listInteractionsValid {
+    final bottomBar = widget.bottomBar;
+    final reorderable = _sections.any((section) => section.reorder != null);
+    final listMode = widget.chat == null && widget.reader == null && widget.navigation == null;
+    return _sections.every((section) => section.valid) &&
+        bottomBar.length <= 6 &&
+        bottomBar.every((row) => ['label', 'button', 'menu'].contains(row.kind)) &&
+        bottomBar.where((row) => row.kind == 'label').length <= 1 &&
+        (listMode || bottomBar.isEmpty && widget.selection == null && !reorderable) &&
+        (widget.selection == null || !reorderable && widget.selection!.validFor(_sections));
+  }
 
   @override
   void initState() {
@@ -529,6 +635,10 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
         'chat': widget.chat?.projection,
         'reader': widget.reader?.projection,
         'navigation': widget.navigation?.projection,
+        'selection': widget.selection?.projection,
+        'bottomBar': widget.bottomBar.map((row) => row.projection).toList(),
+        'expandLabel': context.l10n.expand,
+        'collapseLabel': context.l10n.collapseAction,
       };
 
   Future<Object?> _handle(MethodCall call) async {
@@ -538,6 +648,8 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
       rows: _rows,
       refresh: widget.onRefresh,
       search: widget.search,
+      selection: widget.selection,
+      sections: _sections,
     );
     if (mounted && _session.active) _schedule();
     return null;
@@ -609,6 +721,7 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
                 widget.onRefresh != null) ||
         widget.chat != null && widget.reader != null ||
         widget.reader?.validFor(_sections) == false ||
+        !_listInteractionsValid ||
         rows.any((row) => !row.valid) ||
         rows.map((row) => row.id).toSet().length != rows.length ||
         _sections.map((section) => section.id).toSet().length != _sections.length) {
