@@ -267,11 +267,14 @@ void main() {
   }
 
   /// Lets real file I/O finish, then rebuilds.
-  Future<void> settleIo(WidgetTester tester) async {
-    for (var i = 0; i < 25; i++) {
+  /// [until] bounds the wait for slow machines; without it, a fixed number of rounds runs.
+  Future<void> settleIo(WidgetTester tester, {bool Function()? until}) async {
+    for (var i = 0; i < (until == null ? 25 : 250); i++) {
+      if (until != null && i >= 25 && until()) return;
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
       await tester.pump();
     }
+    if (until != null && !until()) fail('Timed out waiting for the temporary icon file');
   }
 
   IosNativeSurface surface(WidgetTester tester) => tester.widget<IosNativeSurface>(find.byType(IosNativeSurface).last);
@@ -337,7 +340,7 @@ void main() {
       expect(rows(tester).every((row) => row.valid), isTrue);
 
       generator.generated(iconBytes);
-      await settleIo(tester);
+      await settleIo(tester, until: () => previewFile(tester) != null);
       expect(surface(tester).title, 'Focus Coach');
       expect(ids(tester), containsAll(['ai_gen_beta', 'ai_gen_regenerate_icon', 'ai_gen_public', 'ai_gen_paid']));
       expect(previewFile(tester), isNotNull);
@@ -364,18 +367,20 @@ void main() {
       final sent = everySnapshot(tester, host);
       expect(sent, isNot(contains(base64Encode(iconBytes))));
       expect(sent, isNot(contains(base64Encode(iconBytes).substring(0, 24))));
+      expect(sent, isNot(contains('data:image')));
+      expect(row(tester, 'ai_gen_preview').imageUri, startsWith('file:///'));
     });
 
     testWidgets('the temporary icon is replaced on regenerate and deleted on clear', (tester) async {
       NativeTestHost.install();
       final generator = await pumpGenerator(tester);
       generator.generated(iconBytes);
-      await settleIo(tester);
+      await settleIo(tester, until: () => previewFile(tester) != null);
       final first = previewFile(tester)!;
       expect(File(first).existsSync(), isTrue);
 
       await row(tester, 'ai_gen_regenerate_icon').action!(null);
-      await settleIo(tester);
+      await settleIo(tester, until: () => previewFile(tester) != null && previewFile(tester) != first);
       final second = previewFile(tester)!;
       expect(second, isNot(first), reason: 'Each icon gets a new file name');
       expect(File(first).existsSync(), isFalse);
@@ -395,7 +400,7 @@ void main() {
       NativeTestHost.install();
       final generator = await pumpGenerator(tester);
       generator.generated(iconBytes);
-      await settleIo(tester);
+      await settleIo(tester, until: () => previewFile(tester) != null);
       final file = previewFile(tester)!;
       await tester.pumpWidget(const SizedBox());
       await settleIo(tester);
@@ -406,7 +411,7 @@ void main() {
       NativeTestHost.install();
       final generator = await pumpGenerator(tester);
       generator.generated(iconBytes);
-      await settleIo(tester);
+      await settleIo(tester, until: () => previewFile(tester) != null);
       final file = previewFile(tester)!;
       AuthService.installLocalHarnessTokenGateway(const _AnotherOwner());
       AuthService.instance.captureSessionSnapshot();
@@ -422,7 +427,7 @@ void main() {
       NativeTestHost.install();
       final generator = await pumpGenerator(tester);
       generator.generated(iconBytes);
-      await settleIo(tester);
+      await settleIo(tester, until: () => previewFile(tester) != null);
       expect(row(tester, 'ai_gen_create').projection['enabled'], isTrue);
       await row(tester, 'ai_gen_create').action!(null);
       await tester.pump();
@@ -502,10 +507,17 @@ void main() {
   });
 
   group('Stripe Connect setup', () {
-    void mockLauncher() {
+    List<String> mockLauncher() {
       const channel = MethodChannel('plugins.flutter.io/url_launcher');
-      messenger.setMockMethodCallHandler(channel, (_) async => true);
+      final launched = <String>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        if (call.arguments is Map && (call.arguments as Map)['url'] is String) {
+          launched.add((call.arguments as Map)['url'] as String);
+        }
+        return true;
+      });
       addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      return launched;
     }
 
     testWidgets('the country choice ignores the unset option and Connect needs a country', (tester) async {
@@ -518,19 +530,19 @@ void main() {
       expect(country.value, '__unset__');
       expect(row(tester, 'stripe_connect').projection['enabled'], isFalse);
 
-      await country.action!('__unset__');
-      await tester.pump();
-      expect(payments.selectedCountryId, isNull);
-      await row(tester, 'stripe_country').action!('US');
+      await country.action!('US');
       await tester.pump();
       expect(payments.selectedCountryId, 'US');
       expect(row(tester, 'stripe_country').value, 'US');
+      await row(tester, 'stripe_country').action!('__unset__');
+      await tester.pump();
+      expect(payments.selectedCountryId, 'US', reason: 'The unset option never clears or sets a country');
       expect(row(tester, 'stripe_connect').projection['enabled'], isTrue);
     });
 
     testWidgets('the account link never reaches a snapshot', (tester) async {
       final host = NativeTestHost.install();
-      mockLauncher();
+      final launched = mockLauncher();
       final payments = _FakePayments()..setSelectedCountryId('US');
       await pumpPage(tester, const StripeConnectSetup(), payments: payments);
       await row(tester, 'stripe_connect').action!(null);
@@ -538,6 +550,7 @@ void main() {
       expect([payments.links, payments.pollStarts], [1, 1]);
       expect(ids(tester), containsAll(['stripe_retry', 'stripe_later']));
       expect(surface(tester).loading, isTrue);
+      expect(launched, [_accountLink], reason: 'The link goes only to the external browser');
       expect(everySnapshot(tester, host), isNot(contains('acct_secret_link')));
     });
 

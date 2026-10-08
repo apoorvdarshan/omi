@@ -126,6 +126,16 @@ void main() {
       await nativeProjectedRow(tester, 'ai_gen_prompt:0').action!(null);
       await tester.pump();
       expect(nativeProjectedRow(tester, 'ai_gen_prompt_text').value, 'A focus coach for deep work');
+      generator
+        ..fakeState = GenerationState.generatingIcon
+        ..notifyListeners();
+      await tester.pump();
+      expect(nativeProjectedRow(tester, 'ai_gen_progress').value, 5.0);
+      await checkNativeHost(tester, 'native-app-generator-payouts-generator-generating-dark');
+      generator
+        ..fakeState = GenerationState.idle
+        ..notifyListeners();
+      await tester.pump();
       await nativeProjectedRow(tester, 'ai_gen_send').action!(null);
       await tester.pump();
       expect(generator.prompts, ['A focus coach for deep work']);
@@ -166,7 +176,7 @@ void main() {
       await tester.pump();
       expect(setup.selectedCountryId, 'US');
       expect(nativeProjectedRow(tester, 'stripe_connect').projection['enabled'], isTrue);
-      await checkNativeHost(tester, 'native-app-generator-payouts-stripe-country-dark');
+      await checkNativeHost(tester, 'native-app-generator-payouts-stripe-setup-selected-dark');
       await tester.pumpWidget(const SizedBox());
       await tester.pump();
       expect(tester.takeException(), isNull);
