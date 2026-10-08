@@ -51,6 +51,8 @@ final class NativeModalPresenter: NSObject, UIAdaptivePresentationControllerDele
         guard snapshot.chat == nil, !snapshot.toolbar.isEmpty,
               snapshot.toolbar.allSatisfy({ $0.kind == "button" }),
               snapshot.toolbar.contains(where: { $0.id == cancelID && $0.enabled }) else { throw PresentationError.invalid }
+        // A graph needs its surface's camera and capture owner; a modal would echo no node selection.
+        guard !snapshot.allRows.contains(where: { $0.kind == "graph" }) else { throw PresentationError.invalid }
         var parent = root
         while let presented = parent.presentedViewController { parent = presented }
         guard parent.viewIfLoaded?.window != nil, !parent.isBeingDismissed else {
