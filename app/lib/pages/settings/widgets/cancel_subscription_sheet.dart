@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
-import 'package:omi/mobile/native_ui/ios_native_modal.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/settings/widgets/leave_flow_widgets.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -247,8 +246,7 @@ class _CancelConfirmStepState extends State<_CancelConfirmStep> {
     PlatformManager.instance.analytics.subscriptionCancelConfirmed(reason: _flow.reason!, details: details);
 
     // The native view shows a blocking activity while the owner works; it closes before any feedback.
-    final activity =
-        nativePresentationEnabled ? await showIosNativeActivity(context, label: context.l10n.cancelling) : null;
+    final activity = await leaveFlowActivity(context, context.l10n.cancelling);
     try {
       final bool success;
       try {

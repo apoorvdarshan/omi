@@ -7,7 +7,6 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/core/app_shell.dart';
-import 'package:omi/mobile/native_ui/ios_native_modal.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/settings/data_export.dart';
 import 'package:omi/pages/settings/widgets/leave_flow_widgets.dart';
@@ -251,8 +250,7 @@ class _DeleteConfirmStepState extends State<_DeleteConfirmStep> {
     final details = _flow.detailsText;
 
     // The native view shows a blocking activity while the request runs; it closes before anything else.
-    final activity =
-        nativePresentationEnabled ? await showIosNativeActivity(context, label: context.l10n.deleting) : null;
+    final activity = await leaveFlowActivity(context, context.l10n.deleting);
     try {
       final bool ok;
       try {
@@ -404,6 +402,7 @@ class _DeleteConfirmStepState extends State<_DeleteConfirmStep> {
           NativeSection('delete_export_section', [
             NativeRow('delete_export', l10n.exportAllData,
                 symbol: 'square.and.arrow.down',
+                subtitle: exporting ? l10n.exportingAllData : '',
                 enabled: !_isDeleting && !exporting,
                 action: (_) => DataExport.run(context)),
           ]),

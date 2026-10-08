@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
+import 'package:omi/mobile/native_ui/ios_native_modal.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -152,6 +153,18 @@ Widget nativeLeaveStep(
       ...sections,
     ],
   );
+}
+
+/// A blocking native activity with [label] while a leave flow's owner request runs, or null when the
+/// native host cannot show one (flag off, unsupported, or a host without the handler). It never throws,
+/// so the caller's own busy state and error handling always run.
+Future<NativeActivity?> leaveFlowActivity(BuildContext context, String label) async {
+  if (!nativePresentationEnabled) return null;
+  try {
+    return await showIosNativeActivity(context, label: label);
+  } catch (_) {
+    return null;
+  }
 }
 
 /// [text] cut to at most [maximumLength] characters, so a native text row never carries a value

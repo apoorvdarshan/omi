@@ -203,6 +203,7 @@ void main() {
       DataExport.exportInProgress.value = true;
       await _settle(tester);
       expect(_row(tester, 'delete_export').projection['enabled'], false);
+      expect(_row(tester, 'delete_export').subtitle, _l10n.exportingAllData);
       DataExport.exportInProgress.value = false;
       await _settle(tester);
 
@@ -216,6 +217,8 @@ void main() {
       expect(_row(tester, 'delete_keep').projection['enabled'], false);
       expect(_row(tester, 'leave_back').projection['enabled'], false);
       expect(_row(tester, 'delete_account').projection['enabled'], false);
+      await expectLater(_send(host, 'delete_account'), throwsA(isA<PlatformException>()),
+          reason: 'A second tap while deleting never reaches the request');
 
       reply.complete(false);
       await _settle(tester);
