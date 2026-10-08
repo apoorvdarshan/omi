@@ -89,6 +89,8 @@ class _OnboardingKnowledgeGraphStepState extends State<OnboardingKnowledgeGraphS
     // Never the surface's loading or failed state: Continue stays reachable whatever the graph does.
     return IosNativeSurface(
       title: l10n.onboardingWhatIKnowAboutYouTitle,
+      // The placeholder shows this copy over the graph while it loads, without the loading state.
+      empty: graph.isLoading ? l10n.loadingKnowledgeGraph : '',
       fallback: classic,
       sections: [
         NativeSection('onboarding_knowledge_graph', [

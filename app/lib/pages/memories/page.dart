@@ -13,6 +13,7 @@ import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -75,7 +76,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
+    if (nativePresentationEnabled) WidgetsBinding.instance.removeObserver(this);
     _graph
       ?..removeListener(_onGraphChanged)
       ..dispose();
@@ -89,7 +90,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
+    if (nativePresentationEnabled) WidgetsBinding.instance.addObserver(this);
     (() async {
       final provider = context.read<MemoriesProvider>();
       try {
@@ -313,6 +314,8 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
     final searching = provider.searchQuery.isNotEmpty;
     final filtered = provider.memories.isNotEmpty || provider.filterThisDeviceOnly;
     final showGraph = widget.showMindMap && !searching && provider.memories.isNotEmpty;
+    // Locked rows name the upgrade only where the plan page offers one.
+    context.watch<UsageProvider>();
     void onEdit(BuildContext context, Memory memory, MemoriesProvider provider) {
       PlatformManager.instance.analytics.memoryListItemClicked(memory);
       _showQuickEditSheet(context, memory, provider);
@@ -373,7 +376,11 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                           : l10n.noMemoriesYet,
                   kind: 'label'),
               if (searching)
-                NativeRow('memory_clear_search', l10n.clearSearch, action: (_) => _onNativeSearch(provider, ''))
+                NativeRow('memory_clear_search', l10n.clearSearch, action: (_) {
+                  // As the classic empty state: no search-cleared event, which only the field's clear sends.
+                  _searchController.clear();
+                  provider.setSearchQuery('');
+                })
               else if (filtered)
                 NativeRow('memory_reset_filters', l10n.resetFilters, action: (_) {
                   provider.clearCategoryFilter();

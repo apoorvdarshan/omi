@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -547,7 +548,9 @@ NativeRow memoryNativeRow(BuildContext context, Memory memory, MemoriesProvider 
   final l10n = context.l10n;
   void open(Object? _) => openMemoryRow(context, memory, provider, onEdit: onEdit);
   if (memory.isLocked) {
-    return NativeRow('memory_${memory.id}', l10n.upgradeToUnlimited,
+    // The upgrade copy only where the plan page can offer one, as the classic overlay shows it.
+    final title = context.read<UsageProvider>().showSubscriptionUI ? l10n.upgradeToUnlimited : l10n.memoryDetailsTitle;
+    return NativeRow('memory_${memory.id}', title,
         kind: 'navigation', symbol: memoryLedgerSymbol(memory), action: open);
   }
   final editable = memoryIsEditable(memory);
@@ -599,7 +602,8 @@ NativeRow memoryNativeRow(BuildContext context, Memory memory, MemoriesProvider 
           onEdit(context, memory, provider);
         case 'delete':
           OmiHaptics.medium();
-          await deleteMemoryWithUndo(context, provider, memory);
+          // Fire and forget, as the classic row does: the row must not stay pending for the Undo toast.
+          unawaited(deleteMemoryWithUndo(context, provider, memory));
         case 'open_conversation':
           await openMemoryConversation(context, memory);
         case 'review_right' || 'review_wrong':

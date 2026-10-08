@@ -154,8 +154,10 @@ void main() {
       });
       await load;
 
-      expect(graph.simulation.nodes, isEmpty);
-      expect(graph.isLoading, isTrue, reason: 'the stale result changes nothing');
+      expect(graph.simulation.nodes, isEmpty, reason: 'the stale result is not applied');
+      expect(graph.isLoading, isFalse, reason: 'the graph does not stay loading');
+      expect(graph.error, lookupAppLocalizations(const Locale('en')).couldNotLoadKnowledgeGraph,
+          reason: 'Try Again reloads for the current session');
     });
 
     test('a load for the current session applies, and a failure reports the localized error', () async {

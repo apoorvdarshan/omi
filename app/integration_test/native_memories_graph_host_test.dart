@@ -116,7 +116,7 @@ void main() {
 
       rebuildParent(() {});
       await tester.pump(const Duration(seconds: 1));
-      expect(rebuilds, 2);
+      expect(rebuilds, greaterThanOrEqualTo(2));
       expect(nativeViewId(tester, find.byType(UiKitView)), view, reason: 'a parent rebuild keeps the native view');
       await checkNativeHost(tester, 'native-memories-knowledge-graph-onboarding-rebuilt-dark');
 

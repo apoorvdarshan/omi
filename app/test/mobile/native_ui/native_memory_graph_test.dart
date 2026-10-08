@@ -251,7 +251,21 @@ void main() {
       final bytes = sharedBytes.single;
       expect(bytes.sublist(1, 4), 'PNG'.codeUnits);
       expect(ByteData.sublistView(bytes).getUint32(16), 600, reason: 'the shared image keeps the captured size');
-      expect(bytes, isNot(png), reason: 'the watermark is drawn over the capture');
+      final watermarked = (await tester.runAsync(() async {
+        final codec = await ui.instantiateImageCodec(bytes);
+        final image = (await codec.getNextFrame()).image;
+        final pixels = (await image.toByteData())!;
+        image.dispose();
+        codec.dispose();
+        // Any light pixel inside the "omi.me" band over the black capture is the watermark.
+        for (var y = 140; y < 220; y++) {
+          for (var x = 0; x < 600; x++) {
+            if (pixels.getUint8((y * 600 + x) * 4) > 200) return true;
+          }
+        }
+        return false;
+      }))!;
+      expect(watermarked, isTrue, reason: 'the watermark is drawn over the capture');
       expect(temp.listSync(), isEmpty, reason: 'the temporary file is removed after the sheet');
 
       capture = null;
@@ -260,6 +274,20 @@ void main() {
       expect(host.calls.where((call) => call.$2.method == 'captureImage'), hasLength(2));
       expect(shared, hasLength(1), reason: 'no capture, no share');
     });
+  });
+
+  testWidgets('a full graph the native renderer cannot take keeps the classic page', (tester) async {
+    NativeTestHost.install();
+    Future<Map<String, dynamic>> huge() async => {
+          'nodes': [
+            for (var i = 0; i < NativeGraph.maxNodes; i++) {'id': 'n$i', 'label': 'n$i'}
+          ],
+          'edges': const [],
+        };
+    await tester.pumpWidget(NativeTestHost.app(MemoryGraphPage(trackOpenEvent: false, loadGraph: huge)));
+    await NativeTestHost.settle(tester);
+    expect(find.byType(UiKitView), findsNothing);
+    expect(find.byType(AppBar), findsOneWidget);
   });
 
   group('onboarding knowledge graph step', () {

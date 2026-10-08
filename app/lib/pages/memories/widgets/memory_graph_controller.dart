@@ -47,7 +47,9 @@ class MemoryGraphController extends ChangeNotifier {
     if (_disposed) return;
     // The native preview fences to the account; the default build keeps its original load.
     final session = nativePresentationEnabled ? AuthService.instance.captureSessionSnapshot() : null;
-    bool current() => !_disposed && (session == null || AuthService.instance.isSessionSnapshotCurrent(session));
+    final fenced = nativePresentationEnabled;
+    bool current() =>
+        !_disposed && (!fenced || session != null && AuthService.instance.isSessionSnapshotCurrent(session));
     if (!silent) {
       isLoading = true;
       error = null;
@@ -86,6 +88,12 @@ class MemoryGraphController extends ChangeNotifier {
     } finally {
       if (current() && !silent) {
         isLoading = false;
+        _changed();
+      } else if (!_disposed && !silent && isLoading) {
+        // A stale result is dropped, but the graph must not stay loading: Try Again loads for the
+        // current session.
+        isLoading = false;
+        error = localizations().couldNotLoadKnowledgeGraph;
         _changed();
       }
     }

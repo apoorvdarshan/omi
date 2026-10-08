@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/http/api/memories.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
@@ -31,7 +32,8 @@ class _Memories extends MemoriesProvider {
   bool device = false, partial = false, belief = false, history = false, truncated = false, more = false;
   final using = <String>{}, reverting = <String>{}, revertable = <String>{};
   final deleted = <String>[];
-  var loads = 0;
+  final calls = <String>[];
+  var loads = 0, confirmed = 0;
 
   @override
   List<Memory> get memories => items;
@@ -77,7 +79,25 @@ class _Memories extends MemoriesProvider {
   @override
   Future<void> deleteMemory(Memory memory) async => deleted.add(memory.id);
   @override
-  Future<void> confirmPendingDeletion({String? id}) async {}
+  Future<void> confirmPendingDeletion({String? id}) async => confirmed++;
+  @override
+  Future<bool> reviewMemory(Memory memory, bool value) async {
+    calls.add('review:${memory.id}:$value');
+    return true;
+  }
+
+  @override
+  Future<bool> setMemoryUse(Memory memory, MemoryUseAction action) async {
+    calls.add('use:${memory.id}:${action.apiValue}');
+    return true;
+  }
+
+  @override
+  Future<bool> revertSupersededFact(Memory memory) async {
+    calls.add('revert:${memory.id}');
+    return true;
+  }
+
   @override
   Future<bool> restoreLastDeletedMemory({String? id}) async => true;
 }
@@ -184,10 +204,11 @@ Future<void> _send(NativeTestHost host, String id, [Object? value]) =>
     host.sendFromNative(host.created.first, MethodCall('action', {'id': id, 'value': value}));
 
 /// Builds [memory]'s native row with the page's providers in scope.
-Future<NativeRow> _row(WidgetTester tester, _Memories memories, Memory memory) async {
+Future<NativeRow> _row(WidgetTester tester, _Memories memories, Memory memory,
+    {bool subscriptionUI = true, void Function(Memory)? onEdit}) async {
   late NativeRow row;
-  await tester.pumpWidget(_app(memories, Builder(builder: (context) {
-    row = memoryNativeRow(context, memory, memories, onEdit: (_, __, ___) {});
+  await tester.pumpWidget(_app(memories, subscriptionUI: subscriptionUI, Builder(builder: (context) {
+    row = memoryNativeRow(context, memory, memories, onEdit: (_, edited, __) => onEdit?.call(edited));
     return const SizedBox();
   })));
   return row;
@@ -256,6 +277,44 @@ void main() {
     });
   });
 
+  group('memory row actions', () {
+    testWidgets('without a plan to offer, a locked row is a neutral title', (tester) async {
+      final memory = _memory('m2', 'Secret plan', locked: true);
+      final row = await _row(tester, _Memories([memory]), memory, subscriptionUI: false);
+      expect(row.title, _en.memoryDetailsTitle);
+      expect(row.projection.toString(), isNot(contains('Secret plan')));
+    });
+
+    testWidgets('an unreviewed fact offers both verdicts; a wrong verdict leaves only right', (tester) async {
+      final open = _memory('f1', 'Lives in Brooklyn', ledgerKind: KnowledgeLedgerKind.fact);
+      final wrong = _memory('f2', 'Lives in Queens', ledgerKind: KnowledgeLedgerKind.fact, userReview: false);
+      final memories = _Memories([open, wrong]);
+      expect((await _row(tester, memories, open)).options.keys, containsAll(['review_right', 'review_wrong']));
+      final row = await _row(tester, memories, wrong);
+      expect(row.options.keys, contains('review_right'));
+      expect(row.options.keys, isNot(contains('review_wrong')));
+    });
+
+    testWidgets('tap and options reach the existing owners', (tester) async {
+      final fact = _memory('f1', 'Lives in Brooklyn', ledgerKind: KnowledgeLedgerKind.fact, suppressed: false);
+      final superseded = _memory('s1', 'Lived in Boston',
+          ledgerKind: KnowledgeLedgerKind.fact, supersededBy: 'f1', invalidAt: DateTime.utc(2026, 9, 2));
+      final memories = _Memories([fact, superseded])
+        ..belief = true
+        ..revertable.add('s1');
+      final edited = <String>[];
+      final row = await _row(tester, memories, fact, onEdit: (memory) => edited.add(memory.id));
+      await row.action!(null);
+      await row.action!('edit');
+      expect(edited, ['f1', 'f1'], reason: 'an editable tap and Edit open the edit sheet');
+      await row.action!('review_right');
+      await row.action!('use_suppress');
+      final revert = await _row(tester, memories, superseded);
+      await revert.action!('revert');
+      expect(memories.calls, ['review:f1:true', 'use:f1:${MemoryUseAction.suppress.apiValue}', 'revert:s1']);
+    });
+  });
+
   group('native Memories page', () {
     testWidgets('a locked tap routes to the plan page when subscriptions show', (tester) async {
       final host = NativeTestHost.install();
@@ -276,14 +335,19 @@ void main() {
     testWidgets('delete goes through the undo delete', (tester) async {
       final host = NativeTestHost.install();
       final memories = _Memories([_memory('m1', 'Likes tea')]);
-      await tester.pumpWidget(_app(memories, const MemoriesPage(showMindMap: false)));
+      await tester.pumpWidget(_app(memories, const Scaffold(body: MemoriesPage(showMindMap: false))));
       await NativeTestHost.settle(tester);
       expect(_published(host).$2['memory_m1']!['swipeTrailing'], ['delete']);
 
       unawaited(_send(host, 'memory_m1', 'delete'));
       await tester.pump();
       expect(memories.deleted, ['m1']);
-      await tester.pump(const Duration(seconds: 10));
+      expect(memories.confirmed, 0, reason: 'the delete waits for its Undo toast');
+      // The toast closes without Undo; the undo delete then commits.
+      ScaffoldMessenger.of(tester.element(find.byType(MemoriesPage))).hideCurrentSnackBar();
+      await tester.pump();
+      await tester.pump();
+      expect(memories.confirmed, 1);
     });
 
     testWidgets('shows the partial and history banners', (tester) async {
