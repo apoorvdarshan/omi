@@ -1,0 +1,70 @@
+You are a senior Flutter/iOS engineer working in the GitHub repository apoorvdarshan/omi (a fork of BasedHardware/omi; the Flutter app is in app/). You run in a Linux cloud sandbox with NO Xcode and NO iOS Simulator. Your job is one Dart-only migration batch of an opt-in SwiftUI presentation for the Omi iOS app. Everything you need is in this prompt and in the repository.
+
+## 1. Setup (do exactly)
+- git fetch origin feat/ios-swiftui-presentation && git switch -c claude/swiftui-b-live-capture-processing origin/feat/ios-swiftui-presentation
+- Install Flutter 3.44.5 (mandatory; never use another version): git clone --depth 1 -b 3.44.5 https://github.com/flutter/flutter.git $HOME/flutter-3.44.5 && export PATH=$HOME/flutter-3.44.5/bin:$PATH && flutter --version
+- Bootstrap the app exactly like the "Missing generated files" block in app/test.sh (copy lib/firebase_options_local.dart to lib/firebase_options_dev.dart and lib/firebase_options_prod.dart; write app/.dev.env with "API_BASE_URL=", "USE_WEB_AUTH=true", "USE_AUTH_CUSTOM_TOKEN=true"; copy the prebuilt Google service files as listed there; then flutter pub get and flutter pub run build_runner build --delete-conflicting-outputs). Never commit any of these generated/bootstrap files.
+- Sanity check: cd app && flutter test --no-pub test/mobile/native_ui must pass before you change anything (report if not).
+
+## 2. Background
+The branch adds an opt-in SwiftUI/Liquid Glass presentation behind the compile flag OMI_IOS_SWIFTUI (Dart const iosSwiftUiEnabled; native only when the flag is on AND Platform.isIOS AND supportsIosSwiftUi()). Flutter screens project their state into versioned snapshots of rows (IosNativeSurface, NativeRow, NativeSection, showIosNativeModal, showOmiSheet nativeBuilder, IosNativeEdit, ...) that a SwiftUI renderer draws; callbacks stay in Dart with the existing owners; any invalid row makes the whole screen fall back to the complete Flutter screen. Read first: app/docs/ios-native-ui.md, app/AGENTS.md, all of app/lib/mobile/native_ui/*.dart, and app/ios/Runner/NativeUI/NativeSurfaceContract.swift (to learn exactly which row kinds/values Swift accepts — you cannot run Swift, so mirror its validation rules carefully). Study migrated screens as idioms: app/lib/pages/settings/usage_native.dart, transcription_native.dart, app/lib/pages/conversations/auto_sync_native.dart, app/lib/pages/conversation_detail/native_conversation_detail.dart, app/lib/pages/settings/people.dart, app/lib/pages/action_items/action_items_page.dart, app/lib/pages/chat/page.dart, and the tests in app/test/mobile/native_ui/ (use test/mobile/native_ui/native_test_host.dart and the debug seams IosNativeSurface.debugNativeHostForTest / nativePresentationEnabled / supportsNativePresentation() so tests reach the native paths on a non-iOS machine). Host tests use app/integration_test/support/native_host_harness.dart (runNativeHostSuite, nativeProjectedRow, nativeHostApp).
+
+Only the P0 bridge primitive is in your base. Primitives P1-P8 described in the plan are NOT available yet: do not reference them. Where the batch spec says a piece uses P1 (activity HUD, dismissSignal) or P2 (native toasts), keep using the existing APIs (existing showIosNativeModal / OmiFeedback / Flutter spinners) — P2 will later route OmiFeedback natively without changes on your side.
+
+## 3. Your batch (authoritative)
+NAME: live-capture-processing
+# Batch: live-capture-processing
+
+## Screens
+- Live capture page (ConversationCapturingPage) reached from the native Home capture card, deep link and battery pill
+- Processing conversation page (ProcessingConversationPage)
+- Record options sheet and pendant-is-listening sheet (native Home record action)
+- Live capture problem-details sheet
+
+## Owned files (only these may be created/edited)
+- app/lib/pages/conversation_capturing/page.dart
+- app/lib/pages/conversation_capturing/conversation_capturing_native.dart
+- app/lib/pages/conversation_capturing/capture_state_header.dart
+- app/lib/pages/conversation_capturing/widgets/carried_speaker_banner.dart
+- app/lib/pages/conversation_capturing/widgets/speaker_suggestion_chip.dart
+- app/lib/pages/processing_conversations/page.dart
+- app/lib/pages/home/widgets/battery_info_widget.dart
+- app/lib/pages/conversations/widgets/live_capture_card.dart
+- app/test/mobile/native_ui/native_live_capture_test.dart
+- app/integration_test/native_live_capture_host_test.dart
+
+## Instructions
+The scouts missed this area; the parity ledger lists it as 'Detailed capture flows'. Common rules: Dart only. CaptureProvider, the capture controller, WAL upload, speaker-label APIs, MediaViewerPage and the name-speaker sheet stay the owners. Native code gets no audio or photo bytes. Flag-off behaviour is unchanged. Uses P0, P2 and the existing reader idiom from conversation detail (NativeReader following, scroll suspend). 1) ConversationCapturingPage: add part conversation_capturing_native.dart. When iosSwiftUiEnabled, return IosNativeSurface with title = the same display-state label ConversationStateAppBar shows (source label, buffering duration), fallback the current Scaffold, and toolbar back. Section 'capture_status': the recovery prompt projected from the existing wedge monitor, using the same handler as the native Home 'recovery' alert; the unsynced-WAL indicator as a label with the same copy as _buildUnsyncedWalIndicator, plus 'capture_wal_retry' calling retryFailedSessionWalUploads when retryable; and the carried-speaker banner as label rows with its existing actions. Section 'capture_timeline' in chronological order: transcript segments as kind 'transcript' rows 'capture_segment:<index>' (literal text, subtitle speaker label and time) with options {'identify': identifySpeaker} calling _nameSpeaker(segmentId, speakerId), the existing native sheet; speaker-suggestion accept and reject options calling the existing chip handlers; segments in taggingSegmentIds disabled; photo groups as navigation rows 'capture_photos:<index>' (title time · conversationPhotosCount) calling _openPhotoViewer (native MediaViewerPage; no thumbnails cross). When there are no segments or photos, empty = _liveCaptureEmptyStateText. reader: NativeReader(targetId = last row id, request = segmentsPhotosVersion, following true, scroll menu with 'suspend' when the user drags). footer: 'capture_pause' (pause.fill or play.fill, resume or pause, shown when LiveCaptureCard.canPause, enabled when !_mutePending && !isCallActive) calling _toggleMute, and 'capture_finish' (finish, checkmark) calling _stopConversation. 2) ProcessingConversationPage: IosNativeSurface reader with literal transcript rows and photo-group rows (to MediaViewerPage), title the processing state label, back. Empty is noContentToDisplay. Fallback is the current Scaffold. 3) battery_info_widget.dart: _showRecordOptions and _showPendantListening pass a nativeBuilder, an IosNativeSurface with button rows (phone mic and phone call; record with phone, phone call and keep pendant) whose actions pop the sheet, then call exactly the existing callbacks. 4) live_capture_card.dart: LiveCaptureCard.showDetails passes a nativeBuilder: an explanation label plus 'capture_details_ok' (gotIt) that pops. No new strings.
+
+## Tests
+native_live_capture_test.dart, with a fake CaptureProvider: timeline ordering of segments and photos; identify calls _nameSpeaker with the segment's ids; tagging segments disabled; the pause row visibility rules and the call-active disable; finish calls _stopConversation once; the unsynced-WAL label and retry; the empty-state copy variants; following and targetId advance with segmentsPhotosVersion; the record and pendant sheets call the same callbacks after pop; the details sheet pops. Host (native_live_capture_host_test.dart): open ConversationCapturingPage with seeded inert capture state, check native containment, footer Finish reaches the owner, and the processing page renders natively.
+
+
+## Critic addendum (authoritative; supersedes the batch spec where they conflict)
+- M3/O4: you also own lib/pages/conversations/widgets/processing_capture.dart. ProcessingConversationPage must offer the timed-out 'Try again' (ProcessingConversationWidget._onRetry behaviour) natively and classically, so routing the library row to the page loses nothing.
+- O5: reuse lib/pages/conversations/widgets/capture_recovery_banner.dart (add it to your owned files) rather than the inline closure in native_home_presentation.dart.
+- Keep frozen signatures ProcessingConversationPage(conversation:), LiveCaptureCard.formatElapsed, HomeRecordButtonState.performPrimaryAction/showOptions.
+
+
+## 4. Cross-batch rules (authoritative)
+- Frozen shared files (never edit): app/lib/mobile/native_ui/**, app/lib/ui/feedback/omi_feedback.dart, app/lib/ui/feedback/omi_dialogs.dart, app/lib/ui/components/omi_sheet.dart, all of app/ios/**, app/test/mobile/native_ui/native_surface_projection_test.dart, app/integration_test/native_ui_host_test.dart, app/integration_test/support/native_host_harness.dart, shared test infra (integration_test/visual_audit/fakes.dart, integration_test/journeys/support/hermetic_boot.dart, native_ui_inspection.dart, native_advanced_host_cases.dart, native_remaining_host_cases.dart, shared test/ helpers). Every batch is Dart-only. A missing bridge capability means that row stays on the classic fallback; report it.
+- l10n: never edit ARB files or generated app_localizations files; reuse existing keys.
+- Provider files are read-only. analysis_baseline.json, pubspec.yaml/lock, docs/ios-native-ui*.md are integrator-only. Batches add no packages and must not raise analyzer counts.
+- Frozen cross-batch signatures: openConversationListRow, ProcessingConversationPage(conversation:), DayConversationsPage(date:, fetchConversations:), ConversationMapPage, CapabilityAppsPage/CategoryAppsPage constructors, WalItemDetailPage(wal:), FirmwareUpdate/OmiGlassOtaUpdate constructors, InteractiveDeviceOnboardingWrapper, PaymentsPage, UpdateAppPage, AiAppGeneratorPage, MemoryGraphPage(loadGraph:, trackOpenEvent:), ConversationsPage(requestInitialLoad:, nativeLibrary:), conversationRowTitle, LiveCaptureCard.formatElapsed, DailySummaryDetailPage(summaryId:, summary:), MemoriesPage(asRoot:), ChatPage(isPivotBottom:, autoStartVoice:, initialDraft:), UsagePage(showUpgradeDialog:), showGlobalSearch(context, initialQuery:), HomeRecordButtonState.performPrimaryAction/showOptions, DeviceSettings(), ConnectDevicePage(), AutoSyncPage(), SyncPage(). You may add optional named parameters but never remove or rename existing ones.
+- Existing default-build tests must stay green without edits. Extractions must preserve behaviour because the default build runs the same code.
+- Validation traps: never let real-world data produce an invalid snapshot (clamp numbers, truncate labels, omit degenerate controls).
+- Every showOmiSheet nativeBuilder fallback body must be wrapped in OmiSheetScaffold (see lib/pages/conversations/widgets/move_to_folder_sheet.dart).
+- showIosNativeModal null means "use the Flutter path"; cancel is a non-null result with action null. Handle both.
+- Temporary sandbox files you create must be deleted on dispose, session change and stale completion.
+
+## 5. Hard rules
+Every feature, state (loading/empty/error/locked/offline), action, analytics event, copy and navigation path of each Flutter screen stays reachable and equivalent with the flag on; mutations stay with the existing Dart owners; no app-auth tokens or secrets cross the bridge; real-world data must never produce an invalid snapshot (clamp/truncate/omit); invalid rows fall back to the complete Flutter screen; account-session fencing; flag-off and Android behaviour must stay identical (gate every native path); no new packages; no ARB/l10n edits (reuse existing keys); edit ONLY your batch's owned files plus its new test files; never edit Swift/iOS files, app/lib/mobile/native_ui/**, omi_feedback.dart, omi_dialogs.dart, omi_sheet.dart or shared test infrastructure. If a needed bridge capability is missing, keep that piece on the classic Flutter path and report it. Keep every app/lib Dart file under 1500 lines. Match surrounding style.
+
+## 6. Work plan
+1. For every screen in the batch, read the complete Flutter screen and list every feature/state/action/analytics call/string; then implement the native projection with existing primitives, keeping the Flutter screen as fallback.
+2. Write the Dart tests named in the spec, and the host test target app/integration_test/native_live_capture_processing_host_test.dart using runNativeHostSuite (screenshot names 'native-live-capture-processing-<screen>-dark'); you cannot run host tests here — make them compile (flutter analyze) and keep them simple and deterministic.
+3. Verify until green: dart format --line-length 120 on changed files; flutter analyze <changed files and tests> (no errors, no new warnings/infos); flutter test --no-pub <your tests> test/mobile/native_ui <every existing test importing a file you changed>; git diff --check.
+4. Independent review: launch three reviewer subagents if the Agent/Task tool is available (otherwise do three separate passes yourself): (a) feature parity vs the Flutter screens, (b) rules/safety/ownership/fallback/session fencing/only-owned-files, (c) tests and verification. Fix every real finding and re-verify.
+5. Commit only your owned files and new tests (never bootstrap files): message title "feat(ios): <what this batch makes native, <= 72 chars>", blank line, 2-5 plain sentences (what is native now, what stays Flutter and why, how verified, that host tests still need a Simulator run), blank line, "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>".
+6. Push: git push -u origin claude/swiftui-b-live-capture-processing. Never push any other branch, never force-push, never open a pull request.
+7. Final answer: branch name, commit SHA, screens done, anything kept on Flutter and why, tests added, verification output summary, and open issues.
