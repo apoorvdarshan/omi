@@ -234,7 +234,7 @@ struct NativeSurfaceTests {
         rejects(input)
 
         func categories(_ count: Int, label: String = "Day") -> [[String: Any]] {
-            (0..<count).map { ["x": $0, "y": Double($0) * 2, "label": "\(label) \($0)"] }
+            (0..<count).map { ["x": $0, "y": Double($0) * 2, "label": "\(label) \($0)"] as [String: Any] }
         }
         var chart: [String: Any] = ["id": "chart", "title": "Messages", "kind": "chart", "subtitle": "Day",
             "options": [], "enabled": false, "destructive": false]
@@ -257,7 +257,9 @@ struct NativeSurfaceTests {
             [["x": 1, "y": 1, "label": "Day 1"], ["x": 0, "y": 1, "label": "Day 0"]],
             [["x": 0, "y": 1, "label": "Day 0"], ["x": 2, "y": 1, "label": "Day 2"]],
             [["x": 0.5, "y": 1, "label": "Half"]],
+            // SafeJSON already refuses a non-finite y before the chart rule sees it.
             [["x": 0, "y": Double.nan, "label": "Day 0"]],
+            [["x": 0, "y": 1]],
             [["x": 0, "y": 1, "label": String(repeating: "a", count: 65)]],
             categories(10001),
         ]
@@ -266,10 +268,24 @@ struct NativeSurfaceTests {
             input["sections"] = section(chart)
             rejects(input)
         }
-        chart["points"] = categories(3)
-        chart["chartStyle"] = "pie"
+        chart["points"] = categories(10000)
+        chart["chartStyle"] = "bar"
         input["sections"] = section(chart)
-        rejects(input)
+        _ = try NativeSurfaceSnapshot.decode(input)
+        chart["points"] = categories(3)
+        for style in ["pie", ""] {
+            chart["chartStyle"] = style
+            input["sections"] = section(chart)
+            rejects(input)
+        }
+        for kind in ["waveform", "message_ai"] {
+            var other = chart
+            other["kind"] = kind
+            other["chartStyle"] = "bar"
+            other["points"] = [["x": 0, "y": 0.5, "label": "Day 0"]]
+            input["sections"] = section(other)
+            rejects(input)
+        }
         var label: [String: Any] = ["id": "label", "title": "Label", "kind": "label", "subtitle": "", "options": [],
             "enabled": false, "destructive": false, "chartStyle": "bar", "points": categories(3)]
         input["sections"] = section(label)

@@ -165,7 +165,7 @@ class NativeRow {
     if (id.isEmpty || id.startsWith('_') || options.keys.any((id) => id.isEmpty)) return false;
     if (plainText && !['message_ai', 'message_user'].contains(kind)) return false;
     // A rich AI body is Markdown blocks, never literal text too; one message carries at most 2,000.
-    if (plainText && blocks.isNotEmpty || kind == 'message_ai' && blocks.length > 2000) return false;
+    if ((plainText && blocks.isNotEmpty) || (kind == 'message_ai' && blocks.length > 2000)) return false;
     if (chartStyle != null && !_validCategoricalChart) return false;
     if (kind != 'keypad' && (keypadMode != null || eraseLabel != null || clearLabel != null)) return false;
     if (level != null && (level! < 0 || level! > 3)) return false;

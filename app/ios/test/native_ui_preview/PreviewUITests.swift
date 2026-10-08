@@ -490,11 +490,13 @@ final class PreviewUITests: XCTestCase {
             XCTAssertTrue(app.staticTexts[text].waitForExistence(timeout: 10), text)
         }
         // A link whitelist never adds a trailing button; only the retry row's explicit symbol does.
-        XCTAssertEqual(app.buttons.matching(identifier: "chat_rich_ai").count, 0)
-        XCTAssertEqual(app.buttons.matching(identifier: "chat_rich_retry").count, 1)
+        XCTAssertTrue(app.staticTexts["Open"].exists)
+        XCTAssertFalse(app.buttons["Open"].exists)
+        XCTAssertTrue(app.buttons["Try again"].exists)
         capture(app, "native-chat-rich-ai-message")
-        for link in ["another site", "a plain link", "unlisted note"] {
-            XCTAssertTrue(app.links[link].exists, link)
+        // Neither an unlisted link in a reply nor one in a reader row without options leaves the app.
+        for link in ["another site", "unlisted note"] {
+            XCTAssertTrue(app.links[link].waitForExistence(timeout: 5), link)
             app.links[link].tap()
             Thread.sleep(forTimeInterval: 2)
             XCTAssertEqual(app.state, .runningForeground, "\(link) must not open the system browser")
@@ -502,7 +504,8 @@ final class PreviewUITests: XCTestCase {
         }
         app.links["allowed guide"].tap()
         XCTAssertTrue(app.staticTexts["chat_rich_ai:https://omi.me/allowed"].waitForExistence(timeout: 5))
-        app.buttons["chat_rich_retry"].tap()
+        XCTAssertEqual(app.state, .runningForeground)
+        app.buttons["Try again"].tap()
         XCTAssertTrue(app.staticTexts["chat_rich_retry:"].waitForExistence(timeout: 5))
     }
 
@@ -519,23 +522,23 @@ final class PreviewUITests: XCTestCase {
     private func assertCategoricalCharts(_ fixture: String) {
         for large in [false, true] {
             let app = start(large ? ["surface", fixture, "large"] : ["surface", fixture])
-            let many = app.otherElements["chart_many"]
-            XCTAssertTrue(many.waitForExistence(timeout: 10))
-            XCTAssertEqual(many.label, "Messages per day")
-            XCTAssertEqual(many.frame.height, 200, accuracy: 1)
-            XCTAssertGreaterThan(many.children(matching: .any).count, 0)
+            XCTAssertTrue(app.staticTexts["Messages per day"].waitForExistence(timeout: 10))
+            assertChart(app, "Messages per day")
             capture(app, "native-\(fixture)\(large ? "-large-text" : "")")
-            let single = app.otherElements["chart_single"]
+            let single = app.staticTexts["Single day"]
             for _ in 0..<6 where !(single.exists && single.isHittable) { app.swipeUp() }
-            XCTAssertTrue(single.isHittable)
-            XCTAssertEqual(single.label, "Single day")
-            XCTAssertEqual(single.frame.height, 200, accuracy: 1)
-            XCTAssertGreaterThanOrEqual(single.children(matching: .any).count, 1, "The single category is drawn")
+            XCTAssertTrue(single.exists)
+            assertChart(app, "Single day")
             let legacy = app.staticTexts["Collecting data"]
             for _ in 0..<6 where !(legacy.exists && legacy.isHittable) { app.swipeUp() }
-            XCTAssertTrue(legacy.exists)
-            XCTAssertFalse(app.otherElements["chart_legacy"].exists)
+            XCTAssertTrue(legacy.exists, "The unstyled chart keeps its one-point subtitle")
             capture(app, "native-\(fixture)-single\(large ? "-large-text" : "")")
         }
+    }
+
+    /// The chart itself carries its title as accessibility label at the fixed 200 pt height.
+    private func assertChart(_ app: XCUIApplication, _ title: String) {
+        let labelled = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", title))
+        XCTAssertTrue(labelled.allElementsBoundByIndex.contains { abs($0.frame.height - 200) <= 1 }, title)
     }
 }

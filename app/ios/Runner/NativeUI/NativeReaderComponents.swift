@@ -19,7 +19,13 @@ struct NativeRichTextView: View {
                 }.padding(.leading, CGFloat(block.indent) * 16)
             }
         }.frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
-            .environment(\.openURL, nativeWhitelistedLinks(row, state: state))
+            .environment(\.openURL, OpenURLAction { url in
+                // Native code never opens a URL itself: only a link from this row's whitelist reaches
+                // its Dart owner, and without options every link is discarded.
+                guard row.enabled, row.options.contains(where: { $0.id == url.absoluteString }) else { return .discarded }
+                Task { await state.send(row.id, value: url.absoluteString) }
+                return .handled
+            })
     }
     @ViewBuilder private func content(_ block: NativeSurfaceRow.RichBlock) -> some View {
         switch block.kind {
@@ -194,18 +200,6 @@ struct NativePlaybackSlider: View {
     }
 }
 
-/// Links reach only the row's Dart owner, and only from its whitelist. Native code never opens a URL
-/// itself: without options, or without an owner, every link is discarded.
-@available(iOS 16.0, *)
-@MainActor
-func nativeWhitelistedLinks(_ row: NativeSurfaceRow, state: NativeSurfaceState) -> OpenURLAction {
-    OpenURLAction { url in
-        guard row.enabled, row.options.contains(where: { $0.id == url.absoluteString }) else { return .discarded }
-        Task { await state.send(row.id, value: url.absoluteString) }
-        return .handled
-    }
-}
-
 /// A categorical bar or line chart. Point x is the category's index; the axis names the first, the
 /// last and every ceil(n/6)th category by its label, so long or many labels stay legible.
 @available(iOS 16.0, *)
@@ -215,41 +209,39 @@ struct NativeCategoricalChart: View {
 
     private var axisValues: [Double] {
         let step = max(1, (points.count + 5) / 6)
-        return points.indices.filter { $0 == 0 || $0 == points.count - 1 || $0 % step == 0 }.map(Double.init)
+        return points.indices.filter { $0 == 0 || $0 == points.count - 1 || $0 % step == 0 }.map { Double($0) }
+    }
+
+    private func label(_ value: AxisValue) -> String {
+        guard let x = value.as(Double.self), let index = Int(exactly: x), points.indices.contains(index) else { return "" }
+        return points[index].label
     }
 
     var body: some View {
-        GeometryReader { geometry in
-            // Each shown label is centred under its category and truncated to its share of the width;
-            // when neighbours still collide, the first and last categories keep their labels.
-            let labelWidth = max(44, geometry.size.width / CGFloat(axisValues.count))
-            Chart(points) { point in
-                if row.chartStyle == "bar" {
-                    BarMark(x: .value(row.subtitle, point.x), y: .value(row.title, point.y))
-                } else {
-                    LineMark(x: .value(row.subtitle, point.x), y: .value(row.title, point.y))
-                        .interpolationMethod(.catmullRom)
-                    PointMark(x: .value(row.subtitle, point.x), y: .value(row.title, point.y))
+        Chart(points) { point in
+            if row.chartStyle == "bar" {
+                BarMark(x: .value(row.subtitle, point.x), y: .value(row.title, point.y))
+                    .accessibilityLabel(point.label)
+            } else {
+                LineMark(x: .value(row.subtitle, point.x), y: .value(row.title, point.y))
+                    .interpolationMethod(.catmullRom)
+                PointMark(x: .value(row.subtitle, point.x), y: .value(row.title, point.y))
+                    .accessibilityLabel(point.label)
+            }
+        }
+        // Half a category of margin keeps a single point, and the first and last bars, inside the plot.
+        .chartXScale(domain: -0.5...(Double(points.count) - 0.5))
+        .chartXAxis {
+            AxisMarks(values: axisValues) { value in
+                AxisGridLine()
+                AxisTick()
+                AxisValueLabel {
+                    Text(label(value)).lineLimit(1).truncationMode(.tail).frame(maxWidth: 96)
                 }
             }
-            // Half a category of margin keeps a single point, and the first and last bars, inside the plot.
-            .chartXScale(domain: -0.5...(Double(points.count) - 0.5))
-            .chartXAxis {
-                AxisMarks(values: axisValues) { value in
-                    let index = value.as(Double.self).flatMap { Int(exactly: $0) }
-                        .flatMap { points.indices.contains($0) ? $0 : nil }
-                    AxisGridLine()
-                    AxisTick()
-                    let edge = index == 0 || index == points.count - 1
-                    AxisValueLabel(anchor: .top, collisionResolution: .greedy(priority: edge ? 1 : 0)) {
-                        if let index {
-                            Text(points[index].label).lineLimit(1).truncationMode(.tail).frame(maxWidth: labelWidth)
-                        }
-                    }
-                }
-            }
-            .accessibilityLabel(row.title)
         }
         .frame(height: 200)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(row.title)
     }
 }

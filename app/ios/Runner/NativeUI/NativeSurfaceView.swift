@@ -595,18 +595,14 @@ struct NativeSurfaceView: View {
             VStack(alignment: .leading, spacing: 8) {
                 // A rich body shares the reader's blocks and whitelisted links; its link options never
                 // add a trailing button, which only an explicit symbol requests.
-                let rich = !(row.blocks ?? []).isEmpty
-                if rich { NativeRichTextView(row: row, state: state, query: "") } else {
-                    let text = Group {
+                if !(row.blocks ?? []).isEmpty { NativeRichTextView(row: row, state: state, query: "") } else {
+                    Group {
                         if row.plainText == true { Text(verbatim: row.title) }
                         else { Text(.init(row.title)) }
                     }.textSelection(.enabled)
-                    // An AI reply's links follow the same whitelist without blocks too.
-                    if row.kind == "message_ai" { text.environment(\.openURL, nativeWhitelistedLinks(row, state: state)) }
-                    else { text }
                 }
                 if !row.subtitle.isEmpty { Text(row.subtitle).font(.caption).foregroundStyle(.secondary) }
-                if row.enabled && (!rich || row.symbol != nil) {
+                if row.enabled && ((row.blocks ?? []).isEmpty || row.symbol != nil) {
                     Button { Task { await state.send(row.id) } } label: {
                         Image(systemName: row.symbol ?? "ellipsis").frame(minWidth: 44, minHeight: 44)
                     }.accessibilityLabel(row.subtitle)

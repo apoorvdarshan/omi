@@ -8,10 +8,16 @@ List<NativeRow> nativeSummaryContentRows(String markdown, {Future<bool> Function
   return [
     for (final (index, block) in nativeRichText(markdown).indexed)
       NativeRow(index == 0 ? 'detail_summary_content' : 'detail_summary_content:$index', nativeRichBlockText(block),
-          kind: 'rich_text', blocks: [block], options: links, action: (value) async {
-        final url = value is String && links.containsKey(value) ? Uri.tryParse(links[value]!) : null;
-        if (url != null) await open(url);
-      }),
+          kind: 'rich_text',
+          blocks: [block],
+          options: links,
+          action: links.isEmpty
+              ? null
+              : (value) async {
+                  final url = value is String && links.containsKey(value) ? Uri.tryParse(links[value]!) : null;
+                  // A generated summary may only hand off web links; other schemes are ignored.
+                  if (url != null && ['http', 'https'].contains(url.scheme)) await open(url);
+                }),
   ];
 }
 

@@ -202,8 +202,7 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
                       && Set(row.options.map(\.id)).count == row.options.count
                       && row.options.allSatisfy({ !$0.id.isEmpty })
                       && row.hasValidValue
-                      && ((row.blocks ?? []).isEmpty || (["rich_text", "message_ai"].contains(row.kind) && row.blocks?.allSatisfy(\.valid) == true))
-                      && row.hasValidRichMessage && row.hasValidChartStyle
+                      && row.hasValidRichBody && row.hasValidChartStyle
                       && (row.maximumValue == nil || ["slider", "progress", "image"].contains(row.kind))
                       && (row.plainText != true || ["message_ai", "message_user"].contains(row.kind))
                       && (row.kind == "keypad" || (row.keypadMode == nil && row.eraseLabel == nil && row.clearLabel == nil))
@@ -235,18 +234,20 @@ private extension NativeSurfaceRow {
 }
 
 private extension NativeSurfaceRow {
-    /// A rich AI body is Markdown blocks, never literal text too; one message carries at most 2,000.
-    var hasValidRichMessage: Bool {
-        (plainText != true || (blocks ?? []).isEmpty) && (kind != "message_ai" || (blocks ?? []).count <= 2000)
+    /// Reader and AI reply bodies share the block rules; a rich body is never literal text too, and
+    /// one AI reply carries at most 2,000 blocks.
+    var hasValidRichBody: Bool {
+        let blocks = blocks ?? []
+        if blocks.isEmpty { return true }
+        guard kind == "rich_text" || kind == "message_ai", plainText != true else { return false }
+        return blocks.allSatisfy(\.valid) && (kind != "message_ai" || blocks.count <= 2000)
     }
 
     /// Categories in index order (x = 0..n-1), each named by a label of at most 64 characters.
     var hasValidChartStyle: Bool {
         guard let chartStyle else { return true }
         let points = points ?? []
-        return kind == "chart" && ["line", "bar"].contains(chartStyle) && (1...10000).contains(points.count)
-            && points.enumerated().allSatisfy { index, point in
-                point.x == Double(index) && point.y.isFinite && point.label.count <= 64
-            }
+        guard kind == "chart", chartStyle == "line" || chartStyle == "bar", (1...10000).contains(points.count) else { return false }
+        return points.indices.allSatisfy { points[$0].x == Double($0) && points[$0].y.isFinite && points[$0].label.count <= 64 }
     }
 }

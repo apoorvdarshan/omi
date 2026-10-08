@@ -96,6 +96,22 @@ void main() {
       await expectLater(_dispatch(rows.first, 'https://example.com'), throwsA(isA<PlatformException>()));
       await _dispatch(rows.last, 'https://omi.me/docs');
       expect(opened, [Uri.parse('https://omi.me/docs')]);
+
+      // Only web links leave the app, and the URL as written matches the whitelist too.
+      final mixed = nativeSummaryContentRows('[call](tel:123) and [site](https://Example.com/a)', open: (url) async {
+        opened.add(url);
+        return true;
+      }).single;
+      expect(mixed.accepts('https://Example.com/a'), true);
+      await _dispatch(mixed, 'tel:123');
+      await _dispatch(mixed, 'https://Example.com/a');
+      expect(opened.map((url) => url.scheme), ['https', 'https']);
+      expect(opened.last.host, 'example.com');
+
+      // A summary without links keeps its rows passive: no whitelist and no owner action.
+      final plain = nativeSummaryContentRows('Plain summary').single;
+      expect(plain.options, isEmpty);
+      expect(plain.projection['enabled'], false);
     });
   });
 

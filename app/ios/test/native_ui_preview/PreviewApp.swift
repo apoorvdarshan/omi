@@ -448,18 +448,17 @@ final class PreviewHarness: ObservableObject {
                 block("text", "Read the [allowed guide](https://omi.me/allowed) or [another site](https://example.com/blocked)."),
                 block("text", "Ship the **native** body", prefix: "1."), block("text", "Keep the owner", prefix: "•", indent: 1),
                 block("quote", "Links stay with Dart"), block("code", "let owner = \"Dart\""), table]
-            func message(_ id: String, _ kind: String, _ blocks: [[String: Any]], symbol: String? = nil) -> [String: Any] {
-                var row: [String: Any] = ["id": id, "title": "Launch plan", "kind": kind, "subtitle": "", "blocks": blocks,
+            // Like the chat page, each reply has an action and an "Open" subtitle; only a symbol adds a button.
+            func message(_ id: String, _ blocks: [[String: Any]], subtitle: String, symbol: String? = nil) -> [String: Any] {
+                var row: [String: Any] = ["id": id, "title": "Launch plan", "kind": "message_ai", "subtitle": subtitle, "blocks": blocks,
                     "options": [["id": "https://omi.me/allowed", "title": "https://omi.me/allowed"]], "enabled": true, "destructive": false]
-                if let symbol { row["symbol"] = symbol; row["subtitle"] = "Try again" }
+                if let symbol { row["symbol"] = symbol }
                 return row
             }
             surfaceRaw["sections"] = [["id": "messages", "title": "", "footer": "", "rows": [
                 ["id": "chat_rich_user", "title": "Plan the **launch**", "kind": "message_user", "plainText": true, "subtitle": "", "options": [], "enabled": false, "destructive": false],
-                message("chat_rich_ai", "message_ai", blocks),
-                message("chat_rich_retry", "message_ai", [block("text", "The reply could not finish.")], symbol: "arrow.clockwise"),
-                // A blockless AI reply keeps its Text path, and its unlisted link is discarded too.
-                ["id": "chat_rich_plain", "title": "Earlier reply with [a plain link](https://example.com/plain)", "kind": "message_ai", "subtitle": "", "options": [], "enabled": false, "destructive": false],
+                message("chat_rich_ai", blocks, subtitle: "Open"),
+                message("chat_rich_retry", [block("text", "The reply could not finish.")], subtitle: "Try again", symbol: "arrow.clockwise"),
                 // A reader row without a whitelist: its link is discarded rather than opened by the system.
                 ["id": "chat_rich_note", "title": "Note", "kind": "rich_text", "subtitle": "", "options": [], "enabled": false, "destructive": false,
                  "blocks": [block("text", "See the [unlisted note](https://example.com/note).")]]]]]
@@ -468,8 +467,11 @@ final class PreviewHarness: ObservableObject {
             // Labels at the 64-character limit, a single category and the unchanged quantitative chart.
             let long = "Planning review with the native migration team, morning slots"
             func chart(_ id: String, _ title: String, _ count: Int, style: String?, subtitle: String = "Day") -> [String: Any] {
+                let points: [[String: Any]] = (0..<count).map { index in
+                    ["x": Double(index), "y": Double((index * 7) % 11 + 1), "label": "\(long) \(String(format: "%02d", index))"]
+                }
                 var row: [String: Any] = ["id": id, "title": title, "kind": "chart", "subtitle": subtitle, "options": [], "enabled": false, "destructive": false,
-                    "points": (0..<count).map { ["x": Double($0), "y": Double(($0 * 7) % 11 + 1), "label": "\(long) \(String(format: "%02d", $0))"] as [String: Any] }]
+                    "points": points]
                 if let style { row["chartStyle"] = style }
                 return row
             }
