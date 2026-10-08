@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'package:omi/mobile/native_ui/ios_native_modal.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/settings/transcription/transcription_fields.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -90,9 +92,52 @@ Future<bool> confirmModelDownload(
   return confirmed ?? false;
 }
 
+/// The longest configuration the native text field holds; the caller itself imports any length.
+const _nativeImportLimit = 262144;
+
 /// Asks for a pasted JSON configuration; resolves to the text, or null when cancelled.
+///
+/// Natively, Paste reads the clipboard here in Dart and presents the sheet again with that text. A
+/// clipboard longer than the native field's limit is returned at once for import rather than cut.
+/// Without the native presentation, the Flutter dialog opens with the text entered so far.
 Future<String?> showImportConfigDialog(BuildContext context) async {
-  final controller = TextEditingController();
+  var text = '';
+  while (true) {
+    if (!context.mounted) return null;
+    final l10n = context.l10n;
+    final result = await showIosNativeModal(
+      context,
+      title: l10n.importConfiguration,
+      actions: [
+        NativeRow('cancel', l10n.cancel),
+        NativeRow('paste', l10n.paste),
+        NativeRow('import', l10n.import),
+      ],
+      sections: [
+        NativeSection('import_config', [
+          NativeRow('import_hint', l10n.pasteJsonConfig, kind: 'label'),
+          NativeRow('import_json', l10n.transcriptionJsonPlaceholder,
+              kind: 'text', maximumLength: _nativeImportLimit, value: text),
+          NativeRow('import_api_key', l10n.addApiKeyAfterImport, kind: 'label'),
+        ]),
+      ],
+    );
+    if (result == null) {
+      if (!context.mounted) return null;
+      return _showFlutterImportConfigDialog(context, initialText: text);
+    }
+    // Cancelled, dismissed or withdrawn: nothing is imported.
+    if (result.action == null) return null;
+    final edited = result.values['import_json'] as String? ?? text;
+    if (result.action == 'import') return edited;
+    final pasted = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+    if (pasted != null && pasted.length > _nativeImportLimit) return pasted;
+    text = pasted ?? edited;
+  }
+}
+
+Future<String?> _showFlutterImportConfigDialog(BuildContext context, {String initialText = ''}) async {
+  final controller = TextEditingController(text: initialText);
   try {
     return await showDialog<String>(
       context: context,

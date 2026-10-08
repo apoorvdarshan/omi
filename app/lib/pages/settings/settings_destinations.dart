@@ -4,6 +4,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/http/api/announcements.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/mobile/native_ui/native_navigation_chrome.dart';
 import 'package:omi/pages/announcements/changelog_sheet.dart';
 import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
@@ -35,6 +37,7 @@ import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/pages/settings/voice_settings_page.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -133,16 +136,28 @@ Future<void> openVoiceProfile(BuildContext context) async {
   PlatformManager.instance.analytics.pageOpened('Profile Speech Profile');
   await routeToPage(
     context,
-    Builder(
-      builder: (routeContext) => Scaffold(
-        appBar: AppBar(leading: const OmiBackButton()),
-        body: SpeechProfileWidget(
-          flowSource: 'settings',
-          goNext: () => Navigator.of(routeContext).pop(),
-          onSkip: () => Navigator.of(routeContext).pop(),
+    Builder(builder: (routeContext) {
+      Widget classic(Widget body) => Scaffold(appBar: AppBar(leading: const OmiBackButton()), body: body);
+      final flow = SpeechProfileWidget(
+        flowSource: 'settings',
+        goNext: () => Navigator.of(routeContext).pop(),
+        onSkip: () => Navigator.of(routeContext).pop(),
+      );
+      if (!nativePresentationEnabled) return classic(flow);
+      // The native guided-voice screen carries this route's back control in its own toolbar; any
+      // Flutter fallback restores the complete original page chrome. Onboarding supplies its own.
+      return Material(
+        color: OmiColors.surface0,
+        child: NativeNavigationChrome(
+          toolbar: [
+            NativeRow('voice_profile_back', routeContext.l10n.back,
+                symbol: 'chevron.left', action: (_) => Navigator.of(routeContext).maybePop()),
+          ],
+          wrapFallback: (fallback) => NativeNavigationChrome(enabled: false, child: classic(fallback)),
+          child: flow,
         ),
-      ),
-    ),
+      );
+    }),
   );
 }
 
