@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/mobile/native_ui/ios_native_modal.dart';
 import 'package:omi/mobile/native_ui/ios_native_secret.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/auth_service.dart';
 
 import 'native_test_host.dart';
@@ -359,6 +360,20 @@ void main() {
       expect(host.created, isEmpty);
     });
 
+    testWidgets('runs the classic dialog when no account owns the sheet', (tester) async {
+      IosNativeSurface.debugNativeHostForTest = true;
+      final previous = AuthService.installLocalHarnessTokenGateway(const _SignedOut());
+      addTearDown(() {
+        IosNativeSurface.debugNativeHostForTest = false;
+        AuthService.installLocalHarnessTokenGateway(previous);
+      });
+      expect(AuthService.instance.captureSessionSnapshot(), isNull);
+      var classic = 0;
+      await (await reveal(tester, onClassic: () => classic++)).shown;
+      expect(classic, 1);
+      expect(find.text(_key), findsNothing);
+    });
+
     testWidgets('never presents after a session change', (tester) async {
       final host = NativeTestHost.install();
       var classic = 0;
@@ -390,4 +405,17 @@ void main() {
       expect(find.text(_key), findsNothing);
     });
   });
+}
+
+final class _SignedOut implements AuthTokenGateway {
+  const _SignedOut();
+
+  @override
+  AuthUserSnapshot? get currentUser => null;
+
+  @override
+  Future<RefreshedAuthToken?> forceRefresh() async => null;
+
+  @override
+  Future<void> signOut() async {}
 }

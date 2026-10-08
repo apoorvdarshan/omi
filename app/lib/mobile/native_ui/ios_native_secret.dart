@@ -40,7 +40,8 @@ Future<void> showIosNativeSecretSheet(
   // A session that changed while support was checked gets neither presentation of the key.
   if (!context.mounted || owner != null && !AuthService.instance.isSessionSnapshotCurrent(owner)) return;
   if (!supported) return showClassic();
-  if (owner == null) return;
+  // Without a signed-in session there is no owner to fence the sheet to; the caller's dialog runs.
+  if (owner == null) return showClassic();
   NativeSecretPage page(bool native) => NativeSecretPage(
         owner: owner,
         native: native,

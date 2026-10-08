@@ -512,8 +512,9 @@ final class PreviewUITests: XCTestCase {
         app.buttons["preview-become-active"].tap()
         XCTAssertTrue(app.staticTexts[key].waitForExistence(timeout: 5))
         app.buttons["preview-end-session"].tap()
+        let cleared = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.buttons["secret_value"])
+        XCTAssertEqual(XCTWaiter.wait(for: [cleared], timeout: 5), .completed)
         XCTAssertFalse(app.staticTexts[key].exists)
-        XCTAssertFalse(app.buttons["secret_value"].exists)
     }
 
 }

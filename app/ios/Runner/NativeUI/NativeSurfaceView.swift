@@ -910,13 +910,15 @@ private struct NativeSecretRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(row.title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            // VoiceOver spells the key out, so it can be transcribed character by character.
             Text(verbatim: redaction.contains(.privacy) ? "" : row.value?.text ?? "")
+                .speechSpellsOutCharacters()
                 .font(.body.monospaced())
                 .privacySensitive()
                 .fixedSize(horizontal: false, vertical: true)
             if !row.subtitle.isEmpty { Text(row.subtitle).font(.footnote).foregroundStyle(.secondary) }
             Button { Task { await state.send(row.id, value: "copy") } } label: {
-                Label(row.options.first { $0.id == "copy" }?.title ?? "", systemImage: "doc.on.doc")
+                Label(row.options.first(where: { $0.id == "copy" })?.title ?? "", systemImage: "doc.on.doc")
             }.buttonStyle(.bordered).controlSize(.large).disabled(!row.enabled)
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
