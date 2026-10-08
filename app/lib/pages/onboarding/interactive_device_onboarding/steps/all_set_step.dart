@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -94,7 +95,7 @@ class AllSetStep extends StatelessWidget {
         ],
       ),
     );
-    if (!nativePresentationEnabled) return classic;
+    if (!deviceTutorialNative(context)) return classic;
     final l10n = context.l10n;
     NativeRow summary(String id, String title, String subtitle, int step, {String? badge, String? symbol}) =>
         NativeRow(id, title,

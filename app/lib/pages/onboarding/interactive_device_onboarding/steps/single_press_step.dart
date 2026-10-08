@@ -37,6 +37,7 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
   late MessageProvider _messageProvider;
   bool _showContinue = false;
   bool _wasListening = false;
+  bool _bounceStopped = false;
 
   late int _messageCountAtStart;
   String? _userQuestion;
@@ -45,8 +46,9 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
   @override
   void initState() {
     super.initState();
-    _animController = AnimationController(vsync: this, duration: const Duration(seconds: 4))..repeat();
-    _bounceController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))..repeat();
+    // Both run only while the classic step is mounted ([DeviceTutorialClassicAnimations]).
+    _animController = AnimationController(vsync: this, duration: const Duration(seconds: 4));
+    _bounceController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200));
     _messageProvider = context.read<MessageProvider>();
     _messageCountAtStart = _messageProvider.messages.length;
     _messageProvider.addListener(_onMessagesChanged);
@@ -85,24 +87,39 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
     super.dispose();
   }
 
+  void _startClassicAnimations() {
+    _animController.repeat();
+    // The bounce stops for good once listening starts.
+    if (!_bounceStopped) _bounceController.repeat();
+  }
+
+  void _stopClassicAnimations() {
+    _animController.stop();
+    _bounceController.stop();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<DeviceOnboardingProvider>(
       builder: (context, provider, _) {
         if (provider.voiceSessionActive && !_wasListening) {
           _wasListening = true;
+          _bounceStopped = true;
           _bounceController.stop();
         } else if (!provider.voiceSessionActive && _wasListening) {
           _wasListening = false;
         }
 
-        final classic = OnboardingStepScaffold(
-          title: context.l10n.deviceOnboardingAskQuestionTitle,
-          subtitle: _aiResponse != null ? '' : context.l10n.deviceOnboardingAskQuestionSubtitle,
-          content: Column(children: [const Spacer(flex: 1), _buildContent(provider), const Spacer(flex: 2)]),
-          bottomAction: _showContinue ? OnboardingContinueButton(onPressed: widget.onComplete) : null,
-        );
-        if (!nativePresentationEnabled) return classic;
+        final classic = DeviceTutorialClassicAnimations(
+            onMount: _startClassicAnimations,
+            onUnmount: _stopClassicAnimations,
+            child: OnboardingStepScaffold(
+              title: context.l10n.deviceOnboardingAskQuestionTitle,
+              subtitle: _aiResponse != null ? '' : context.l10n.deviceOnboardingAskQuestionSubtitle,
+              content: Column(children: [const Spacer(flex: 1), _buildContent(provider), const Spacer(flex: 2)]),
+              bottomAction: _showContinue ? OnboardingContinueButton(onPressed: widget.onComplete) : null,
+            ));
+        if (!deviceTutorialNative(context)) return classic;
         return _nativeSurface(provider, classic);
       },
     );

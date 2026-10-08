@@ -98,7 +98,7 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
               ? OnboardingContinueButton(onPressed: widget.onComplete)
               : null,
         );
-        if (!nativePresentationEnabled) return classic;
+        if (!deviceTutorialNative(context)) return classic;
         return _nativeSurface(provider, classic);
       },
     );

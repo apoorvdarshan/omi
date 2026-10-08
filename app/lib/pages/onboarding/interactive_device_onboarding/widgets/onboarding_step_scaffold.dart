@@ -14,8 +14,53 @@ String deviceTutorialNativeText(String text, {int maximum = 4000}) {
 }
 
 /// The tutorial's Continue action as a native row; the step keeps its own visibility rule.
-NativeRow deviceTutorialContinueRow(BuildContext context, VoidCallback onComplete, {String? label}) =>
-    NativeRow('dev_tut_continue', label ?? context.l10n.deviceOnboardingContinue, action: (_) => onComplete());
+NativeRow deviceTutorialContinueRow(BuildContext context, VoidCallback onComplete) =>
+    NativeRow('dev_tut_continue', context.l10n.deviceOnboardingContinue, action: (_) => onComplete());
+
+/// Marks a tutorial the wrapper presents classically because SwiftUI is unsupported here, so its
+/// screens mount their classic trees directly instead of a native surface that would fall back.
+class DeviceTutorialClassicScope extends InheritedWidget {
+  const DeviceTutorialClassicScope({super.key, required super.child});
+
+  @override
+  bool updateShouldNotify(DeviceTutorialClassicScope oldWidget) => false;
+}
+
+/// Whether a tutorial screen projects natively: the preview flag is on and no classic scope encloses it.
+bool deviceTutorialNative(BuildContext context) =>
+    nativePresentationEnabled && context.dependOnInheritedWidgetOfExactType<DeviceTutorialClassicScope>() == null;
+
+/// Mounted only inside a screen's classic subtree, so decorative animations run while the classic
+/// presentation is on screen and never tick under the native surface, which does not mount it.
+class DeviceTutorialClassicAnimations extends StatefulWidget {
+  const DeviceTutorialClassicAnimations(
+      {super.key, required this.onMount, required this.onUnmount, required this.child});
+
+  final VoidCallback onMount;
+  final VoidCallback onUnmount;
+  final Widget child;
+
+  @override
+  State<DeviceTutorialClassicAnimations> createState() => _DeviceTutorialClassicAnimationsState();
+}
+
+class _DeviceTutorialClassicAnimationsState extends State<DeviceTutorialClassicAnimations> {
+  @override
+  void initState() {
+    super.initState();
+    widget.onMount();
+  }
+
+  @override
+  void dispose() {
+    // Children unmount before their parent, so the owning screen's controllers are still alive here.
+    widget.onUnmount();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
 
 /// Static bundled device artwork for native rows, replacing the classic animated artwork. Null on
 /// the classic path and until the copy is ready; a failed copy simply leaves the row without it.

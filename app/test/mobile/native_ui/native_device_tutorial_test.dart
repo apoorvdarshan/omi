@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,11 +14,13 @@ import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/interactive_device_onboarding_wrapper.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/steps/all_set_step.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/steps/voice_reply_step.dart';
+import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_intro_screen.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/services/voice_playback/voice_output_route.dart';
+import 'package:omi/ui/ui.dart';
 
 import 'native_test_host.dart';
 
@@ -120,6 +121,15 @@ Future<void> _openTutorial(WidgetTester tester) async {
   await NativeTestHost.settle(tester);
 }
 
+/// The wrapper's chrome on every step: the close X and the progress row for step [n] of 6.
+void _expectChrome(WidgetTester tester, int n) {
+  expect(_row(tester, 'device_tutorial_close'), allOf(containsPair('symbol', 'xmark'), containsPair('title', 'Close')));
+  expect(
+      _row(tester, 'device_tutorial_step'),
+      allOf(containsPair('kind', 'progress'), containsPair('value', n.toDouble()), containsPair('maximumValue', 6.0),
+          containsPair('title', 'Step $n of 6')));
+}
+
 DeviceOnboardingProvider _provider(WidgetTester tester) =>
     Provider.of<DeviceOnboardingProvider>(tester.element(find.byType(IosNativeSurface)), listen: false);
 
@@ -149,10 +159,7 @@ void main() {
 
     // Transcription demo.
     final provider = _provider(tester);
-    expect(_row(tester, 'device_tutorial_step'), allOf(containsPair('kind', 'progress'), containsPair('value', 1.0)));
-    expect(_row(tester, 'device_tutorial_step'),
-        allOf(containsPair('maximumValue', 6.0), containsPair('title', 'Step 1 of 6')));
-    expect(_row(tester, 'device_tutorial_close'), isNotNull);
+    _expectChrome(tester, 1);
     expect(_row(tester, 'dev_tut_transcription_status'), isNotNull);
     provider.onTranscriptSegments([_segment('one two three four **five**')]);
     await NativeTestHost.settle(tester);
@@ -165,7 +172,7 @@ void main() {
 
     // Single press: waiting, listening, processing, then the literal question and stripped answer.
     expect(provider.currentStep, DeviceOnboardingProvider.askQuestionStep);
-    expect(_row(tester, 'device_tutorial_step'), containsPair('value', 2.0));
+    _expectChrome(tester, 2);
     expect(_row(tester, 'dev_tut_press_state'), containsPair('symbol', 'hand.tap'));
     provider.onButtonEvent(1);
     await NativeTestHost.settle(tester);
@@ -181,14 +188,27 @@ void main() {
         _row(tester, 'dev_tut_question'),
         allOf(containsPair('kind', 'message_user'), containsPair('plainText', true),
             containsPair('title', 'What is **Omi**?')));
-    expect(_row(tester, 'dev_tut_answer'),
-        allOf(containsPair('kind', 'message_ai'), containsPair('title', 'Omi is your AI wearable.')));
+    expect(
+        _row(tester, 'dev_tut_answer'),
+        allOf(containsPair('kind', 'message_ai'), containsPair('plainText', true),
+            containsPair('title', 'Omi is your AI wearable.')));
     expect(provider.aiResponse, 'Omi is **your** AI _wearable_.');
-    expect(_row(tester, 'dev_tut_continue'), isNotNull);
+    await _tap(tester, host, 'dev_tut_continue');
 
-    // Power cycle (voice reply has its own test with a fake output route): hint, off, reconnect.
-    provider.goToStep(DeviceOnboardingProvider.powerCycleStep);
-    await NativeTestHost.settle(tester);
+    // Voice reply inside the wrapper (its playback has its own test with a fake output route).
+    expect(provider.currentStep, DeviceOnboardingProvider.voiceReplyStep);
+    _expectChrome(tester, 3);
+    expect(_row(tester, 'dev_tut_preview'), isNotNull);
+    // Re-entry from Settings preselects the stored preference, as the classic step does.
+    final stored = SharedPreferencesUtil().voiceResponseMode;
+    expect(provider.selectedVoiceResponseMode, stored);
+    expect([for (var i = 0; i < 3; i++) _row(tester, 'dev_tut_mode_$i')!['value']],
+        [for (var i = 0; i < 3; i++) i == stored]);
+    await _tap(tester, host, 'dev_tut_continue');
+
+    // Power cycle: hint, off, reconnect.
+    expect(provider.currentStep, DeviceOnboardingProvider.powerCycleStep);
+    _expectChrome(tester, 4);
     expect(_row(tester, 'dev_tut_power_state'), containsPair('symbol', 'power'));
     expect(_row(tester, 'dev_tut_power_hint'), isNull);
     await tester.pump(const Duration(seconds: 31));
@@ -209,6 +229,7 @@ void main() {
 
     // Double press: single-select actions, the single-tap hint, the prompt, then Continue.
     expect(provider.currentStep, DeviceOnboardingProvider.doublePressStep);
+    _expectChrome(tester, 5);
     expect([for (var i = 0; i < 3; i++) _row(tester, 'dev_tut_double_$i')!['value']], [false, false, false]);
     expect(_row(tester, 'dev_tut_double_prompt'), isNull);
     await _tap(tester, host, 'dev_tut_double_1', true);
@@ -227,8 +248,7 @@ void main() {
 
     // All set.
     expect(provider.currentStep, DeviceOnboardingProvider.allSetStep);
-    expect(
-        _row(tester, 'device_tutorial_step'), allOf(containsPair('value', 6.0), containsPair('title', 'Step 6 of 6')));
+    _expectChrome(tester, 6);
     expect(_row(tester, 'dev_tut_all_set_double_tap'), containsPair('subtitle', contains('Mute')));
     expect(_row(tester, 'dev_tut_finish'), isNotNull);
     expect(tester.takeException(), isNull);
@@ -393,6 +413,41 @@ void main() {
     await _openTutorial(tester);
     expect(find.byType(IosNativeSurface), findsNothing);
     expect(find.byKey(const Key('device_onboarding_skip_button')), findsOneWidget);
-    expect(debugDefaultTargetPlatformOverride, isNull);
+  });
+
+  testWidgets('with the flag on but SwiftUI unsupported the wrapper mounts the classic tree', (tester) async {
+    NativeTestHost.install();
+    final support = Completer<bool>();
+    await tester.pumpWidget(_app(
+        Builder(
+            builder: (context) => Scaffold(
+                body: TextButton(
+                    onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                        builder: (_) =>
+                            InteractiveDeviceOnboardingWrapper(allowExit: true, nativeSupport: () => support.future))),
+                    child: const Text('open tutorial')))),
+        capture: _FakeCapture()));
+    await tester.tap(find.text('open tutorial'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(OmiLoadingState), findsOneWidget, reason: 'Pending support shows the loading state');
+    expect(find.byType(OnboardingIntroScreen), findsNothing);
+
+    support.complete(false);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(IosNativeSurface), findsNothing);
+    expect(find.byType(UiKitView), findsNothing);
+    expect(find.byType(AnimatedSwitcher), findsOneWidget);
+    expect(find.byKey(const Key('device_onboarding_skip_button')), findsOneWidget);
+
+    await tester.tap(find.text('Get Started'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('Speak Into Your Omi'), findsOneWidget);
+    expect(find.byType(IosNativeSurface), findsNothing);
+    expect(find.byType(OnboardingProgressDots), findsOneWidget);
+    expect(find.byType(AnimatedSwitcher), findsNWidgets(2), reason: 'The classic intro and step transitions');
+    expect(tester.takeException(), isNull);
   });
 }

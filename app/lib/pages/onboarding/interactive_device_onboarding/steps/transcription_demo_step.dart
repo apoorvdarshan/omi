@@ -26,7 +26,8 @@ class _TranscriptionDemoStepState extends State<TranscriptionDemoStep>
   @override
   void initState() {
     super.initState();
-    _pulseController = AnimationController(vsync: this, duration: const Duration(seconds: 4))..repeat();
+    // The pulse runs only while the classic step is mounted ([DeviceTutorialClassicAnimations]).
+    _pulseController = AnimationController(vsync: this, duration: const Duration(seconds: 4));
   }
 
   @override
@@ -46,28 +47,31 @@ class _TranscriptionDemoStepState extends State<TranscriptionDemoStep>
           });
         }
 
-        final classic = OnboardingStepScaffold(
-          title: context.l10n.deviceOnboardingTranscriptionTitle,
-          subtitle: provider.transcriptionComplete ? '' : context.l10n.deviceOnboardingTranscriptionSubtitle,
-          content: Column(
-            children: [
-              if (!provider.transcriptionComplete) ...[
-                const Spacer(flex: 1),
-                _buildOmiWithPulse(),
-                const SizedBox(height: 32),
-              ],
-              if (provider.transcriptionComplete) ...[
-                const SizedBox(height: 16),
-                _buildSuccessCard(),
-                const SizedBox(height: 16),
-              ],
-              if (provider.demoSegments.isNotEmpty) _buildTranscriptCard(provider),
-              const Spacer(flex: 2),
-            ],
-          ),
-          bottomAction: _showContinue ? OnboardingContinueButton(onPressed: widget.onComplete) : null,
-        );
-        if (!nativePresentationEnabled) return classic;
+        final classic = DeviceTutorialClassicAnimations(
+            onMount: _pulseController.repeat,
+            onUnmount: _pulseController.stop,
+            child: OnboardingStepScaffold(
+              title: context.l10n.deviceOnboardingTranscriptionTitle,
+              subtitle: provider.transcriptionComplete ? '' : context.l10n.deviceOnboardingTranscriptionSubtitle,
+              content: Column(
+                children: [
+                  if (!provider.transcriptionComplete) ...[
+                    const Spacer(flex: 1),
+                    _buildOmiWithPulse(),
+                    const SizedBox(height: 32),
+                  ],
+                  if (provider.transcriptionComplete) ...[
+                    const SizedBox(height: 16),
+                    _buildSuccessCard(),
+                    const SizedBox(height: 16),
+                  ],
+                  if (provider.demoSegments.isNotEmpty) _buildTranscriptCard(provider),
+                  const Spacer(flex: 2),
+                ],
+              ),
+              bottomAction: _showContinue ? OnboardingContinueButton(onPressed: widget.onComplete) : null,
+            ));
+        if (!deviceTutorialNative(context)) return classic;
         return _nativeSurface(provider, classic);
       },
     );

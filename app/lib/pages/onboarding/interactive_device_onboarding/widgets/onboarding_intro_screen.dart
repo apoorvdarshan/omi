@@ -23,7 +23,8 @@ class _OnboardingIntroScreenState extends State<OnboardingIntroScreen>
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(seconds: 6))..repeat(reverse: true);
+    // The glow runs only while the classic screen is mounted ([DeviceTutorialClassicAnimations]).
+    _controller = AnimationController(vsync: this, duration: const Duration(seconds: 6));
   }
 
   @override
@@ -34,8 +35,9 @@ class _OnboardingIntroScreenState extends State<OnboardingIntroScreen>
 
   @override
   Widget build(BuildContext context) {
-    final classic = _buildClassic(context);
-    if (!nativePresentationEnabled) return classic;
+    final classic = DeviceTutorialClassicAnimations(
+        onMount: () => _controller.repeat(reverse: true), onUnmount: _controller.stop, child: _buildClassic(context));
+    if (!deviceTutorialNative(context)) return classic;
     final l10n = context.l10n;
     final skip = widget.onSkip ?? () => Navigator.of(context).maybePop();
     // The glow orb is decorative; the static device art and the same copy replace it natively.

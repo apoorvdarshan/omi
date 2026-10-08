@@ -27,7 +27,11 @@ class InteractiveDeviceOnboardingWrapper extends StatefulWidget {
   // and the tutorial stays reachable from device settings.
   final bool allowExit;
 
-  const InteractiveDeviceOnboardingWrapper({super.key, this.allowExit = false});
+  /// Whether this device can render the SwiftUI presentation; injectable for tests.
+  final Future<bool> Function() nativeSupport;
+
+  const InteractiveDeviceOnboardingWrapper(
+      {super.key, this.allowExit = false, this.nativeSupport = supportsNativePresentation});
 
   @override
   State<InteractiveDeviceOnboardingWrapper> createState() => _InteractiveDeviceOnboardingWrapperState();
@@ -39,6 +43,8 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
   bool _showIntro = true;
   bool _started = false;
   bool _completed = false;
+  // Parent rebuilds must not unmount the active step while a fresh platform-support reply is pending.
+  late final Future<bool> _nativeSupported = widget.nativeSupport();
 
   @override
   void initState() {
@@ -223,6 +229,42 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
     });
   }
 
+  Widget _classic(BuildContext context) => Scaffold(
+        backgroundColor: Colors.transparent,
+        body: _classicFrame(
+          AnimatedSwitcher(
+            duration: OmiMotion.of(context).standard,
+            child: _showIntro
+                ? _intro()
+                : _classicStepChrome(
+                    key: const ValueKey('steps'),
+                    Consumer<DeviceOnboardingProvider>(
+                      builder: (context, provider, _) => AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 320),
+                        switchInCurve: Curves.easeOutCubic,
+                        switchOutCurve: Curves.easeInCubic,
+                        layoutBuilder: (currentChild, previousChildren) => Stack(
+                          alignment: Alignment.topCenter,
+                          children: [...previousChildren, if (currentChild != null) currentChild],
+                        ),
+                        transitionBuilder: (child, animation) {
+                          final slide = Tween<Offset>(
+                            begin: const Offset(0.08, 0),
+                            end: Offset.zero,
+                          ).animate(animation);
+                          return FadeTransition(
+                            opacity: animation,
+                            child: SlideTransition(position: slide, child: child),
+                          );
+                        },
+                        child: _buildStep(provider.currentStep),
+                      ),
+                    ),
+                  ),
+          ),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider.value(
@@ -237,42 +279,16 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
           if (didPop) return;
           _skipOnboarding();
         },
-        child: nativePresentationEnabled
-            ? Scaffold(backgroundColor: OmiColors.surface0, body: _nativeBody(context))
-            : Scaffold(
-                backgroundColor: Colors.transparent,
-                body: _classicFrame(
-                  AnimatedSwitcher(
-                    duration: OmiMotion.of(context).standard,
-                    child: _showIntro
-                        ? _intro()
-                        : _classicStepChrome(
-                            key: const ValueKey('steps'),
-                            Consumer<DeviceOnboardingProvider>(
-                              builder: (context, provider, _) => AnimatedSwitcher(
-                                duration: const Duration(milliseconds: 320),
-                                switchInCurve: Curves.easeOutCubic,
-                                switchOutCurve: Curves.easeInCubic,
-                                layoutBuilder: (currentChild, previousChildren) => Stack(
-                                  alignment: Alignment.topCenter,
-                                  children: [...previousChildren, if (currentChild != null) currentChild],
-                                ),
-                                transitionBuilder: (child, animation) {
-                                  final slide = Tween<Offset>(
-                                    begin: const Offset(0.08, 0),
-                                    end: Offset.zero,
-                                  ).animate(animation);
-                                  return FadeTransition(
-                                    opacity: animation,
-                                    child: SlideTransition(position: slide, child: child),
-                                  );
-                                },
-                                child: _buildStep(provider.currentStep),
-                              ),
-                            ),
-                          ),
-                  ),
-                ),
+        child: !nativePresentationEnabled
+            ? _classic(context)
+            : FutureBuilder<bool>(
+                future: _nativeSupported,
+                builder: (context, support) {
+                  if (support.connectionState != ConnectionState.done) return const OmiLoadingState();
+                  // Unsupported: the complete classic presentation, with no native surface per screen.
+                  if (support.data != true) return DeviceTutorialClassicScope(child: _classic(context));
+                  return Scaffold(backgroundColor: OmiColors.surface0, body: _nativeBody(context));
+                },
               ),
       ),
     );

@@ -47,6 +47,7 @@ class _VoiceReplyStepState extends State<VoiceReplyStep> with SingleTickerProvid
   StreamSubscription<VoiceOutputRoute>? _routeSubscription;
   VoiceOutputRoute _route = const VoiceOutputRoute.unknown();
   bool _playing = false;
+  bool _classicMounted = false;
 
   DeviceOnboardingProvider get _provider => context.read<DeviceOnboardingProvider>();
 
@@ -89,9 +90,7 @@ class _VoiceReplyStepState extends State<VoiceReplyStep> with SingleTickerProvid
     final text = widget.previewText?.trim();
     final previewText = text == null || text.isEmpty ? context.l10n.deviceOnboardingVoiceReplySample : text;
     setState(() => _playing = true);
-    if (!(MediaQuery.maybeDisableAnimationsOf(context) ?? false)) {
-      _waveController.repeat();
-    }
+    _startWave();
     await OmiHaptics.light();
     try {
       await (widget.playPreview ?? OmiVoicePlaybackService.instance.playPreview)(previewText);
@@ -100,6 +99,13 @@ class _VoiceReplyStepState extends State<VoiceReplyStep> with SingleTickerProvid
         _waveController.stop();
         setState(() => _playing = false);
       }
+    }
+  }
+
+  /// The preview wave is decorative: it runs only while the classic step is mounted.
+  void _startWave() {
+    if (_playing && _classicMounted && !(MediaQuery.maybeDisableAnimationsOf(context) ?? false)) {
+      _waveController.repeat();
     }
   }
 
@@ -115,91 +121,100 @@ class _VoiceReplyStepState extends State<VoiceReplyStep> with SingleTickerProvid
   Widget build(BuildContext context) {
     return Consumer<DeviceOnboardingProvider>(builder: (context, provider, _) {
       final mode = provider.selectedVoiceResponseMode ?? 0;
-      final classic = Padding(
-        padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg),
-        child: Column(
-          children: [
-            const SizedBox(height: OmiSpacing.lg),
-            Text(context.l10n.deviceOnboardingVoiceReplyTitle, style: OmiType.title1, textAlign: TextAlign.center),
-            const SizedBox(height: OmiSpacing.xs),
-            Text(
-              context.l10n.deviceOnboardingVoiceReplySubtitle,
-              style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.35),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: OmiSpacing.lg),
-            Expanded(
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _PreviewCard(
-                      playing: _playing,
-                      animation: _waveController,
-                      route: _route,
-                      onPressed: _togglePreview,
-                    ),
-                    const SizedBox(height: OmiSpacing.lg),
-                    Text(
-                      context.l10n.voiceResponseModeTitle.toUpperCase(),
-                      style: OmiType.footnote.copyWith(
-                        color: OmiColors.textSecondary,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.6,
-                      ),
-                    ),
-                    const SizedBox(height: OmiSpacing.xs),
-                    _ModeCard(
-                      key: const Key('voice_reply_mode_off'),
-                      selected: mode == 0,
-                      title: context.l10n.voiceResponseOff,
-                      description: context.l10n.deviceOnboardingVoiceReplyOffDescription,
-                      onTap: () => _selectMode(0),
-                    ),
-                    const SizedBox(height: OmiSpacing.xs),
-                    _ModeCard(
-                      key: const Key('voice_reply_mode_headphones'),
-                      selected: mode == 1,
-                      title: context.l10n.voiceResponseHeadphonesOnly,
-                      description: context.l10n.deviceOnboardingVoiceReplyHeadphonesDescription,
-                      onTap: () => _selectMode(1),
-                    ),
-                    const SizedBox(height: OmiSpacing.xs),
-                    _ModeCard(
-                      key: const Key('voice_reply_mode_always'),
-                      selected: mode == 2,
-                      title: context.l10n.voiceResponseAlways,
-                      description: context.l10n.deviceOnboardingVoiceReplyAlwaysDescription,
-                      onTap: () => _selectMode(2),
-                    ),
-                    const SizedBox(height: OmiSpacing.sm),
-                    _OutputStatus(mode: mode, route: _route),
-                  ],
+      final classic = DeviceTutorialClassicAnimations(
+          onMount: () {
+            _classicMounted = true;
+            _startWave();
+          },
+          onUnmount: () {
+            _classicMounted = false;
+            _waveController.stop();
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg),
+            child: Column(
+              children: [
+                const SizedBox(height: OmiSpacing.lg),
+                Text(context.l10n.deviceOnboardingVoiceReplyTitle, style: OmiType.title1, textAlign: TextAlign.center),
+                const SizedBox(height: OmiSpacing.xs),
+                Text(
+                  context.l10n.deviceOnboardingVoiceReplySubtitle,
+                  style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.35),
+                  textAlign: TextAlign.center,
                 ),
-              ),
+                const SizedBox(height: OmiSpacing.lg),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _PreviewCard(
+                          playing: _playing,
+                          animation: _waveController,
+                          route: _route,
+                          onPressed: _togglePreview,
+                        ),
+                        const SizedBox(height: OmiSpacing.lg),
+                        Text(
+                          context.l10n.voiceResponseModeTitle.toUpperCase(),
+                          style: OmiType.footnote.copyWith(
+                            color: OmiColors.textSecondary,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.6,
+                          ),
+                        ),
+                        const SizedBox(height: OmiSpacing.xs),
+                        _ModeCard(
+                          key: const Key('voice_reply_mode_off'),
+                          selected: mode == 0,
+                          title: context.l10n.voiceResponseOff,
+                          description: context.l10n.deviceOnboardingVoiceReplyOffDescription,
+                          onTap: () => _selectMode(0),
+                        ),
+                        const SizedBox(height: OmiSpacing.xs),
+                        _ModeCard(
+                          key: const Key('voice_reply_mode_headphones'),
+                          selected: mode == 1,
+                          title: context.l10n.voiceResponseHeadphonesOnly,
+                          description: context.l10n.deviceOnboardingVoiceReplyHeadphonesDescription,
+                          onTap: () => _selectMode(1),
+                        ),
+                        const SizedBox(height: OmiSpacing.xs),
+                        _ModeCard(
+                          key: const Key('voice_reply_mode_always'),
+                          selected: mode == 2,
+                          title: context.l10n.voiceResponseAlways,
+                          description: context.l10n.deviceOnboardingVoiceReplyAlwaysDescription,
+                          onTap: () => _selectMode(2),
+                        ),
+                        const SizedBox(height: OmiSpacing.sm),
+                        _OutputStatus(mode: mode, route: _route),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: OmiSpacing.sm),
+                Text(
+                  context.l10n.deviceOnboardingVoiceReplySettingsHint(
+                    context.l10n.settings,
+                    context.l10n.voiceResponseMode,
+                  ),
+                  style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: OmiSpacing.sm),
+                OmiButton(
+                  key: const Key('voice_reply_continue'),
+                  label: context.l10n.deviceOnboardingContinue,
+                  onPressed: widget.onComplete,
+                  expand: true,
+                  labelStyle: OmiType.callout.copyWith(fontWeight: FontWeight.w600, fontFamily: 'Roboto'),
+                ),
+                const SizedBox(height: OmiSpacing.lg),
+              ],
             ),
-            const SizedBox(height: OmiSpacing.sm),
-            Text(
-              context.l10n.deviceOnboardingVoiceReplySettingsHint(
-                context.l10n.settings,
-                context.l10n.voiceResponseMode,
-              ),
-              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: OmiSpacing.sm),
-            OmiButton(
-              key: const Key('voice_reply_continue'),
-              label: context.l10n.deviceOnboardingContinue,
-              onPressed: widget.onComplete,
-              expand: true,
-              labelStyle: OmiType.callout.copyWith(fontWeight: FontWeight.w600, fontFamily: 'Roboto'),
-            ),
-            const SizedBox(height: OmiSpacing.lg),
-          ],
-        ),
-      );
-      if (!nativePresentationEnabled) return classic;
+          ));
+      if (!deviceTutorialNative(context)) return classic;
       return _nativeSurface(mode, classic);
     });
   }

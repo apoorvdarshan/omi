@@ -66,7 +66,7 @@ class _PowerCycleStepState extends State<PowerCycleStep> with DeviceTutorialNati
           ),
           bottomAction: _showContinue && isReconnected ? OnboardingContinueButton(onPressed: widget.onComplete) : null,
         );
-        if (!nativePresentationEnabled) return classic;
+        if (!deviceTutorialNative(context)) return classic;
         return _nativeSurface(provider.powerCycleState, isOff: isOff, isReconnected: isReconnected, classic: classic);
       },
     );
