@@ -132,7 +132,8 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
       loading: _isLoading,
       failed: _failed,
       errorMessage: l10n.couldNotLoadWhatsNew,
-      onRefresh: widget.changelogsFuture == null ? null : (_) => _retry(),
+      // Retry exists only for a failed load, as on the Flutter sheet; loaded content is never reloaded.
+      onRefresh: _failed && widget.changelogsFuture != null ? (_) => _retry() : null,
       fallback: fallback,
       toolbar: [
         NativeRow('changelog_close', l10n.close, symbol: 'xmark', action: (_) {
@@ -158,7 +159,7 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
                   symbol: 'chevron.right', enabled: page < count - 1, action: (_) => _showVersion(page + 1)),
             ],
           ]),
-        if (loaded)
+        if (loaded && _orderedChangelogs[page].changelogContent.changes.isNotEmpty)
           NativeSection('changelog_changes', [
             for (final (index, item) in _orderedChangelogs[page].changelogContent.changes.indexed)
               NativeRow('changelog_item_$index', '${item.icon ?? '✨'} ${item.title}',

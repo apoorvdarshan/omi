@@ -10,7 +10,8 @@ import 'journeys/support/hermetic_boot.dart';
 import 'support/native_host_harness.dart';
 
 /// Host checks for the prompts-first-run batch: run on Simulator with OMI_APP_PROFILE=local_dev and
-/// OMI_IOS_SWIFTUI=true.
+/// OMI_IOS_SWIFTUI=true, on an iPhone 15-class (or taller) display: the announcement dialog is 80% of
+/// the screen height and the harness expects more than 550 points.
 void main() {
   runNativeHostSuite((checkNativeHost) {
     testWidgets('the prompt queue shows the native announcement, then the native changelog', (tester) async {
@@ -53,18 +54,19 @@ void main() {
           builder: (context) => Scaffold(
               body: Center(
                   child: TextButton(
-                      // The Settings destination's loader, with fixture data instead of the network.
+                      // The Settings destination's loader (at most five versions), with fixture data
+                      // instead of the network.
                       onPressed: () => ChangelogSheet.showWithLoading(
-                          context, () async => [for (var i = 6; i >= 1; i--) _changelog('1.0.$i')]),
+                          context, () async => [for (var i = 5; i >= 1; i--) _changelog('1.0.$i')]),
                       child: const Text('whats-new')))))));
       await tester.tap(find.text('whats-new'));
       await tester.pump();
       await checkNativeHost(tester, 'native-prompts-first-run-whats-new-dark');
-      expect(nativeProjectedRow(tester, 'changelog_version_label').title, 'Version 1.0.6');
-      await nativeProjectedRow(tester, 'changelog_previous').action!(null);
+      expect(nativeProjectedRow(tester, 'changelog_version').value, '4');
+      await nativeProjectedRow(tester, 'changelog_version').action!('3');
       await tester.pump();
-      expect(nativeProjectedRow(tester, 'changelog_version_label').title, 'Version 1.0.5');
-      expect(nativeProjectedRow(tester, 'changelog_item_0').title, '🚀 Change in 1.0.5');
+      expect(nativeProjectedRow(tester, 'changelog_version').value, '3');
+      expect(nativeProjectedRow(tester, 'changelog_item_0').title, '🚀 Change in 1.0.4');
     });
   });
 }

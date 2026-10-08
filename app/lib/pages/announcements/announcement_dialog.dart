@@ -171,7 +171,10 @@ String nativeMarkdownLiteral(String text) =>
 
 /// The native rich-text image block for a server image: HTTPS only, otherwise no block at all.
 Map<String, Object>? nativeAnnouncementImageBlock(String? url) {
-  if (url == null || Uri.tryParse(url)?.scheme != 'https' || nativeImageUri(url) == null) return null;
+  // Only a URL already in its normalized spelling: Swift's stricter parser must accept exactly what
+  // Dart checked, or one odd image would cost the whole native surface.
+  if (url == null || !url.startsWith('https://') || Uri.tryParse(url)?.toString() != url) return null;
+  if (nativeImageUri(url) == null) return null;
   return {'kind': 'image', 'text': '', 'uri': url, 'indent': 0, 'prefix': ''};
 }
 

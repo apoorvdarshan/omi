@@ -129,7 +129,8 @@ class _FeatureScreenState extends State<FeatureScreen> {
     final step = steps[index];
     final image = nativeAnnouncementImageBlock(step.imageUrl);
     return [
-      if (step.videoUrl != null) NativeRow('feature_video_$index', step.title, kind: 'label', symbol: 'play.rectangle'),
+      // The Flutter placeholder is a bare play glyph; the heading below already names the step.
+      if (step.videoUrl != null) NativeRow('feature_video_$index', '', kind: 'label', symbol: 'play.rectangle'),
       NativeRow('feature_step_body_$index', step.title, kind: 'rich_text', blocks: [
         if (image != null) image,
         {
@@ -550,6 +551,15 @@ String nativeFeatureDescription(FeatureStep step) {
   }
   final start = description.indexOf(highlight) + highlight.indexOf(core);
   final end = start + core.length;
+  // CommonMark opens '**' before punctuation only after a space, punctuation or the start, and closes
+  // it after punctuation only before one; otherwise the stars would show, so the text stays plain.
+  bool loose(String? char) => char == null || RegExp(r'[\s\p{P}\p{S}]', unicode: true).hasMatch(char);
+  bool punctuation(String char) => RegExp(r'[\p{P}\p{S}]', unicode: true).hasMatch(char);
+  final before = start == 0 ? null : description[start - 1];
+  final after = end == description.length ? null : description[end];
+  if (punctuation(core[0]) && !loose(before) || punctuation(core[core.length - 1]) && !loose(after)) {
+    return nativeMarkdownLiteral(description);
+  }
   return '${nativeMarkdownLiteral(description.substring(0, start))}**${nativeMarkdownLiteral(core)}**'
       '${nativeMarkdownLiteral(description.substring(end))}';
 }

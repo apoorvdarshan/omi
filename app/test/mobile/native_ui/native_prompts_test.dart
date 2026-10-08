@@ -183,6 +183,9 @@ void main() {
       expect(nativeAnnouncementImageBlock('file:///tmp/a.png'), isNull);
       expect(nativeAnnouncementImageBlock('https://user:pw@cdn.omi.me/a.png'), isNull);
       expect(nativeAnnouncementImageBlock(null), isNull);
+      // Spellings Swift's URL parser reads differently are dropped rather than refusing the surface.
+      expect(nativeAnnouncementImageBlock('HTTPS://cdn.omi.me/a.png'), isNull);
+      expect(nativeAnnouncementImageBlock('https://cdn.omi.me/a b.png'), isNull);
     });
 
     test('the CTA allowlist is unchanged: navigate:/route, /route and http(s) pages only', () {
@@ -273,6 +276,9 @@ void main() {
       expect(nativeFeatureDescription(step('a b a', 'a')), '**a** b a');
       expect(nativeFeatureDescription(step('plain_text', 'missing')), r'plain\_text');
       expect(nativeFeatureDescription(step('plain', '  ')), 'plain');
+      // Emphasis that CommonMark would not open or close stays plain rather than showing stars.
+      expect(nativeFeatureDescription(step('Try Omi(beta) now', '(beta)')), 'Try Omi(beta) now');
+      expect(nativeFeatureDescription(step('Try Omi (beta) now', '(beta)')), 'Try Omi **(beta)** now');
     });
   });
 
@@ -327,6 +333,30 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(ChangelogSheet), findsNothing);
       expect(find.text('open'), findsOneWidget, reason: 'the route beneath stays');
+    });
+
+    testWidgets('a failed load shows the error with Retry, which reloads through the same loader', (tester) async {
+      final host = NativeTestHost.install();
+      var calls = 0;
+      await tester.pumpWidget(NativeTestHost.app(Scaffold(
+          body: ChangelogSheet(
+              native: true,
+              changelogsFuture: () async {
+                calls++;
+                if (calls == 1) throw Exception('offline');
+                return [_changelog('1.0.1')];
+              }))));
+      await NativeTestHost.settle(tester);
+      var snapshot = _snapshot(tester, host);
+      expect([snapshot['failed'], snapshot['refreshEnabled']], [true, true]);
+      expect(snapshot['error'], "Couldn't load what's new");
+      await host.sendFromNative(host.created.last, const MethodCall('action', {'id': '_refresh', 'value': null}));
+      await NativeTestHost.settle(tester);
+      snapshot = _snapshot(tester, host);
+      expect(calls, 2);
+      expect([snapshot['failed'], snapshot['loading'], snapshot['refreshEnabled']], [false, false, false],
+          reason: 'loaded content offers no reload');
+      expect(_ids(_rows(snapshot)), ['changelog_item_0']);
     });
 
     testWidgets('a single version has no version picker', (tester) async {
@@ -445,6 +475,13 @@ void main() {
     });
 
     testWidgets('the checklist and the rating alert are native; Not Really is cancel', (tester) async {
+      PackageInfo.setMockInitialValues(
+          appName: 'Omi Test', packageName: 'com.omi.test', version: '1.0.0', buildNumber: '1', buildSignature: '');
+      AnalyticsManager.resetForTesting();
+      final analytics = _Analytics();
+      AnalyticsManager.configure(analytics);
+      await AnalyticsManager.init();
+      addTearDown(AnalyticsManager.resetForTesting);
       final host = NativeTestHost.install();
       final presented =
           _answerPresentations((_) => {'action': null, 'values': <String, Object?>{}, 'reason': 'cancel'});
@@ -471,6 +508,11 @@ void main() {
       await tester.pump(const Duration(seconds: 2));
       expect(reviews, 0, reason: 'Not Really never opens the store review');
       expect(finished, 1);
+      await tester.runAsync(() => AnalyticsManager.flushPending(force: true));
+      const answered = OnboardingSetupRatingPromptAnswered(answer: OnboardingSetupRatingPromptAnsweredAnswer.notReally);
+      expect(analytics.tracked.where((event) => event.$1 == answered.wireName).map((event) => event.$2?['answer']),
+          [answered.properties['answer']],
+          reason: 'cancel is answered as notReally, not as no answer');
     });
   });
 
@@ -571,6 +613,7 @@ class _Permissions implements OnboardingPermissionsSource {
 
 class _Analytics implements AnalyticsAdapter {
   final List<String> events = [];
+  final List<(String, Map<String, Object>?)> tracked = [];
 
   @override
   bool get isInitialized => true;
@@ -579,7 +622,10 @@ class _Analytics implements AnalyticsAdapter {
   Future<void> init() async {}
 
   @override
-  void track({required String eventName, Map<String, Object>? properties}) => events.add(eventName);
+  void track({required String eventName, Map<String, Object>? properties}) {
+    events.add(eventName);
+    tracked.add((eventName, properties));
+  }
 
   @override
   void alias({required String newUserId}) {}
