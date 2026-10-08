@@ -61,6 +61,13 @@ Widget _app(Widget home) => nativeHostApp(home, providers: [
           create: (_) => ConversationDetailProvider(fetchConversation: (_) async => null)),
     ]);
 
+/// Bounded frames for a route or sheet transition; the live binding never settles behind a spinner.
+Future<void> _frames(WidgetTester tester) async {
+  for (var frame = 0; frame < 10; frame++) {
+    await tester.pump(const Duration(milliseconds: 200));
+  }
+}
+
 /// Waits for real file I/O, then answers whether [uri]'s file still exists.
 Future<bool> _exists(WidgetTester tester, String uri) async {
   await tester.pump();
@@ -77,7 +84,7 @@ void main() => runNativeHostSuite((checkNativeHost) {
         await tester.pumpWidget(nativeHostApp(const GlobalSearchPage(source: AuditSearchSource())));
         await checkNativeHost(tester, 'native-maps-recap-search-dark');
         unawaited(Future.sync(() => nativeProjectedRow(tester, 'search_places').action!(null)));
-        await tester.pumpAndSettle();
+        await _frames(tester);
         expect(find.byType(ConversationMapPage), findsOneWidget);
         await checkNativeHost(tester, 'native-maps-recap-places-dark');
         expect(tester.widget<IosNativeSurface>(find.byType(IosNativeSurface)).title, 'Conversation Map');
@@ -95,7 +102,7 @@ void main() => runNativeHostSuite((checkNativeHost) {
         expect(await _exists(tester, uri), isTrue);
         expect(nativeProjectedRow(tester, 'conversation_map_group_0').title, 'Place single');
         unawaited(Future.sync(() => nativeProjectedRow(tester, 'conversation_map_group_0').action!(null)));
-        await tester.pumpAndSettle();
+        await _frames(tester);
         expect(find.byType(ConversationDetailPage), findsOneWidget);
         await checkNativeHost(tester, 'native-maps-recap-detail-dark');
         await tester.pumpWidget(const SizedBox());
@@ -113,13 +120,13 @@ void main() => runNativeHostSuite((checkNativeHost) {
         await checkNativeHost(tester, 'native-maps-recap-cluster-map-dark');
         expect(nativeProjectedRow(tester, 'conversation_map_group_0').title, '2 conversations');
         unawaited(Future.sync(() => nativeProjectedRow(tester, 'conversation_map_group_0').action!(null)));
-        await tester.pumpAndSettle();
+        await _frames(tester);
         expect(find.byType(ConversationMapClusterChooser), findsOneWidget);
         await tester.pump(const Duration(seconds: 2));
         expect(await captureNativeHostScreenshot('native-maps-recap-chooser-dark'), isNotEmpty);
         expect(nativeProjectedRow(tester, 'conversation_map_cluster_1').title, 'Place second');
         unawaited(Future.sync(() => nativeProjectedRow(tester, 'conversation_map_cluster_1').action!(null)));
-        await tester.pumpAndSettle();
+        await _frames(tester);
         expect(find.byType(ConversationMapClusterChooser), findsNothing);
         expect(find.byType(ConversationDetailPage), findsOneWidget);
         await checkNativeHost(tester, 'native-maps-recap-chooser-detail-dark');
@@ -150,9 +157,9 @@ void main() => runNativeHostSuite((checkNativeHost) {
           staticMapResolver: _fixtureMap,
           launchMap: (latitude, longitude) => launched.add((latitude, longitude)),
         )));
-        await checkNativeHost(tester, 'native-maps-recap-recap-dark');
+        await checkNativeHost(tester, 'native-maps-recap-summary-dark');
         unawaited(Future.sync(() => nativeProjectedRow(tester, 'recap_locations_map').action!(null)));
-        await tester.pumpAndSettle();
+        await _frames(tester);
         expect(find.byType(RecapJourneySheet), findsOneWidget);
         await tester.pump(const Duration(seconds: 2));
         expect(await captureNativeHostScreenshot('native-maps-recap-journey-dark'), isNotEmpty);
@@ -162,7 +169,7 @@ void main() => runNativeHostSuite((checkNativeHost) {
         await nativeProjectedRow(tester, 'recap_location_1').action!(null);
         expect(launched, [(37.7849, -122.4094)]);
         await nativeProjectedRow(tester, 'recap_journey_close').action!(null);
-        await tester.pumpAndSettle();
+        await _frames(tester);
         expect(find.byType(RecapJourneySheet), findsNothing);
         expect(await _exists(tester, uri), isFalse);
         await tester.pumpWidget(const SizedBox());

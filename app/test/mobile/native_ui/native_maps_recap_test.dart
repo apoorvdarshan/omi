@@ -22,6 +22,7 @@ import 'package:omi/pages/conversations/day_conversations_page.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/ui/ui.dart' show OmiSpinner;
 import 'package:omi/widgets/components/memory_review_card.dart';
 import 'package:omi/widgets/native_static_map.dart';
 import 'package:omi/widgets/omi_map_preview.dart';
@@ -85,10 +86,12 @@ class _Maps {
   }
 }
 
-/// Lets real file deletions finish.
+/// Lets real file I/O and the fake-async continuations between its steps finish.
 Future<void> _settleIo(WidgetTester tester) async {
-  await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
-  await tester.pump();
+  for (var round = 0; round < 20; round++) {
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+    await tester.pump();
+  }
 }
 
 Map _snapshot(WidgetTester tester) => tester.widget<UiKitView>(find.byType(UiKitView).last).creationParams as Map;
@@ -298,10 +301,12 @@ void main() {
       final file = maps.complete(0)!;
       await tester.pump();
       await tester.pump();
+      expect(_row(tester, 'conversation_map_image'), isNotNull);
       AuthService.instance.handleAuthUserChanged('another-owner');
       await tester.pump();
       await _settleIo(tester);
       expect(file.existsSync(), isFalse);
+      expect(find.byType(UiKitView), findsNothing, reason: 'The previous owner\'s surface shows nothing');
       expect(maps.requests, hasLength(1), reason: 'Nothing is fetched for the previous owner again');
     });
 
@@ -318,6 +323,18 @@ void main() {
       await tester.pump();
       await _settleIo(tester);
       expect(late.existsSync(), isFalse);
+    });
+
+    testWidgets('a shared place opens its chooser sheet from the page', (tester) async {
+      final host = NativeTestHost.install();
+      await tester.pumpWidget(
+          NativeTestHost.app(ConversationMapPage(conversations: _places, staticMapResolver: _Maps(directory).resolve)));
+      await NativeTestHost.settle(tester);
+      await _tap(tester, host, 'conversation_map_group_0');
+      await tester.pump(const Duration(seconds: 1));
+      // The compile-time flag is off in tests, so showOmiSheet keeps the classic chooser rows.
+      expect(find.byKey(const ValueKey('conversation_map_cluster_row_a')), findsOneWidget);
+      expect(find.byKey(const ValueKey('conversation_map_cluster_row_b')), findsOneWidget);
     });
 
     testWidgets('the cluster chooser projects rows, pops, then opens the chosen conversation', (tester) async {
@@ -484,6 +501,21 @@ void main() {
         await tester.pump(const Duration(seconds: 10));
       });
     }
+
+    testWidgets('without native presentation the Flutter spinner shows and is dismissed once', (tester) async {
+      final fetch = Completer<ServerConversation?>();
+      await tester.pumpWidget(page(_summary(), fetcher: (_) => fetch.future));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.tap(find.text('Planning'));
+      await tester.pump();
+      expect(find.byType(Dialog), findsNothing);
+      expect(find.byType(OmiSpinner), findsOneWidget);
+      fetch.complete(null);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.byType(OmiSpinner), findsNothing);
+      expect(find.byType(DailySummaryDetailPage), findsOneWidget, reason: 'Only the spinner was popped');
+    });
 
     testWidgets('the memories row opens the review sheet', (tester) async {
       final host = NativeTestHost.install();
