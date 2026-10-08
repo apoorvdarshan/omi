@@ -429,7 +429,8 @@ class _AddAppPageState extends State<AddAppPage> {
 @visibleForTesting
 Future<void> showStartEarningPrompt(BuildContext context) async {
   final l10n = context.l10n;
-  final result = await showIosNativeModal(context, title: l10n.startEarning, sections: [
+  // An alert keeps both choices as labelled buttons, as the classic sheet does.
+  final result = await showIosNativeModal(context, title: l10n.startEarning, alert: true, sections: [
     NativeSection('start_earning', [NativeRow('start_earning_message', l10n.connectStripeOrPayPal, kind: 'label')]),
   ], actions: [
     NativeRow('cancel', l10n.notNow),

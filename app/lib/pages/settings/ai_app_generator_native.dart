@@ -198,13 +198,16 @@ extension _NativeAiAppGenerator on _AiAppGeneratorPageState {
             symbol: 'arrow.clockwise', enabled: !provider.isLoading, action: (_) => provider.regenerateIcon()),
         NativeRow('ai_gen_description', l10n.description,
             kind: 'label', subtitle: _nativeExcerpt(provider.generatedDescription ?? '')),
-        if (capabilities.contains('memories'))
-          NativeRow('ai_gen_feature:memories', l10n.tailoredConversationSummaries, kind: 'label', symbol: 'doc.text'),
-        if (capabilities.contains('chat'))
-          NativeRow('ai_gen_feature:chat', l10n.customChatbotPersonality,
-              kind: 'label', symbol: 'bubble.left.and.bubble.right'),
       ]),
-      NativeSection('ai_gen_settings', [
+      if (capabilities.contains('memories') || capabilities.contains('chat'))
+        NativeSection('ai_gen_feature_list', title: l10n.features, [
+          if (capabilities.contains('memories'))
+            NativeRow('ai_gen_feature:memories', l10n.tailoredConversationSummaries, kind: 'label', symbol: 'doc.text'),
+          if (capabilities.contains('chat'))
+            NativeRow('ai_gen_feature:chat', l10n.customChatbotPersonality,
+                kind: 'label', symbol: 'bubble.left.and.bubble.right'),
+        ]),
+      NativeSection('ai_gen_settings', footer: provider.isPaid ? l10n.perMonthLabel : '', [
         NativeRow('ai_gen_public', l10n.makePublic,
             kind: 'toggle',
             value: provider.makePublic,
