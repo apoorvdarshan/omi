@@ -43,7 +43,12 @@ Future<NativeModalResult?> showIosNativeModal(
   if (!context.mounted) return null;
   final rows = [...actions, ...sections.expand((section) => section.rows)];
   // An unrepresentable request keeps the caller's complete Flutter dialog.
-  if (rows.any((row) => !row.valid) || rows.map((row) => row.id).toSet().length != rows.length) return null;
+  if (rows.any((row) => !row.valid) ||
+      // Host-drawn rows belong to surface lists; a presentation never carries them.
+      rows.any((row) => nativeHostRowKinds.contains(row.kind)) ||
+      rows.map((row) => row.id).toSet().length != rows.length) {
+    return null;
+  }
   final ticket = _PresentationTicket();
   final owner = AuthService.instance.captureSessionSnapshot();
   var sessionValid = true;

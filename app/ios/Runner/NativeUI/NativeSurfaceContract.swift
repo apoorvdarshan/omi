@@ -194,8 +194,11 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
               ["ltr", "rtl"].contains(snapshot.direction), !snapshot.locale.isEmpty,
               Set(snapshot.sections.map(\.id)).count == snapshot.sections.count,
               Set(ids).count == ids.count, !ids.contains(where: { $0.isEmpty || $0.hasPrefix("_") }),
+              snapshot.hostKindsOnlyInSections,
               rows.allSatisfy({ row in
-                  ["label", "button", "navigation", "transcript", "rich_text", "image", "toggle", "task", "choice", "segmented", "color", "text", "menu", "date", "message_user", "message_ai", "chart", "waveform", "keypad", "slider", "progress"].contains(row.kind)
+                  (["label", "button", "navigation", "transcript", "rich_text", "image", "toggle", "task", "choice", "segmented", "color", "text", "menu", "date", "message_user", "message_ai", "chart", "waveform", "keypad", "slider", "progress"].contains(row.kind)
+                      || NativeUICapabilities.compiledKinds.contains(row.kind))
+                      && row.hasValidHostKind
                       && Set(row.options.map(\.id)).count == row.options.count
                       && row.options.allSatisfy({ !$0.id.isEmpty })
                       && row.hasValidValue
@@ -218,9 +221,42 @@ struct NativeSurfaceSnapshot: Decodable, Equatable {
         return snapshot
     }
     enum ContractError: Error { case invalidSnapshot }
+
+    /// Host-provided rows are list content; toolbars, chat, reader and navigation never carry them.
+    var hostKindsOnlyInSections: Bool {
+        let chrome = toolbar + (chat?.actions ?? []) + (reader?.actions ?? []) + (navigation.map { [$0] } ?? [])
+        return !chrome.contains(where: { NativeUICapabilities.hostKinds.contains($0.kind) })
+    }
+}
+
+/// Row kinds the host renders with system UI, answered on the config channel as 'capabilities'.
+/// Only the Siri toolchain (the gate SiriBridge uses) links the Shortcuts link; anything compiled
+/// with a stable toolchain, including the Preview and the contract test, reports none and rejects it.
+enum NativeUICapabilities {
+    static let hostKinds: Set<String> = ["shortcuts_link"]
+
+    static let compiledKinds: Set<String> = {
+        #if compiler(>=6.4)
+        return NativeUICapabilities.hostKinds
+        #else
+        return []
+        #endif
+    }()
+
+    static var current: [String] {
+        guard #available(iOS 16.0, *) else { return [] }
+        return compiledKinds.sorted()
+    }
 }
 
 private extension NativeSurfaceRow {
+    /// A Shortcuts link carries no value, command, options, symbol or media; the system owns its tap.
+    var hasValidHostKind: Bool {
+        guard kind == "shortcuts_link" else { return true }
+        return options.isEmpty && symbol == nil && !enabled && imageUri == nil
+            && (points ?? []).isEmpty && (blocks ?? []).isEmpty
+    }
+
     var hasValidImageURI: Bool {
         guard let imageUri else { return true }
         guard imageUri.count <= 4096, let url = URL(string: imageUri),

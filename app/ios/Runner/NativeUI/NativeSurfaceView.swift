@@ -1,6 +1,9 @@
 import SwiftUI
 import Charts
 import ImageIO
+#if compiler(>=6.4)
+import AppIntents
+#endif
 
 @available(iOS 16.0, *)
 @MainActor
@@ -391,6 +394,8 @@ struct NativeSurfaceView: View {
                 NativeTextRow(row: row, state: state)
             case "keypad":
                 NativeKeypadRow(row: row, state: state)
+            case "shortcuts_link":
+                NativeShortcutsLinkRow(row: row)
             case "label":
                 if let symbol = row.symbol {
                     Label { label(row) } icon: {
@@ -400,7 +405,7 @@ struct NativeSurfaceView: View {
             default: action(row, compact: compact)
             }
         }
-        .disabled(!row.enabled && !["label", "rich_text", "image", "progress", "chart", "waveform", "message_ai", "message_user"].contains(row.kind) || (state.pending.contains(row.id) && !["text", "keypad", "slider"].contains(row.kind)))
+        .disabled(!row.enabled && !["label", "rich_text", "image", "progress", "chart", "waveform", "message_ai", "message_user", "shortcuts_link"].contains(row.kind) || (state.pending.contains(row.id) && !["text", "keypad", "slider"].contains(row.kind)))
         .accessibilityIdentifier(row.id)
     }
 
@@ -728,6 +733,24 @@ private struct NativeKeypadGlass: ViewModifier {
     @ViewBuilder func body(content: Content) -> some View {
         if #available(iOS 26, *) { content.glassEffect(.regular.interactive(), in: .circle) }
         else { content.background(.thinMaterial, in: Circle()) }
+    }
+}
+
+/// Apple's Shortcuts link for this app. The system owns the tap, so no command reaches Dart; the
+/// contract rejects the kind wherever the Siri toolchain did not compile this branch.
+@available(iOS 16.0, *)
+private struct NativeShortcutsLinkRow: View {
+    let row: NativeSurfaceRow
+
+    var body: some View {
+        #if compiler(>=6.4)
+        ShortcutsLink()
+            .shortcutsLinkStyle(.automatic)
+            .frame(maxWidth: .infinity, minHeight: 50)
+            .accessibilityIdentifier(row.id)
+        #else
+        EmptyView()
+        #endif
     }
 }
 

@@ -50,6 +50,11 @@ String? nativeImageUri(String? input) {
   return null;
 }
 
+/// Row kinds the host draws with its own system control, offered through [nativeUiCapabilities].
+/// They are list content: only surface sections carry them, never toolbars, chat, reader,
+/// navigation or modal presentations.
+const nativeHostRowKinds = {'shortcuts_link'};
+
 /// Only presentation values cross the channel. Callbacks stay with their current owner.
 class NativeRow {
   const NativeRow(
@@ -221,6 +226,14 @@ class NativeRow {
           options.keys.every((key) => RegExp(r'^#[0-9A-Fa-f]{6}$').hasMatch(key)),
       'text' => value is String && (value as String).characters.length <= (maximumLength ?? 10000),
       'date' => value is String && ((value as String).isEmpty || _validDate(value as String)),
+      // The system owns the Shortcuts link's tap, so it carries no value, command or media.
+      'shortcuts_link' => value == null &&
+          options.isEmpty &&
+          symbol == null &&
+          action == null &&
+          imageUri == null &&
+          points.isEmpty &&
+          blocks.isEmpty,
       'label' ||
       'button' ||
       'navigation' ||
@@ -610,6 +623,12 @@ class _IosNativeSurfaceState extends State<IosNativeSurface> {
         widget.chat != null && widget.reader != null ||
         widget.reader?.validFor(_sections) == false ||
         rows.any((row) => !row.valid) ||
+        [
+          ..._toolbar,
+          ...?widget.chat?.actions,
+          ...?widget.reader?.actions,
+          if (widget.navigation != null) widget.navigation!,
+        ].any((row) => nativeHostRowKinds.contains(row.kind)) ||
         rows.map((row) => row.id).toSet().length != rows.length ||
         _sections.map((section) => section.id).toSet().length != _sections.length) {
       unawaited(_invalidate());
