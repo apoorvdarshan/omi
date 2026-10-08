@@ -1,0 +1,28 @@
+# Batch: app-generator-payouts
+
+## Screens
+- AI App Generator (prompt, generating, generated, create)
+- Creator Payouts (payment methods page)
+- Stripe Connect setup and country picker
+- Start-earning prompt after submitting a paid app
+
+## Owned files (only these may be created/edited)
+- app/lib/pages/settings/ai_app_generator_page.dart
+- app/lib/pages/settings/ai_app_generator_native.dart
+- app/lib/pages/payments/payments_page.dart
+- app/lib/pages/payments/payments_native.dart
+- app/lib/pages/payments/stripe_connect_setup.dart
+- app/lib/pages/payments/widgets/country_bottom_sheet.dart
+- app/lib/pages/payments/widgets/payment_method_card.dart
+- app/lib/pages/apps/add_app.dart
+- app/test/mobile/native_ui/native_generator_payouts_test.dart
+- app/integration_test/native_generator_payouts_host_test.dart
+
+## Instructions
+Common rules: Dart only. AiAppGeneratorProvider, PaymentMethodProvider (polling and session generation), url_launcher (Stripe onboarding stays in the external browser) and analytics stay the owners. Native code never receives the Stripe account link or base64 icon bytes. Flag-off behaviour is unchanged. Uses P0 and P2. 1) AI generator: add part ai_app_generator_native.dart. It returns IosNativeSurface (fallback the current Scaffold) inside the existing PopScope, so back semantics stay identical: in the generated view back clears to the prompt; in the prompt view it clears and pops. Toolbar 'ai_gen_back' (chevron.left) calls Navigator.maybePop. Prompt state: title aiAppGeneratorBannerTitle; section 'ai_gen_suggestions' (trySomethingLike) with 'ai_gen_prompt:<index>' buttons (subtitle tryIt, symbol sparkles) that fill _promptController with a light haptic; a loading label while prompts load; text row 'ai_gen_prompt_text' (placeholder whatShouldWeMake); 'ai_gen_send' (arrow.up.circle.fill, enabled with non-empty text and not generating) calling the existing _generateApp; an error label with exclamationmark.triangle. Generating state: loading flag; progress row 'ai_gen_progress' (value currentStepIndex + 1, maximumValue 5, subtitle percent); a preview label; five step labels 'ai_gen_step:<enum name>' (checkmark.circle.fill, circle.dotted or circle; subtitle processing on the active one); a features label. Generated state: title generatedName; a BETA label; a preview label with imageUri pointing at a session-fenced temp PNG of the icon (at most 8 MB; a new filename per regenerate with the previous file deleted; deleted on clear, dispose and session change); 'ai_gen_regenerate_icon' (enabled !isLoading); description and feature labels; toggles 'ai_gen_public' and 'ai_gen_paid' calling setMakePublic and setIsPaid; a price text row (keyboard decimal) calling setPrice(double.tryParse ?? 0) when paid; 'ai_gen_create' (title creating or createApp, enabled when !isLoading && icon != null) calling the existing _submitApp, which routes to AppDetailPage. A prompt over 10000 chars uses classic. 2) Payouts: new payments_native.dart used by PaymentsPage, with title payments, loading isLoading and onRefresh getPaymentMethodsStatus. Section 'payout_selected': connectPaymentMethodInfo as a label (info.circle) when there is no active method (a PayPal default counts as none); otherwise label 'payout_active:stripe' (paymentStatusActive, checkmark.seal.fill) plus update (to StripeConnectSetup). Section 'payout_available': connected but not active gives menu 'payout_method:stripe' {update, set_active}; not connected gives navigation 'payout_connect:stripe' (paymentStatusNotConnected). Plus a coming-soon label (clock). Analytics stay in the same closures, and SF Symbols replace the brand logos. 3) StripeConnectSetup: the same State returns IosNativeSurface inside the existing PopScope; dispose still stops polling. Connect state: labels getPaidThroughStripe, monthlyPayouts (banknote) and secureAndReliable (lock.shield). When notConnected, a searchable choice 'stripe_country' (optionSearch searchCountries, optionClose close) with options '__unset__' (selectYourCountry) plus each supported country id (two uppercase letters) as '<flag> <decoded name>'; '__unset__' is ignored. Also a destructive countrySelectionPermanent label, the byClickingConnectNow label, navigation 'stripe_agreement' calling launchUrl(legal), and 'stripe_connect' (enabled per _canConnect) calling the existing _connect. Polling state: loading, the two labels, 'stripe_retry' and 'stripe_later'. Connected state: label successfullyConnected / stripeReadyForPayments plus 'stripe_update' and 'stripe_go_back'. Any invalid country id falls back to classic, and countries are never dropped. 4) add_app.dart _startEarningSheet: showIosNativeModal(title startEarning, label connectStripeOrPayPal, actions [cancel notNow, connect connectNow with creditcard]); connect routes to PaymentsPage, and null falls back to the existing sheet. No new strings.
+
+## Tests
+native_generator_payouts_test.dart: the projection for each generator state never contains base64; the temp icon file is deleted after regenerate, clear, dispose and session change; Back from the generated state clears without popping; Create calls submit once; payouts projection for none, connected and active; set_active calls setActiveMethod(stripe) once; country choice '__unset__' is a no-op and 'US' sets the id; Connect is disabled without a country; leaving stops polling; the account link URL never appears in a snapshot; start earning routes on connect. Host (native_generator_payouts_host_test.dart) with fakes for generate, icon, submit, payment status and countries: the native generator flow and the native payouts and Stripe setup.
+
+## Depends on
+None
