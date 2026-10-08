@@ -57,6 +57,14 @@ AppReview _review(String uid, double score, {String response = ''}) => AppReview
 class _RecordingAppProvider extends AppProvider {
   final publicChanges = <(String, bool)>[];
   final deletions = <String>[];
+  final enables = <String>[];
+  Completer<bool>? enableAnswer;
+
+  @override
+  Future<bool> toggleApp(String appId, bool isEnabled, int? idx) {
+    enables.add(appId);
+    return (enableAnswer = Completer<bool>()).future;
+  }
 
   @override
   Future<void> toggleAppPublic(String appId, bool value) async => publicChanges.add((appId, value));
@@ -160,6 +168,19 @@ void main() {
     await pump(tester, ReviewsListPage(app: _app(uid: 'owner', reviews: [_review('a', 4)])), AppProvider());
     expect(find.byType(IosNativeSurface), findsNothing);
     expect(find.text(_l10n.reply), findsOneWidget);
+    final sent = <String>[];
+    ReviewsListPage.debugReplySenderForTest = (_, reply, __) async {
+      sent.add(reply);
+      return true;
+    };
+    addTearDown(() => ReviewsListPage.debugReplySenderForTest = null);
+    await tester.tap(find.text(_l10n.reply));
+    await settle(tester);
+    await tester.enterText(find.byType(TextField), '  Thanks  ');
+    await tester.tap(find.text(_l10n.send));
+    await settle(tester);
+    expect(sent, ['Thanks']);
+    expect(find.byType(OmiAlertDialog), findsNothing, reason: 'The dialog closes after sending');
     await pump(
         tester,
         CategoryAppsPage(
@@ -234,6 +255,23 @@ void main() {
       expect(review.response, 'Thanks for the review!');
       expect(row(tester, 'review_reply:0')!.title, _l10n.editReply);
       expect(find.text(_l10n.replySentSuccessfully), findsOneWidget);
+    });
+
+    testWidgets('a failed send keeps the editor open with the draft and mutates nothing', (tester) async {
+      NativeTestHost.install();
+      SharedPreferencesUtil().uid = 'owner';
+      ReviewsListPage.debugReplySenderForTest = (_, __, ___) async => throw Exception('offline');
+      final review = _review('reviewer', 4);
+      final presented = _answerPresentations([_send('Thanks'), _cancel]);
+      await pump(tester, ReviewsListPage(app: _app(uid: 'owner', reviews: [review])), AppProvider());
+
+      unawaited(row(tester, 'review_reply:0')!.action!(null) as Future<void>?);
+      await settle(tester);
+      expect(presented, hasLength(2), reason: 'The editor reopens after the failure');
+      final text = (presented.last['sections'] as List).cast<Map>().single['rows'].single as Map;
+      expect(text['value'], 'Thanks');
+      expect(review.response, isEmpty);
+      expect(find.textContaining('offline'), findsOneWidget, reason: 'The existing failure toast');
     });
 
     testWidgets('a cancelled reply mutates nothing', (tester) async {
@@ -328,6 +366,7 @@ void main() {
   group('capability and category pages', () {
     testWidgets('capability apps load, fail with retry, empty and group rows open AppDetailPage', (tester) async {
       NativeTestHost.install();
+      final provider = _RecordingAppProvider();
       final answers =
           <Completer<({List<Map<String, dynamic>> groups, Map<String, dynamic>? capability, int totalApps})>>[];
       final routes = await pump(
@@ -339,7 +378,7 @@ void main() {
                 answers.add(Completer());
                 return answers.last.future;
               }),
-          AppProvider());
+          provider);
       expect(surface(tester).loading, isTrue);
 
       answers.last.completeError(Exception('offline'));
@@ -377,7 +416,16 @@ void main() {
       expect(section.rows.first.imageUri, 'https://example.invalid/one.png');
       expect(section.rows.first.subtitle, contains('Sync your tasks with one.'));
       expect(section.rows.first.options.keys, ['enable']);
+      expect(section.rows.first.swipeTrailing, ['enable']);
       expect(section.rows.last.options, isEmpty, reason: 'An enabled app opens instead');
+
+      unawaited(section.rows.first.action!('enable') as Future<void>?);
+      await settle(tester);
+      expect(provider.enables, ['one']);
+      expect(row(tester, 'group_0_0')!.options, isEmpty, reason: 'No second enable while the owner answers');
+      provider.enableAnswer!.complete(true);
+      await settle(tester);
+      expect(row(tester, 'group_0_0')!.options.keys, ['enable'], reason: 'The owner still reports it disabled');
 
       unawaited(section.rows.first.action!(null) as Future<void>?);
       expect(routes.lastPage(tester), isA<AppDetailPage>());

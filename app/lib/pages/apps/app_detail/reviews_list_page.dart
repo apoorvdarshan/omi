@@ -96,13 +96,15 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
 
   /// The native reply editor, or the Flutter dialog when it is unavailable.
   Future<void> _reply(AppReview review) async {
-    if (await _replyNative(review) || !mounted) return;
-    await _showReplyDialog(review);
+    var draft = review.response;
+    if (await _replyNative(review, (text) => draft = text) || !mounted) return;
+    await _showReplyDialog(review, initialText: draft);
   }
 
   /// Answers false when the native editor could not be used, so the caller opens the Flutter dialog.
-  /// Blank text is never sent and keeps the editor open, as does a failed send.
-  Future<bool> _replyNative(AppReview review) async {
+  /// Blank text is never sent and keeps the editor open, as does a send that throws; [onDraft] keeps
+  /// the latest text for the Flutter dialog.
+  Future<bool> _replyNative(AppReview review, ValueChanged<String> onDraft) async {
     var draft = review.response;
     while (true) {
       if (!mounted) return true;
@@ -119,6 +121,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
       final text = result.values['review_reply_text'];
       if (result.action != 'send' || text is! String || !mounted) return true;
       draft = text;
+      onDraft(draft);
       if (draft.trim().isEmpty) continue;
       final activity = await showIosNativeActivity(context, label: l10n.replyToReview);
       final bool sent;
@@ -131,8 +134,8 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
     }
   }
 
-  Future<void> _showReplyDialog(AppReview review) async {
-    final controller = TextEditingController(text: review.response);
+  Future<void> _showReplyDialog(AppReview review, {String? initialText}) async {
+    final controller = TextEditingController(text: initialText ?? review.response);
     final isSubmitting = ValueNotifier<bool>(false);
 
     Future<void> submit(BuildContext dialogContext) async {

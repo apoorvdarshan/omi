@@ -285,7 +285,8 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
   }
 
   void _openAllReviews() {
-    PlatformManager.instance.analytics.appDetailReviewsOpened(appId: widget.app.id, reviewCount: widget.reviews.length);
+    PlatformManager.instance.analytics
+        .appDetailReviewsOpened(appId: widget.app.id, reviewCount: widget.app.reviews.length);
     routeToReviews();
   }
 

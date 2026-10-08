@@ -29,7 +29,8 @@ class CapabilityAppsPage extends StatefulWidget {
   final AppCapability capability;
   final List<App> apps;
 
-  /// Replaces the HTTP loader (tests); null uses [retrieveCapabilityAppsGroupedByCategory].
+  /// Replaces the HTTP loader in tests; null uses [retrieveCapabilityAppsGroupedByCategory].
+  @visibleForTesting
   final CapabilityAppsLoader? loadApps;
 
   const CapabilityAppsPage({super.key, required this.capability, required this.apps, this.loadApps});
@@ -43,6 +44,9 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
   bool _isLoading = true;
   bool _loadFailed = false;
   int _totalCount = 0;
+
+  /// Apps the native rows are enabling; their Enable option is withdrawn until the owner answers.
+  final _enabling = <String>{};
 
   @override
   void initState() {
@@ -263,8 +267,14 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
   Future<void> _enable(App app) async {
     final provider = context.read<AppProvider>();
     if (!await confirmAppDataAccess(context, app)) return;
-    if (!mounted) return;
-    await provider.toggleApp(app.id, true, null);
+    if (!mounted || !_enabling.add(app.id)) return;
+    setState(() {});
+    try {
+      await provider.toggleApp(app.id, true, null);
+    } finally {
+      _enabling.remove(app.id);
+      if (mounted) setState(() {});
+    }
   }
 
   /// The same states and groups in the native presentation; loading and navigation stay here.
@@ -274,6 +284,7 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
     final failed = !_isLoading && _totalCount == 0 && _loadFailed;
     NativeRow appRow(App app, String id) {
       final enabled = (provider.apps.firstWhereOrNull((a) => a.id == app.id) ?? app).enabled;
+      final canEnable = !enabled && !appNeedsDetailToEnable(app) && !_enabling.contains(app.id);
       return NativeRow(id, app.name.decodeString,
           kind: 'navigation',
           imageUri: nativeImageUri(app.getImageUrl()),
@@ -281,7 +292,8 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
             if (app.description.isNotEmpty) app.description,
             if (app.ratingAvg != null) '★ ${app.getRatingAvg()} (${app.ratingCount})',
           ].join('\n'),
-          options: !enabled && !appNeedsDetailToEnable(app) ? {'enable': l10n.enable} : const {},
+          options: canEnable ? {'enable': l10n.enable} : const {},
+          swipeTrailing: canEnable ? const ['enable'] : const [],
           action: (value) => value == 'enable' ? _enable(app) : _openDetail(app));
     }
 
