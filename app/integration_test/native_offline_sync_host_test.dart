@@ -100,7 +100,7 @@ void main() {
       await checkNativeHost(tester, 'native-offline-sync-sync-page-dark');
       final l10n = AppLocalizations.of(tester.element(find.byType(IosNativeSurface)));
       expect(nativeProjectedRow(tester, 'sync_status_title').title, l10n.syncCardReadyCount(2));
-      expect(_rows(tester, RegExp(r'^sync_wal:\d+$')), 2);
+      expect(_rows(tester, RegExp(r'^sync_wal:\d+:[^:]+$')), 2);
       expect(owner.calls, isEmpty, reason: 'Rendering status never starts a sync');
 
       await nativeProjectedRow(tester, 'sync_manage').action!(null);
@@ -129,6 +129,7 @@ void main() {
       await nativeProjectedRow(tester, 'offline_more').onVisible!(null);
       await tester.pump(const Duration(seconds: 1));
       expect(_rows(tester, rows), 400);
+      expect(find.byType(UiKitView), findsOneWidget, reason: 'The grown window stays native');
 
       await nativeProjectedRow(tester, 'offline_manage').action!(null);
       await tester.pump(const Duration(seconds: 1));

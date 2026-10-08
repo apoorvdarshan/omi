@@ -173,7 +173,8 @@ extension _NativeSyncPresentation on _SyncPageState {
     final source = WalListItem._sourceOf(context, wal);
     final time = OmiDateFormat.of(context).time(DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000));
     final duration = OmiDuration.compact(wal.seconds, l);
-    final id = 'sync_wal:$index';
+    // The recording id keeps a command from an older snapshot off a row that shifted position.
+    final id = 'sync_wal:$index:${wal.id}';
     final rows = [
       NativeRow(id, source != null ? '$time · $duration · $source' : '$time · $duration',
           kind: 'navigation',

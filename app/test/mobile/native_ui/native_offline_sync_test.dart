@@ -161,6 +161,11 @@ class _Device extends ChangeNotifier implements DeviceProvider {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+class _Offline extends ConnectivityProvider {
+  @override
+  bool get isConnected => false;
+}
+
 class _Conversations extends ConversationProvider {
   _Conversations() : super(isSignedIn: () => false);
   final updated = <ServerConversation>[];
@@ -229,6 +234,12 @@ List<String> _rowIds(WidgetTester tester) => [
       for (final surface in tester.stateList<State<IosNativeSurface>>(find.byType(IosNativeSurface)))
         ...IosNativeSurface.debugDispatchRows(surface).map((row) => row.id),
     ];
+
+/// A recording's main row: its position, then its recording id.
+final _walRowPattern = RegExp(r'^sync_wal:\d+:[^:]+$');
+
+String _walRow(WidgetTester tester, int index) =>
+    _rowIds(tester).singleWhere((id) => _walRowPattern.hasMatch(id) && id.startsWith('sync_wal:$index:'));
 
 List<NativeSection> _sections(WidgetTester tester) =>
     tester.widget<IosNativeSurface>(find.byType(IosNativeSurface).last).sections;
@@ -333,16 +344,16 @@ void main() {
         'synced': '${_l10n.synced}  1',
         'corrupted': '${_l10n.failedStatus}  1',
       });
-      expect(_rowIds(tester).where((id) => RegExp(r'^sync_wal:\d+$').hasMatch(id)), hasLength(2));
+      expect(_rowIds(tester).where((id) => _walRowPattern.hasMatch(id)), hasLength(2));
 
       await _send(tester, host, 'sync_filter', 'synced');
       expect(sync.calls, ['filter:synced']);
       expect(nativeProjectedRow(tester, 'sync_filter').value, 'synced');
-      expect(nativeProjectedRow(tester, 'sync_wal:0').subtitle, _l10n.syncStatusConversationCreated);
+      expect(nativeProjectedRow(tester, _walRow(tester, 0)).subtitle, _l10n.syncStatusConversationCreated);
 
       await _send(tester, host, 'sync_filter', 'corrupted');
-      expect(nativeProjectedRow(tester, 'sync_wal:0').subtitle, _l10n.syncStatusFileUnavailable);
-      expect(nativeProjectedRow(tester, 'sync_wal:0:delete').destructive, true);
+      expect(nativeProjectedRow(tester, _walRow(tester, 0)).subtitle, _l10n.syncStatusFileUnavailable);
+      expect(nativeProjectedRow(tester, '${_walRow(tester, 0)}:delete').destructive, true);
     });
 
     testWidgets('pending recordings from several sources group by source, otherwise by hour', (tester) async {
@@ -353,7 +364,7 @@ void main() {
       final grouped = _sections(tester).where((section) => section.id.startsWith('sync_source:')).toList();
       expect(grouped.map((section) => section.id), ['sync_source:phone', 'sync_source:sd_card']);
       expect(grouped.first.title, '${_l10n.phone} · 1');
-      expect(nativeProjectedRow(tester, 'sync_wal:1').title, endsWith(_l10n.sdCard));
+      expect(nativeProjectedRow(tester, _walRow(tester, 1)).title, endsWith(_l10n.sdCard));
 
       sync
         ..wals = [_wal(0), _wal(1)]
@@ -374,7 +385,7 @@ void main() {
 
       // The projection lists newest first, so look rows up by their recording.
       String rowOf(Wal wal) => _rowIds(tester).firstWhere((id) =>
-          RegExp(r'^sync_wal:\d+$').hasMatch(id) &&
+          _walRowPattern.hasMatch(id) &&
           nativeProjectedRow(tester, id).subtitle ==
               (wal == uploaded
                   ? _l10n.syncStatusUploaded
@@ -399,6 +410,66 @@ void main() {
       expect(syncingRow.swipeTrailing, isEmpty);
     });
 
+    testWidgets('Sync without internet asks for it and never syncs', (tester) async {
+      final sync = _Sync()..wals = [_wal(0)];
+      addTearDown(sync.dispose);
+      final presented = _answerPresentations(_confirm);
+      final host = await _pump(tester, const SyncPage(), sync,
+          providers: [ChangeNotifierProvider<ConnectivityProvider>(create: (_) => _Offline())]);
+      await _send(tester, host, 'sync_start');
+      expect(presented, isEmpty);
+      expect(sync.calls, isEmpty);
+    });
+
+    testWidgets('a transferring recording shows clamped progress; a failed one keeps the status and offers retry',
+        (tester) async {
+      final moving = _wal(0, syncing: true)
+        ..syncStartedAt = DateTime(2026, 10, 4)
+        ..storageOffset = 250
+        ..storageTotalBytes = 1000
+        ..syncSpeedKBps = double.nan
+        ..syncEtaSeconds = 30;
+      final failed = _wal(1);
+      final sync = _Sync()
+        ..wals = [moving, failed]
+        ..state = SyncState(status: SyncStatus.error, errorMessage: 'upload failed', failedWal: failed);
+      addTearDown(sync.dispose);
+      final host = await _pump(tester, const SyncPage(), sync);
+      expect(find.byType(UiKitView), findsOneWidget, reason: 'Odd transfer numbers never invalidate the snapshot');
+
+      final progressId = _rowIds(tester).singleWhere((id) => id.endsWith(':progress'));
+      final progress = nativeProjectedRow(tester, progressId);
+      expect(progress.kind, 'progress');
+      expect(progress.value, .25);
+      expect(progress.title, '25% · ${_l10n.etaLabel('30s')}');
+      expect(_rowIds(tester), contains('sync_status_title'), reason: 'An attributed error keeps the status');
+
+      final retry = _rowIds(tester).singleWhere((id) => id.endsWith(':retry'));
+      expect(retry, startsWith('sync_wal:'));
+      expect(retry, contains(failed.id));
+      await _send(tester, host, retry);
+      expect(sync.calls, ['sync ${failed.id}']);
+    });
+
+    testWidgets('a command for a row that shifted to another recording is refused', (tester) async {
+      final first = _wal(0);
+      final second = _wal(1);
+      final sync = _Sync()..wals = [first, second];
+      addTearDown(sync.dispose);
+      final presented = _answerPresentations(_confirm);
+      final host = await _pump(tester, const SyncPage(), sync);
+      final stale = _walRow(tester, 0);
+
+      sync
+        ..wals = [stale.endsWith(first.id) ? second : first]
+        ..notifyListeners();
+      await NativeTestHost.settle(tester);
+      expect(_walRow(tester, 0), isNot(stale), reason: 'Position 0 now shows the other recording');
+      await _send(tester, host, stale, 'delete');
+      expect(presented, isEmpty);
+      expect(sync.calls, isEmpty);
+    });
+
     testWidgets('projects 200 recordings and grows the window as its end comes into view', (tester) async {
       final sync = _Sync()
         ..filter = WalStatusFilter.synced
@@ -406,7 +477,7 @@ void main() {
       addTearDown(sync.dispose);
       final host = await _pump(tester, const SyncPage(), sync);
 
-      int walRows() => _rowIds(tester).where((id) => RegExp(r'^sync_wal:\d+$').hasMatch(id)).length;
+      int walRows() => _rowIds(tester).where((id) => _walRowPattern.hasMatch(id)).length;
       expect(walRows(), 200);
       expect(nativeProjectedRow(tester, 'sync_more').onVisible, isNotNull);
 
@@ -597,23 +668,23 @@ void main() {
       }), sync, providers: [ChangeNotifierProvider<ConversationProvider>.value(value: conversations)]);
 
       expect(_sections(tester).map((section) => section.title), [_l10n.updatedConversations, _l10n.newConversations]);
-      expect(nativeProjectedRow(tester, 'synced_conversation:0').title, 'Before');
-      expect(nativeProjectedRow(tester, 'synced_conversation:1').title, _l10n.conversations,
+      expect(nativeProjectedRow(tester, 'synced_conversation:0:updated').title, 'Before');
+      expect(nativeProjectedRow(tester, 'synced_conversation:1:locked').title, _l10n.conversations,
           reason: 'Locked content never crosses the bridge');
-      expect(_rowIds(tester), isNot(contains('synced_conversation:1:reprocess')));
+      expect(_rowIds(tester), isNot(contains('synced_conversation:1:locked:reprocess')));
 
-      unawaited(host.sendFromNative(
-          host.created.last, const MethodCall('action', {'id': 'synced_conversation:0:reprocess', 'value': null})));
+      unawaited(host.sendFromNative(host.created.last,
+          const MethodCall('action', {'id': 'synced_conversation:0:updated:reprocess', 'value': null})));
       await NativeTestHost.settle(tester);
       expect(requested, ['updated']);
-      expect(nativeProjectedRow(tester, 'synced_conversation:0:reprocess').projection['enabled'], false);
-      expect(nativeProjectedRow(tester, 'synced_conversation:0').subtitle, _l10n.processing);
-      expect(nativeProjectedRow(tester, 'synced_conversation:0').options, isEmpty);
+      expect(nativeProjectedRow(tester, 'synced_conversation:0:updated:reprocess').projection['enabled'], false);
+      expect(nativeProjectedRow(tester, 'synced_conversation:0:updated').subtitle, _l10n.processing);
+      expect(nativeProjectedRow(tester, 'synced_conversation:0:updated').options, isEmpty);
 
       pending.complete(conversation('updated', 'After'));
       await NativeTestHost.settle(tester);
-      expect(nativeProjectedRow(tester, 'synced_conversation:0').title, 'After');
-      expect(nativeProjectedRow(tester, 'synced_conversation:0:reprocess').projection['enabled'], true);
+      expect(nativeProjectedRow(tester, 'synced_conversation:0:updated').title, 'After');
+      expect(nativeProjectedRow(tester, 'synced_conversation:0:updated:reprocess').projection['enabled'], true);
       expect(conversations.updated.map((c) => c.structured.title), ['After']);
     });
   });

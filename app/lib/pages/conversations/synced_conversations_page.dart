@@ -73,7 +73,7 @@ class _SyncedConversationsPageState extends State<SyncedConversationsPage> {
     final canReprocess = showReprocess || conversation.discarded;
     final seconds = conversation.transcriptSegments.isEmpty ? 0 : conversation.getDurationInSeconds();
     final time = OmiDateFormat.of(context).time(conversation.startedAt ?? conversation.createdAt);
-    final id = 'synced_conversation:$index';
+    final id = 'synced_conversation:$index:${original.id}';
     return [
       NativeRow(id, conversation.isLocked ? l.conversations : conversationRowTitle(context, conversation),
           kind: 'navigation',
