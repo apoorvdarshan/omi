@@ -281,6 +281,25 @@ void main() {
       expect(find.textContaining('offline'), findsOneWidget, reason: 'The existing failure toast');
     });
 
+    testWidgets('a refused send keeps the editor open with the draft and never confirms', (tester) async {
+      NativeTestHost.install();
+      SharedPreferencesUtil().uid = 'owner';
+      ReviewsListPage.debugReplySenderForTest = (_, __, ___) async => false;
+      final review = _review('reviewer', 4);
+      final presented = _answerPresentations([_send('Thanks'), _cancel]);
+      await pump(tester, ReviewsListPage(app: _app(uid: 'owner', reviews: [review])), AppProvider());
+
+      unawaited(row(tester, 'review_reply:0')!.action!(null) as Future<void>?);
+      await settle(tester);
+      expect(presented, hasLength(2), reason: 'The editor reopens after the refusal');
+      final text = (presented.last['sections'] as List).cast<Map>().single['rows'].single as Map;
+      expect(text['value'], 'Thanks');
+      expect(review.response, isEmpty);
+      expect(row(tester, 'review_reply:0')!.title, _l10n.reply);
+      expect(find.text(_l10n.replySentSuccessfully), findsNothing);
+      expect(find.text(_l10n.failedToSendReply(_l10n.somethingWentWrongTryAgain)), findsOneWidget);
+    });
+
     testWidgets('a cancelled reply mutates nothing', (tester) async {
       NativeTestHost.install();
       SharedPreferencesUtil().uid = 'owner';
