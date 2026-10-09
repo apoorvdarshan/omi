@@ -69,8 +69,15 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
     final text = reply.trim();
     if (text.isEmpty) return false;
     try {
-      await ((kDebugMode ? ReviewsListPage.debugReplySenderForTest : null) ?? replyToAppReview)(
+      final sent = await ((kDebugMode ? ReviewsListPage.debugReplySenderForTest : null) ?? replyToAppReview)(
           widget.app.id, text, review.uid);
+      // replyToAppReview answers false instead of throwing; the caller keeps its editor and text open.
+      if (!sent) {
+        if (mounted) {
+          OmiFeedback.error(context, context.l10n.failedToSendReply(context.l10n.somethingWentWrongTryAgain));
+        }
+        return false;
+      }
       if (mounted) {
         context.read<AppProvider>().updateLocalAppReviewResponse(
               widget.app.id,
@@ -102,7 +109,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
   }
 
   /// Answers false when the native editor could not be used, so the caller opens the Flutter dialog.
-  /// Blank text is never sent and keeps the editor open, as does a send that throws; [onDraft] keeps
+  /// Blank text is never sent and keeps the editor open, as does a send that fails; [onDraft] keeps
   /// the latest text for the Flutter dialog.
   Future<bool> _replyNative(AppReview review, ValueChanged<String> onDraft) async {
     var draft = review.response;
