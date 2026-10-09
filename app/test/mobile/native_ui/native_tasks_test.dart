@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,6 +16,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/action_items/action_items_page.dart';
+import 'package:omi/pages/action_items/native_project_task_sections.dart';
 import 'package:omi/pages/action_items/project_task_sections.dart';
 import 'package:omi/pages/action_items/task_categorization.dart';
 import 'package:omi/pages/action_items/widgets/task_selection_action_bar.dart';
@@ -156,12 +159,13 @@ List<ActionItemWithMetadata> _fixture() => [
 const _gamma = EntityRef(entityId: 'gamma', type: EntityType.project, name: 'gamma');
 const _zeta = EntityRef(entityId: 'zeta', type: EntityType.project, name: 'Zeta');
 const _alpha = EntityRef(entityId: 'alpha', type: EntityType.project, name: 'alpha');
+const _delta = EntityRef(entityId: 'delta', type: EntityType.project, name: 'Delta');
 final _projects = {
-  for (final project in [_gamma, _zeta, _alpha]) project.entityId: project
+  for (final project in [_gamma, _zeta, _alpha, _delta]) project.entityId: project
 };
 
-/// gamma holds four tasks (two dated, two undated, g4 under g1), alpha and Zeta one each (a tie broken by
-/// name, ignoring case), and two tasks belong to no known project: an unknown workstream and none.
+/// gamma holds four tasks (two dated, two undated, g4 under g1), Delta two, alpha and Zeta one each (a tie
+/// broken by name, ignoring case), and two tasks belong to no known project: an unknown workstream and none.
 List<ActionItemWithMetadata> _projectFixture() => [
       _task('z1', project: 'zeta', dueAt: _today),
       _task('g1', project: 'gamma', sortOrder: 4000, dueAt: _today.add(const Duration(days: 3))),
@@ -171,16 +175,19 @@ List<ActionItemWithMetadata> _projectFixture() => [
       _task('ghost', project: 'ghost', dueAt: _today),
       _task('a1', project: 'alpha', dueAt: _today.subtract(const Duration(days: 2))),
       _task('free'),
+      _task('d1', project: 'delta'),
+      _task('d2', project: 'delta', dueAt: _today),
       _task('gdone', project: 'gamma', dueAt: _today, completed: true),
     ];
 
 const _dateSections = ['today', 'tomorrow', 'later', 'noDeadline', 'overdue'];
-const _groupedSections = ['project:gamma', 'project:alpha', 'project:zeta', 'project_none'];
+const _groupedSections = ['project:gamma', 'project:delta', 'project:alpha', 'project:zeta', 'project_none'];
 
 /// A Review provider that is on (or off), answering project loads with [projects] and counting them.
-ReviewProvider _review({bool on = true, Map<String, EntityRef>? projects, List<int>? loads}) {
+ReviewProvider _review({bool on = true, Map<String, EntityRef>? projects, List<int>? loads, Future<void>? answered}) {
   final review = ReviewProvider(loadProjects: () async {
     loads?.add(1);
+    await answered;
     return ApiSuccess((projects ?? _projects).values.toList());
   });
   if (on) review.availability = ReviewAvailability.on;
@@ -666,14 +673,27 @@ void main() {
       expect(page.sectionIds, _groupedSections);
     });
 
+    testWidgets('groups follow projects that load after the switch', (tester) async {
+      final answer = Completer<void>();
+      final page = await _pump(tester, items: _projectFixture(), review: _review(answered: answer.future));
+      await page.send('tasks_menu', 'groupByProject');
+      expect(page.sectionIds, [nativeNoProjectSectionId], reason: 'no project is known yet');
+      answer.complete();
+      await tester.pump();
+      await tester.pump();
+      expect(page.sectionIds, _groupedSections);
+      expect(find.byType(UiKitView), findsOneWidget);
+    });
+
     testWidgets('groups in the classic order with titles, counts and due-date order', (tester) async {
       final page = await grouped(tester);
       expect(page.rowIds('project:gamma'), ['project_open:gamma', 'task_g2', 'task_g1', 'task_g4', 'task_g3']);
+      expect(page.rowIds('project:delta'), ['project_open:delta', 'task_d2', 'task_d1']);
       expect(page.rowIds('project:alpha'), ['project_open:alpha', 'task_a1']);
       expect(page.rowIds('project:zeta'), ['project_open:zeta', 'task_z1']);
       expect(page.rowIds('project_none'), ['task_ghost', 'task_free'], reason: 'unknown and missing projects, last');
       expect([for (final section in page.surface.sections) section.title],
-          ['gamma', 'alpha', 'Zeta', _l10n.tasksNoProject]);
+          ['gamma', 'Delta', 'alpha', 'Zeta', _l10n.tasksNoProject]);
       expect(page.section('project:gamma').footer, _l10n.tasksCountLabel(4));
       expect(page.surface.sections.any((section) => section.collapsible), isFalse);
       expect(page.row('project_open:gamma').kind, 'navigation');
@@ -687,6 +707,7 @@ void main() {
       expect(page.surface.sections.expand((section) => section.rows).where((row) => row.id.startsWith('tasks_clear')),
           isEmpty,
           reason: 'project headers carry no clear action');
+      expect(find.byType(UiKitView), findsOneWidget, reason: 'every snapshot stayed native');
     });
 
     testWidgets('a project row opens its page; the no-project group has none', (tester) async {
@@ -706,6 +727,7 @@ void main() {
       expect(built, isA<EntityPage>().having((page) => page.entityId, 'entityId', 'alpha'));
       route.navigator!.removeRoute(route);
       await tester.pump();
+      expect(find.byType(UiKitView), findsOneWidget);
     });
 
     testWidgets('search shows the flat matches; selection keeps the groups and cascades within one', (tester) async {
@@ -728,30 +750,27 @@ void main() {
       expect(page.sectionIds, _dateSections);
     });
 
-    testWidgets('edit mode reorders within one project group only', (tester) async {
+    testWidgets('offers no edit mode while grouped: groups sort by due date first', (tester) async {
       final page = await grouped(tester);
+      expect(page.row('tasks_menu').options.keys, isNot(contains('reorder')));
+      await expectLater(page.send('tasks_menu', 'reorder'), _refused);
+      expect(page.surface.sections.every((section) => section.reorder == null), isTrue);
+      await expectLater(page.send('_reorder:project:gamma', ['task_g4', 'task_g2', 'task_g1', 'task_g3']), _refused);
+      expect(page.calls.sortOrders, isEmpty);
+      expect(page.calls.indents, isEmpty);
+
+      // Back by date, edit mode is offered again.
+      await page.send('tasks_menu', 'groupByProject');
       await page.send('tasks_menu', 'reorder');
-      expect(
-          page.surface.sections.where((section) => section.id != 'pagination').every((s) => s.reorder != null), isTrue);
-      expect(page.rowIds('project:gamma'), ['task_g2', 'task_g1', 'task_g4', 'task_g3'], reason: 'no open row');
+      expect(page.section('today').reorder, isNotNull);
+      expect(page.surface.toolbar.map((row) => row.id), contains('tasks_reorder_done'));
       expect(find.byType(UiKitView), findsOneWidget);
-
-      await page.send('_reorder:project:gamma', ['task_g4', 'task_g2', 'task_g1', 'task_g3']);
-      expect(page.calls.sortOrders, [
-        {'g4': 1000, 'g2': 2000, 'g1': 3000, 'g3': 4000}
-      ]);
-      expect(page.calls.indents, [('g4', 0)]);
-
-      await expectLater(page.send('_reorder:project:gamma', ['task_g2', 'task_g1', 'task_g4', 'task_a1']), _refused);
-      await expectLater(page.send('_reorder:project:alpha', ['task_z1']), _refused);
-      await expectLater(page.send('_reorder:today', ['task_z1', 'task_ghost']), _refused);
-      expect(page.calls.sortOrders, hasLength(1));
     });
 
     testWidgets('stays valid with no projects', (tester) async {
       final page = await grouped(tester, projects: const {});
       expect(page.sectionIds, ['project_none']);
-      expect(page.section('project_none').rows, hasLength(8));
+      expect(page.section('project_none').rows, hasLength(10));
       expect(find.byType(UiKitView), findsOneWidget);
     });
 
@@ -775,16 +794,20 @@ void main() {
   testWidgets('classic and native list the same groups from groupTasksByProject', (tester) async {
     final expected = groupTasksByProject(
         categorizeTasks(_projectFixture(), false).values.expand((items) => items).toList(), _projects);
-    expect([for (final (id, _) in expected) id], ['gamma', 'alpha', 'zeta', null]);
+    expect([for (final (id, _) in expected) id], ['gamma', 'delta', 'alpha', 'zeta', null]);
     final expectedRows = [for (final (_, items) in expected) ...items.map((item) => item.id)];
 
     final native =
         await _pump(tester, items: _projectFixture(), review: _review(projects: _projects)..projects = _projects);
     await native.send('tasks_menu', 'groupByProject');
-    expect(
-        [for (final section in native.surface.sections) ...section.rows.where((r) => r.kind == 'task')]
-            .map((r) => r.id),
-        [for (final id in expectedRows) 'task_$id']);
+    expect([
+      for (final section in native.surface.sections)
+        '${section.id}: ${section.rows.where((row) => row.kind == 'task').map((row) => row.id).join(', ')}',
+    ], [
+      for (final (id, items) in expected)
+        '${id == null ? nativeNoProjectSectionId : 'project:$id'}: ${items.map((item) => 'task_${item.id}').join(', ')}',
+    ]);
+    expect(find.byType(UiKitView), findsOneWidget);
 
     // The classic list, on a fresh page with no native host: open the menu and group by project.
     await tester.pumpWidget(const SizedBox());
@@ -816,7 +839,8 @@ void main() {
     await tester.tap(find.text(_l10n.tasksGroupByProject));
     await tester.pumpAndSettle();
     double top(Finder finder) => tester.getTopLeft(finder).dy;
-    final headers = ['gamma', 'alpha', 'zeta'].map((id) => top(find.byKey(ValueKey('project_header_$id')))).toList();
+    final headers =
+        ['gamma', 'delta', 'alpha', 'zeta'].map((id) => top(find.byKey(ValueKey('project_header_$id')))).toList();
     expect(headers, orderedEquals([...headers]..sort()));
     final rows = [for (final id in expectedRows) top(find.text('Task $id'))];
     expect(rows, orderedEquals([...rows]..sort()), reason: 'classic rows run in the shared order');

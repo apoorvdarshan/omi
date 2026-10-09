@@ -37,13 +37,12 @@ bool isNativeProjectSection(String sectionId) =>
 
 /// One project group: titled with the project's name (or "No project"), its count as the footer, and a
 /// leading row that opens the project's page like the classic header. The no-project group opens nothing.
-/// While [reorder] is set the section holds only its tasks, so the permutation is exactly [rows].
+/// Never reorderable: a group sorts by due date first, so a stored order would snap back.
 NativeSection nativeProjectTaskSection(
   BuildContext context,
   String sectionId,
-  List<NativeRow> rows, {
-  NativeAction? reorder,
-}) {
+  List<NativeRow> rows,
+) {
   final l10n = context.l10n;
   final projects = context.read<ReviewProvider?>()?.projects ?? const <String, EntityRef>{};
   final project =
@@ -51,7 +50,7 @@ NativeSection nativeProjectTaskSection(
   return NativeSection(
     sectionId,
     [
-      if (project != null && reorder == null)
+      if (project != null)
         NativeRow('project_open:${project.entityId}', project.name,
             // Fire and forget: the command completes now, not when the project page closes.
             kind: 'navigation',
@@ -61,6 +60,5 @@ NativeSection nativeProjectTaskSection(
     ],
     title: project?.name ?? l10n.tasksNoProject,
     footer: l10n.tasksCountLabel(rows.length),
-    reorder: reorder,
   );
 }

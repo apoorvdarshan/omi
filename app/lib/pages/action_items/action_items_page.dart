@@ -503,7 +503,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }) {
     final l10n = context.l10n;
     final selecting = provider.isSelectionMode;
-    final reordering = _nativeReorderMode && !provider.isSearching && !selecting;
+    // Project groups sort by due date first, so a stored order would snap back: no edit mode while grouped.
+    final reordering = _nativeReorderMode && !provider.isSearching && !selecting && !_groupByProject;
     final loading = provider.isLoading && provider.actionItems.isEmpty;
     final selectedCount = provider.selectedCount;
     final allSelected = provider.actionItems.isNotEmpty && selectedCount == provider.actionItems.length;
@@ -558,7 +559,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             'select': l10n.selectActionItems,
             'selectAll': allSelected ? l10n.deselectAllTasksMenu : l10n.selectAllTasksMenu,
             if (reviewOn) 'groupByProject': groupTitle,
-            if (!provider.isSearching) 'reorder': l10n.edit,
+            if (!provider.isSearching && !_groupByProject) 'reorder': l10n.edit,
           }, action: (value) {
             if (value == 'completed') provider.toggleShowCompletedView();
             if (value == 'groupByProject' && reviewOn) _toggleGroupByProject();
@@ -575,7 +576,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 provider.selectAllItems();
               }
             }
-            if (value == 'reorder' && !provider.isSearching && !provider.isSelectionMode) {
+            if (value == 'reorder' && !provider.isSearching && !provider.isSelectionMode && !_groupByProject) {
               setState(() => _nativeReorderMode = true);
             }
           }),
@@ -623,8 +624,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             )
           else if (isNativeProjectSection(id))
             nativeProjectTaskSection(
-                context, id, [for (final item in items) _nativeTaskRow(provider, item, items, selecting: selecting)],
-                reorder: reordering ? (value) => _applyNativeReorder(provider, id, value) : null)
+                context, id, [for (final item in items) _nativeTaskRow(provider, item, items, selecting: selecting)])
           else
             // Search results are one flat list in match order, open and completed alike, as in Flutter.
             NativeSection(id, [for (final item in items) _nativeTaskRow(provider, item, items, selecting: selecting)],
@@ -757,9 +757,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     }
   }
 
-  /// '_reorder:<section>' is an exact permutation of a category's or project group's current rows. The new
-  /// order is stored as sort orders, and a moved row deeper than its new predecessor allows is clamped, the
-  /// same as a drop without horizontal travel. Category moves go through Set Due Date.
+  /// '_reorder:<category>' is an exact permutation of the category's current rows. The new order is
+  /// stored as sort orders, and a moved row deeper than its new predecessor allows is clamped, the same
+  /// as a drop without horizontal travel. Category moves go through Set Due Date.
   void _applyNativeReorder(ActionItemsProvider provider, String sectionId, Object? value) {
     final current =
         _nativeVisibleTasks(provider, _categorizeItems(provider.actionItems, provider.showCompletedView))[sectionId];
