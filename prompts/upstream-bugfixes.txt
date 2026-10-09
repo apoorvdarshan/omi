@@ -1,0 +1,28 @@
+You are a senior Flutter engineer in the GitHub repository apoorvdarshan/omi (a fork of BasedHardware/omi; the Flutter app is in app/). Linux cloud sandbox. Fix two existing upstream bugs, as two separate commits, delivered on two branches.
+
+## Setup
+- git fetch origin main swiftui/integration   (origin here is the fork; its main may lag upstream — that is fine)
+- Also fetch upstream: git remote add upstream https://github.com/BasedHardware/omi.git 2>/dev/null; git fetch upstream main
+- Branch A (clean, upstream-PR candidate): git switch -c claude/fix-app-key-log-and-review-reply upstream/main
+- Install Flutter 3.44.5 (mandatory; never use another version): git clone --depth 1 -b 3.44.5 https://github.com/flutter/flutter.git $HOME/flutter-3.44.5 && export PATH=$HOME/flutter-3.44.5/bin:$PATH && flutter --version
+- Bootstrap the app exactly like the "Missing generated files" block in app/test.sh (copy lib/firebase_options_local.dart to lib/firebase_options_dev.dart and lib/firebase_options_prod.dart; write app/.dev.env with "API_BASE_URL=", "USE_WEB_AUTH=true", "USE_AUTH_CUSTOM_TOKEN=true"; copy the prebuilt Google service files as listed there; then flutter pub get and flutter pub run build_runner build --delete-conflicting-outputs). Never commit any of these generated/bootstrap files.
+- Read AGENTS.md, app/AGENTS.md, product/failure-classes.md and scripts/failure-class (fix commits must declare a validated semantic failure class with a "Failure-Class:" trailer exactly as that protocol requires; use scripts/failure-class to pick/validate it).
+
+## Bug 1 (security): new app API key secret is written to logs
+app/lib/backend/http/api/apps.dart, createApiKeyServer (around line 739-746): on success it does log('createApiKeyServer: ${response.body}') and the body contains the newly generated app API key secret. Fix: never log the response body (log at most the status code / a redacted marker). Check the whole file and app/lib/backend/http for any other place that logs a response body that can contain a secret, token or API key (e.g. other *ApiKey*, token, credential, MCP key endpoints) and fix those the same way. Add a regression test that a successful create does not emit the secret through the logging seam the codebase uses (find how other tests capture log/Logger output; if no seam exists, add the smallest one that the repo idioms allow).
+
+## Bug 2: a failed owner reply to an app review shows the success toast
+app/lib/backend/http/api/apps.dart replyToAppReview returns false on failure (it never throws), but its caller(s) — app/lib/pages/apps/app_detail/reviews_list_page.dart (~line 72) and any other caller (grep the whole app/lib for replyToAppReview, including the classic reviews section) — await it and show the success feedback regardless. Fix: when it returns false, keep the reply text, show the existing error feedback (reuse an existing l10n key; no ARB edits) and do not update the UI as replied; success path unchanged. Add/adjust widget tests for both outcomes.
+
+## Rules
+Flag-off/Android behaviour must be unchanged except for the bug fixes themselves. No new packages, no ARB edits, keep app/lib Dart files under 1500 lines, match surrounding style. Verify: dart format --line-length 120 on changed files; flutter analyze on changed files (no new issues); flutter test --no-pub on the new/changed tests and every test importing a changed file; git diff --check.
+
+## Commits (on branch A)
+1. "fix(app): never log the new app API key secret" — body: root cause, fix, test; Failure-Class trailer per the protocol; last line "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>".
+2. "fix(app): report a failed review reply instead of showing success" — same structure.
+Push: git push -u origin claude/fix-app-key-log-and-review-reply
+
+## Branch B (same fixes on the SwiftUI integration branch)
+git switch -c claude/fix-app-key-log-and-review-reply-integration origin/swiftui/integration && git cherry-pick <the two commits>. Resolve conflicts (the integration branch has a native SwiftUI reviews path and a debugReplySenderForTest seam in reviews_list_page.dart — the failure handling must apply to BOTH the classic and the native path). Re-run the same verification there plus flutter test --no-pub test/mobile/native_ui. Push: git push -u origin claude/fix-app-key-log-and-review-reply-integration
+
+Never push to any other branch, never force-push, never open a PR. Final reply: both branch heads, commit shas, test results, and every other secret-logging site you found and fixed.
