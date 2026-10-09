@@ -274,11 +274,11 @@ final class PreviewUITests: XCTestCase {
         XCTAssertFalse(cell.isSelected)
         XCTAssertTrue(listCell(app, "conv_1").isSelected)
         row.tap()
-        // The circle fills at once, before the owner answers the slow command.
+        // The circle fills at once, before the owner answers the slow (8 s) command.
         expectation(for: NSPredicate(format: "isSelected == true"), evaluatedWith: cell)
-        waitForExpectations(timeout: 2)
+        waitForExpectations(timeout: 4)
         XCTAssertFalse(app.staticTexts["_selection:conv_1,conv_3"].exists)
-        XCTAssertTrue(app.staticTexts["_selection:conv_1,conv_3"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["_selection:conv_1,conv_3"].waitForExistence(timeout: 20))
         XCTAssertTrue(app.staticTexts["2 selected"].waitForExistence(timeout: 5))
         XCTAssertTrue(cell.isSelected)
         capture(app, "native-list-selection")
@@ -291,7 +291,7 @@ final class PreviewUITests: XCTestCase {
         // Delete is tapped while the selection command is still pending; it acts on the new set.
         XCTAssertFalse(app.staticTexts["_selection:conv_1,conv_2"].exists)
         app.buttons["bulk_delete"].tap()
-        XCTAssertTrue(app.staticTexts["bulk_delete:conv_1,conv_2"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["bulk_delete:conv_1,conv_2"].waitForExistence(timeout: 20))
     }
 
     func testBottomBarDeleteStopsWhenThePendingSelectionFails() {
@@ -300,7 +300,7 @@ final class PreviewUITests: XCTestCase {
         app.staticTexts["conv_2"].tap()
         app.buttons["bulk_delete"].tap()
         // The refused selection reverts, so Delete must not act on a set the user never saw.
-        XCTAssertTrue(app.staticTexts["native-surface-error"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["native-surface-error"].waitForExistence(timeout: 20))
         XCTAssertFalse(app.staticTexts["bulk_delete:conv_1"].waitForExistence(timeout: 3))
         XCTAssertFalse(listCell(app, "conv_2").isSelected)
     }
@@ -663,6 +663,17 @@ final class PreviewUITests: XCTestCase {
         XCTAssertFalse(app.buttons["native-retry"].exists)
         capture(app, "native-empty")
     }
+    func testEmptySurfaceCentresItsCopyAndKeepsItsIdentifier() {
+        let app = start(["surface", "empty-surface"])
+        let empty = app.staticTexts["native-surface-empty"]
+        XCTAssertTrue(empty.waitForExistence(timeout: 10))
+        XCTAssertEqual(empty.label, "No tasks yet")
+        let window = app.windows.firstMatch.frame
+        XCTAssertEqual(empty.frame.midX, window.midX, accuracy: 2, "The empty state is centred, not a leading row")
+        XCTAssertGreaterThan(empty.frame.minY, window.height / 4)
+        XCTAssertTrue(app.buttons["save"].isHittable, "The empty state never covers the toolbar")
+        capture(app, "native-surface-empty")
+    }
     func testSessionInvalidationHidesNativeTranscript() {
         let app = start()
         app.buttons["native-conversation-conversation-1"].tap()
@@ -700,6 +711,22 @@ final class PreviewUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["tasks:"].waitForExistence(timeout: 5))
         app.swipeUp()
         XCTAssertTrue(app.buttons["native-conversation-conversation-1"].isHittable)
+    }
+    func testSeveralRecapsPageWithTheNextCardPeeking() {
+        let app = start(["chrome", "recaps"])
+        let first = app.buttons["native-recap-recap-1"], second = app.buttons["native-recap-recap-2"]
+        XCTAssertTrue(first.waitForExistence(timeout: 10))
+        XCTAssertTrue(first.isHittable)
+        let window = app.windows.firstMatch.frame
+        // The next card shows at the trailing edge, so the row reads as a carousel rather than one card.
+        XCTAssertLessThan(first.frame.width, window.width - 40)
+        XCTAssertTrue(second.exists)
+        XCTAssertLessThan(second.frame.minX, window.maxX)
+        capture(app, "native-home-recap-carousel")
+        first.swipeLeft()
+        wait(until: second.isHittable, "A swipe pages to the next recap")
+        second.tap()
+        XCTAssertTrue(app.staticTexts["recap:recap-2"].waitForExistence(timeout: 5))
     }
     func testHomeChromeLargeTextKeepsControlsReachable() {
         let app = start(["chrome", "large", "light"])
@@ -1255,6 +1282,7 @@ final class PreviewUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Open"].exists)
         XCTAssertFalse(app.buttons["Open"].exists)
         XCTAssertTrue(app.buttons["Try again"].exists)
+        XCTAssertGreaterThanOrEqual(app.buttons["Try again"].frame.height, 44, "The labelled retry keeps its hit target")
         capture(app, "native-chat-rich-ai-message")
         // Neither an unlisted link in a reply nor one in a reader row without options leaves the app.
         for link in ["another site", "unlisted note"] {

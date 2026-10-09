@@ -253,6 +253,7 @@ struct NativeSurfaceView: View {
     @State private var readerUserScroll = false
     @State private var readerTopId: String?
     @State private var collapsedSections: Set<String> = []
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Group {
@@ -351,17 +352,13 @@ struct NativeSurfaceView: View {
             Section {
                 if state.snapshot.loading {
                     ProgressView(state.snapshot.loadingLabel).accessibilityIdentifier("native-surface-loading")
+                        .frame(maxWidth: .infinity)
                 }
                 if state.snapshot.failed || state.actionFailed {
-                    Text(state.snapshot.error)
-                        .accessibilityIdentifier("native-surface-error")
+                    statusError
                     if state.snapshot.refreshEnabled {
                         Button(state.snapshot.retry) { Task { await state.send("_refresh") } }
                     }
-                }
-                if !state.snapshot.loading && !state.snapshot.failed
-                    && state.snapshot.sections.allSatisfy({ $0.rows.isEmpty }) {
-                    Text(state.snapshot.empty).accessibilityIdentifier("native-surface-empty")
                 }
             }.id("native-surface-status")
             ForEach(state.snapshot.sections) { section in
@@ -378,8 +375,10 @@ struct NativeSurfaceView: View {
                         NativeCollapsibleHeader(title: section.title, collapsed: collapsedSections.contains(section.id),
                                                 expandLabel: state.snapshot.expandLabel ?? "",
                                                 collapseLabel: state.snapshot.collapseLabel ?? "") {
-                            if collapsedSections.contains(section.id) { collapsedSections.remove(section.id) }
-                            else { collapsedSections.insert(section.id) }
+                            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {
+                                if collapsedSections.contains(section.id) { collapsedSections.remove(section.id) }
+                                else { collapsedSections.insert(section.id) }
+                            }
                         }.accessibilityIdentifier("\(section.id)_header")
                     } else if !section.title.isEmpty { Text(section.title) }
                 } footer: {
@@ -387,7 +386,19 @@ struct NativeSurfaceView: View {
                 }
             }
         }
+        // Selection marks use the system accent, like Mail and Photos; rows keep the monochrome tint.
+        .tint(state.snapshot.selection == nil ? Color.primary : NativeMetrics.accent)
         .listStyle(.insetGrouped)
+        .overlay {
+            if !state.snapshot.loading && !state.snapshot.failed && !state.snapshot.empty.isEmpty
+                && state.snapshot.sections.allSatisfy({ $0.rows.isEmpty }) {
+                // Search results use the system's search symbol; any other empty list a tray.
+                NativeEmptyState(title: state.snapshot.empty,
+                                 symbol: state.snapshot.searchValue.isEmpty ? "tray" : "magnifyingglass",
+                                 identifier: "native-surface-empty")
+                    .allowsHitTesting(false)
+            }
+        }
         .environment(\.editMode, .constant(state.snapshot.editsList ? .active : .inactive))
         .refreshable { if state.snapshot.refreshEnabled { await state.send("_refresh") } }
         .safeAreaInset(edge: .bottom) {
@@ -403,6 +414,23 @@ struct NativeSurfaceView: View {
         }
     }
 
+    private func choicePicker(_ row: NativeSurfaceRow) -> some View {
+        Picker(row.title, selection: Binding(get: { row.value?.text ?? "" }, set: { value in
+            Task { await state.send(row.id, value: value) }
+        })) {
+            ForEach(row.options) { option in Text(option.title).tag(option.id) }
+        }.pickerStyle(.menu).labelsHidden()
+    }
+
+    /// The surface's error copy after a warning symbol; the identifier stays on the text.
+    private var statusError: some View {
+        Label {
+            Text(state.snapshot.error).accessibilityIdentifier("native-surface-error")
+        } icon: {
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange).accessibilityHidden(true)
+        }
+    }
+
     /// Only a reorderable section offers the system reorder controls.
     private func mover(for section: NativeSurfaceSnapshot.Section) -> ((IndexSet, Int) -> Void)? {
         guard section.reorderable == true else { return nil }
@@ -415,9 +443,10 @@ struct NativeSurfaceView: View {
                                       selectable: Set<String>) -> some View {
         Group {
             if section.reorderable == true || selectable.contains(row.id) {
-                actionLabel(row).frame(minHeight: 44).accessibilityIdentifier(row.id)
+                actionLabel(row).frame(minHeight: NativeMetrics.rowHeight).accessibilityIdentifier(row.id)
+                    .modifier(NativeSelectableRow(selectable: selectable.contains(row.id)))
             } else if state.snapshot.selection != nil {
-                rowView(row).modifier(NativeSelectionDisabled())
+                rowView(row).modifier(NativeSelectionDisabled()).tint(.primary)
             } else {
                 rowView(row).modifier(NativeSwipeActions(row: row, enabled: !state.snapshot.editsList && row.enabled) { option in
                     Task { await state.send(row.id, value: option) }
@@ -463,11 +492,11 @@ struct NativeSurfaceView: View {
                     }
             case "transcript":
                 Button { Task { await state.send(row.id) } } label: {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(row.subtitle).font(.caption).foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        if !row.subtitle.isEmpty { NativeSpeakerTint.subtitle(row.subtitle) }
                         Text(nativeHighlighted(AttributedString(row.title), query: state.snapshot.searchValue))
-                            .foregroundStyle(.primary)
-                    }.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                            .foregroundStyle(.primary).lineSpacing(2)
+                    }.frame(maxWidth: .infinity, minHeight: NativeMetrics.rowHeight, alignment: .leading)
                         .contentShape(Rectangle())
                 }.buttonStyle(.plain).contextMenu {
                     ForEach(row.options) { option in
@@ -495,16 +524,19 @@ struct NativeSurfaceView: View {
                 if row.optionSearch != nil {
                     NativeSearchableChoice(row: row, state: state)
                 } else {
-                VStack(alignment: .leading, spacing: 8) {
-                    label(row)
-                    Picker(row.title, selection: Binding(get: { row.value?.text ?? "" }, set: { value in
-                        Task { await state.send(row.id, value: value) }
-                    })) {
-                        ForEach(row.options) { option in Text(option.title).tag(option.id) }
-                    }.pickerStyle(.menu).labelsHidden()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                    // Title leading and value trailing, as in Settings; stacked when that does not fit.
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 12) {
+                            label(row)
+                            choicePicker(row).fixedSize()
+                        }.frame(minHeight: NativeMetrics.rowHeight)
+                        VStack(alignment: .leading, spacing: 8) {
+                            label(row)
+                            choicePicker(row)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
                 }
             case "segmented":
                 Picker(row.title, selection: Binding(get: { row.value?.text ?? "" }, set: { value in
@@ -671,7 +703,8 @@ struct NativeSurfaceView: View {
 
     private func graphStatusCard<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         content().multilineTextAlignment(.center).padding(16)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16)).padding(20)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: NativeMetrics.cardRadius, style: .continuous))
+            .padding(20)
     }
 
     private func readerView(_ projection: NativeSurfaceSnapshot.Reader) -> some View {
@@ -687,14 +720,16 @@ struct NativeSurfaceView: View {
                             }
                         }
                         ForEach(state.snapshot.sections) { section in
-                            if !section.title.isEmpty { Text(section.title).font(.headline) }
+                            if !section.title.isEmpty {
+                                Text(section.title).font(.title3.weight(.semibold)).accessibilityAddTraits(.isHeader)
+                            }
                             ForEach(section.rows) { row in
                                 rowView(row)
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, row.kind == "rich_text" ? 4 : 8)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .background(row.id == projection.currentId ? Color.primary.opacity(0.08) : .clear,
-                                                in: RoundedRectangle(cornerRadius: 12))
+                                                in: RoundedRectangle(cornerRadius: NativeMetrics.blockRadius, style: .continuous))
                                     .id(row.id)
                                     .background(GeometryReader { geometry in
                                         Color.clear.preference(key: NativeChatMessageFramesPreference.self,
@@ -869,15 +904,27 @@ struct NativeSurfaceView: View {
                         else { Text(.init(row.title)) }
                     }.textSelection(.enabled)
                 }
-                if !row.subtitle.isEmpty { Text(row.subtitle).font(.caption).foregroundStyle(.secondary) }
-                if row.enabled && ((row.blocks ?? []).isEmpty || row.symbol != nil) {
+                let hasButton = row.enabled && ((row.blocks ?? []).isEmpty || row.symbol != nil)
+                // An explicit symbol with a subtitle is a labelled control ("↻ Try again"); the subtitle is its title.
+                let labelled = hasButton && row.symbol != nil && !row.subtitle.isEmpty
+                if !row.subtitle.isEmpty && !labelled { Text(row.subtitle).font(.caption).foregroundStyle(.secondary) }
+                if labelled, let symbol = row.symbol {
+                    Button { Task { await state.send(row.id) } } label: {
+                        // With the bordered style's padding the capsule keeps the 44 pt hit target.
+                        Label(row.subtitle, systemImage: symbol).font(.subheadline.weight(.semibold))
+                            .frame(minHeight: 32)
+                    }
+                    .buttonStyle(.bordered).buttonBorderShape(.capsule)
+                    .accessibilityLabel(row.subtitle)
+                } else if hasButton {
                     Button { Task { await state.send(row.id) } } label: {
                         Image(systemName: row.symbol ?? "ellipsis").frame(minWidth: 44, minHeight: 44)
                     }.accessibilityLabel(row.subtitle)
                 }
             }.padding(row.kind == "message_user" ? 14 : 0)
-                .background(row.kind == "message_user" ? Color(uiColor: .secondarySystemGroupedBackground) : .clear,
-                    in: RoundedRectangle(cornerRadius: 20))
+                // Secondary system background reads on the chat's own background in light and dark.
+                .background(row.kind == "message_user" ? Color(uiColor: .secondarySystemBackground) : .clear,
+                    in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             if row.kind != "message_user" { Spacer(minLength: 10) }
         }.background(GeometryReader { geometry in
             Color.clear.preference(key: NativeChatMessageFramesPreference.self,
@@ -904,16 +951,26 @@ struct NativeSurfaceView: View {
                 Image(systemName: symbol).foregroundStyle(row.destructive ? Color.red : Color.primary)
                     .accessibilityLabel(row.title)
             }
-            else { Label { label(row) } icon: { Image(systemName: symbol) } }
+            else {
+                // An explicit style, so a selecting list's accent tint never recolours row symbols.
+                Label { label(row) } icon: {
+                    Image(systemName: symbol).foregroundStyle(row.destructive ? Color.red : Color.primary)
+                }
+            }
         } else if compact { Text(row.title) }
         else { label(row) }
     }
 
     private func label(_ row: NativeSurfaceRow) -> some View {
-        HStack(spacing: 12) {
+        // A short all-caps subtitle ("NEW", "BETA") is a tag: a capsule after the title, in the same order.
+        let badge = NativeBadge.accepts(row.subtitle)
+        return HStack(spacing: 12) {
             if let uri = row.imageUri { NativeThumbnail(uri: uri) }
             VStack(alignment: .leading, spacing: 4) {
-                Text(row.title).foregroundStyle(row.destructive ? Color.red : Color.primary)
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(row.title).foregroundStyle(row.destructive ? Color.red : Color.primary)
+                    if badge { NativeBadge(text: row.subtitle) }
+                }
                 if let level = row.level {
                     HStack(spacing: 3) {
                         ForEach(0..<3) { step in
@@ -922,7 +979,7 @@ struct NativeSurfaceView: View {
                         }
                     }.accessibilityHidden(true)
                 }
-                if !row.subtitle.isEmpty { Text(row.subtitle).font(.subheadline).foregroundStyle(.secondary) }
+                if !row.subtitle.isEmpty && !badge { Text(row.subtitle).font(.subheadline).foregroundStyle(.secondary) }
             }
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -1101,7 +1158,7 @@ private struct NativeThumbnail: View {
                 }
             }
         }.frame(width: 72, height: 64).clipped()
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .clipShape(RoundedRectangle(cornerRadius: NativeMetrics.blockRadius, style: .continuous))
             .accessibilityHidden(true)
             .task(id: uri) {
                 localImage = nil
