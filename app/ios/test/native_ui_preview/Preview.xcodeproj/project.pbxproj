@@ -26,6 +26,8 @@
 		A48A40B1B16FFBC6BD0E22E0 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F7D65CD2BBD03EF907D6979B /* Foundation.framework */; };
 		E83BDDB1C883CAD7AD90461F /* NativeSurfaceContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA2F8E25709F7288D41E8E22 /* NativeSurfaceContract.swift */; };
 		FD56A2E7C665843711B4ED8A /* NativeHomeContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55EC5BD0A7A6C752FE4A955E /* NativeHomeContract.swift */; };
+		9D2350C3A77BC70BA0425546 /* PreviewDemo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04269594AC1122A66A86763B /* PreviewDemo.swift */; };
+		7DCADE6C08218BA42B31E7C9 /* PreviewDemoTourTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53B4AA173DAF99BF4DA7830B /* PreviewDemoTourTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -56,6 +58,8 @@
 		59C5E0B802754555CE9AB7F5 /* NativeListInteractions.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NativeListInteractions.swift; path = ../../Runner/NativeUI/NativeListInteractions.swift; sourceTree = "<group>"; };
 		9DCDD9E5B7BE8B7282BDA64A /* NativeGraphView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NativeGraphView.swift; path = ../../Runner/NativeUI/NativeGraphView.swift; sourceTree = "<group>"; };
 		F7D65CD2BBD03EF907D6979B /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
+		04269594AC1122A66A86763B /* PreviewDemo.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PreviewDemo.swift; sourceTree = "<group>"; };
+		53B4AA173DAF99BF4DA7830B /* PreviewDemoTourTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PreviewDemoTourTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -87,8 +91,10 @@
 				F7AE9569D962FC2F33E70895 /* NativeToastPresenter.swift */,
 				2E81D51895F8F245493AA2D3 /* NativeHomeView.swift */,
 				51CDC6B151864D7EF2E98348 /* PreviewApp.swift */,
+				04269594AC1122A66A86763B /* PreviewDemo.swift */,
 				AE1159B5206DEF2789FB7D8F /* native_home_v1.json */,
 				A4D27B1031DDE8583F2CA747 /* PreviewUITests.swift */,
+				53B4AA173DAF99BF4DA7830B /* PreviewDemoTourTests.swift */,
 				645CC78FE98DE80A5C3A3203 /* SafeFoundationSinks.swift */,
 				D2C8C0EA0179610FE3BD6292 /* NativeGlass.swift */,
 				BA2F8E25709F7288D41E8E22 /* NativeSurfaceContract.swift */,
@@ -216,6 +222,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				6099496A98CDE6FB652CA40F /* PreviewUITests.swift in Sources */,
+				7DCADE6C08218BA42B31E7C9 /* PreviewDemoTourTests.swift in Sources */,
 				2220E372D12AEA59EA92A516 /* NativeGraphView.swift in Sources */,
 				4954043709421EBA7FF731A5 /* NativeSurfaceContract.swift in Sources */,
 				3C7C1E7FCB8DEE113B6DB11E /* SafeFoundationSinks.swift in Sources */,
@@ -231,6 +238,7 @@
 				FD56A2E7C665843711B4ED8A /* NativeHomeContract.swift in Sources */,
 				851BC53CF881B6950C353656 /* NativeHomeView.swift in Sources */,
 				67FEC9CAB30F258C23D08B31 /* PreviewApp.swift in Sources */,
+				9D2350C3A77BC70BA0425546 /* PreviewDemo.swift in Sources */,
 				008CA96741DBE8D32F73B59F /* SafeFoundationSinks.swift in Sources */,
 				2C62D3AB2B45A141921699F0 /* NativeGlass.swift in Sources */,
 				E83BDDB1C883CAD7AD90461F /* NativeSurfaceContract.swift in Sources */,

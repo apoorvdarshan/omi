@@ -13,7 +13,10 @@ struct PreviewApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                if ProcessInfo.processInfo.arguments.contains("navigation") {
+                if PreviewDemo.enabled {
+                    // The demo tour shows realistic content with no fixture overlays (PreviewDemo.swift).
+                    PreviewDemoRoot()
+                } else if ProcessInfo.processInfo.arguments.contains("navigation") {
                     VStack(spacing: 0) {
                         NativeHomeView(state: harness.state)
                         NativeSurfaceView(state: harness.surface).frame(height: 98)
@@ -38,13 +41,13 @@ struct PreviewApp: App {
                 .environment(\.dynamicTypeSize, ProcessInfo.processInfo.arguments.contains("large") ? .accessibility3 : .large)
                 .environment(\.nativeGraphReduceMotion, ProcessInfo.processInfo.arguments.contains("reduce-motion"))
                 .overlay(alignment: .top) {
-                    if ProcessInfo.processInfo.arguments.contains("chrome") {
+                    if ProcessInfo.processInfo.arguments.contains("chrome") && !PreviewDemo.enabled {
                         Text(harness.lastAction).font(.caption2).allowsHitTesting(false)
                             .accessibilityIdentifier("preview-last-action")
                     }
                 }
                 .safeAreaInset(edge: .bottom) {
-                    if !ProcessInfo.processInfo.arguments.contains("chrome") {
+                    if !ProcessInfo.processInfo.arguments.contains("chrome") && !PreviewDemo.enabled {
                     HStack {
                         VStack {
                             Text(harness.lastAction).accessibilityIdentifier("preview-last-action")
