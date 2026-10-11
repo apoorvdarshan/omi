@@ -13005,4 +13005,16 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'ลืมอุปกรณ์เครื่องที่สอง';
+
+  @override
+  String get reprocessTranscription => 'ประมวลผลการถอดเสียงใหม่';
+
+  @override
+  String get retranscribingConversation => 'กำลังถอดเสียงบทสนทนาใหม่...\nอาจใช้เวลาสักครู่สำหรับบทสนทนาที่ยาวนาน';
+
+  @override
+  String get errorReprocessingTranscription => 'เกิดข้อผิดพลาดขณะประมวลผลการถอดเสียงใหม่ โปรดลองอีกครั้งในภายหลัง';
+
+  @override
+  String get errorNoStoredAudio => 'ไม่มีเสียงที่จัดเก็บไว้สำหรับบทสนทนานี้';
 }

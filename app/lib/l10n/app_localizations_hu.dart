@@ -13126,4 +13126,17 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'Második eszköz elfelejtése';
+
+  @override
+  String get reprocessTranscription => 'Átírás újrafeldolgozása';
+
+  @override
+  String get retranscribingConversation =>
+      'A beszélgetés újraátiratazása...\nEz hosszabb beszélgetések esetén eltarthat egy ideig';
+
+  @override
+  String get errorReprocessingTranscription => 'Hiba az átírás újrafeldolgozásakor. Próbáld meg később.';
+
+  @override
+  String get errorNoStoredAudio => 'Ehhez a beszélgetéshez nincs tárolt hang.';
 }

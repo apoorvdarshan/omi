@@ -141,6 +141,45 @@ Future<ServerConversation?> reProcessConversationServer(
   return null;
 }
 
+class TranscriptionReprocessResult {
+  final ServerConversation? conversation;
+  final String? errorCode;
+
+  const TranscriptionReprocessResult({this.conversation, this.errorCode});
+}
+
+String transcriptionReprocessErrorCode(int? statusCode, String body) {
+  if (statusCode != 400) return 'failed';
+  try {
+    final payload = jsonDecode(body);
+    final detail = payload is Map<String, dynamic> ? payload['detail'] : null;
+    final code = detail is Map<String, dynamic> ? detail['code'] : null;
+    if (code == 'no_audio' || code == 'no_speech') return 'no_audio';
+  } on FormatException {
+    // A proxy/non-JSON response is a generic failure, never evidence of missing audio.
+  }
+  return 'failed';
+}
+
+Future<TranscriptionReprocessResult> reProcessTranscriptionServer(String conversationId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/reprocess-transcription',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  if (response == null) {
+    return const TranscriptionReprocessResult(errorCode: 'failed');
+  }
+  Logger.debug('reProcessTranscriptionServer: ${response.statusCode}');
+  if (response.statusCode == 200) {
+    return TranscriptionReprocessResult(
+      conversation: ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+    );
+  }
+  return TranscriptionReprocessResult(errorCode: transcriptionReprocessErrorCode(response.statusCode, response.body));
+}
+
 Future<bool> deleteConversationServer(String conversationId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations/$conversationId?cascade=true',

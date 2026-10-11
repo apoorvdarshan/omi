@@ -13164,4 +13164,18 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'இரண்டாவது சாதனத்தை மறக்கவும்';
+
+  @override
+  String get reprocessTranscription => 'படியெடுப்பை மீண்டும் செயல்படுத்தவும்';
+
+  @override
+  String get retranscribingConversation =>
+      'உரையாடலை மீண்டும் எழுத்துப்பெயர்ப்பு செய்கிறது...\nநீளமான உரையாடல்களுக்கு இதற்கு சிறிது நேரம் ஆகலாம்';
+
+  @override
+  String get errorReprocessingTranscription =>
+      'படியெடுப்பை மீண்டும் செயல்படுத்தும்போது பிழை. பின்னர் மீண்டும் முயலவும்.';
+
+  @override
+  String get errorNoStoredAudio => 'இந்த உரையாடலுக்கு சேமிக்கப்பட்ட ஆடியோ இல்லை.';
 }

@@ -13177,4 +13177,17 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'Oublier le deuxième appareil';
+
+  @override
+  String get reprocessTranscription => 'Retraiter la transcription';
+
+  @override
+  String get retranscribingConversation =>
+      'Nouvelle transcription de la conversation...\nCela peut prendre un peu de temps pour les conversations plus longues';
+
+  @override
+  String get errorReprocessingTranscription => 'Erreur lors du retraitement de la transcription. Réessaie plus tard.';
+
+  @override
+  String get errorNoStoredAudio => 'Aucun audio enregistré n\'est disponible pour cette conversation.';
 }

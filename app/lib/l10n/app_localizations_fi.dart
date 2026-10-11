@@ -13079,4 +13079,17 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'Unohda toinen laite';
+
+  @override
+  String get reprocessTranscription => 'Käsittele litterointi uudelleen';
+
+  @override
+  String get retranscribingConversation =>
+      'Transkroi keskustelua uudelleen...\nTämä voi kestää hetken pidempien keskustelujen kohdalla';
+
+  @override
+  String get errorReprocessingTranscription => 'Virhe litteroinnin uudelleenkäsittelyssä. Yritä myöhemmin uudelleen.';
+
+  @override
+  String get errorNoStoredAudio => 'Tälle keskustelulle ei ole tallennettua ääntä.';
 }

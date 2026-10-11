@@ -11459,5 +11459,21 @@
     "pairSecondDevice": "Упари други уређај",
     "forgetSecondDevice": "Заборави други уређај",
     "pairSecondDeviceDescription": "Повежите OmiGlass уз свој Omi како би фотографије и звук ишли у исти разговор.",
-    "secondDevice": "Други уређај"
+    "secondDevice": "Други уређај",
+    "reprocessTranscription": "Поново обради транскрипт",
+    "@reprocessTranscription": {
+        "description": "Menu item to re-run speech-to-text on stored conversation audio"
+    },
+    "retranscribingConversation": "Поновна транскрипција разговора...\nОво може потрајати код дужих разговора",
+    "@retranscribingConversation": {
+        "description": "Loading message shown while transcription is being reprocessed"
+    },
+    "errorReprocessingTranscription": "Грешка при поновној обради транскрипта. Покушајте поново касније.",
+    "@errorReprocessingTranscription": {
+        "description": "Error message when transcription reprocess fails"
+    },
+    "errorNoStoredAudio": "Нема сачуваног звука за овај разговор.",
+    "@errorNoStoredAudio": {
+        "description": "Error message when a conversation has no stored audio to retranscribe"
+    }
 }

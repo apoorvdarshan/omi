@@ -4022,5 +4022,9 @@
     "pairSecondDeviceDescription": "Anslut OmiGlass tillsammans med din Omi så att bilder och ljud hamnar i samma konversation.",
     "pairSecondDevice": "Para ihop en andra enhet",
     "forgetSecondDevice": "Glöm andra enhet",
-    "secondDevice": "Andra enhet"
+    "secondDevice": "Andra enhet",
+    "reprocessTranscription": "Bearbeta transkription igen",
+    "retranscribingConversation": "Transkriberar konversationen igen...\nDetta kan ta lite tid för längre konversationer",
+    "errorReprocessingTranscription": "Fel vid ominbearbetning av transkriptionen. Försök igen senare.",
+    "errorNoStoredAudio": "Ingen sparad ljudfil finns för den här konversationen."
 }

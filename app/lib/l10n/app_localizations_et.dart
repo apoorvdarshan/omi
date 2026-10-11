@@ -13067,4 +13067,17 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'Unusta teine seade';
+
+  @override
+  String get reprocessTranscription => 'Töötle transkriptsioon uuesti';
+
+  @override
+  String get retranscribingConversation =>
+      'Vestlust transkribeeritakse uuesti...\nSee võib pikemate vestluste puhul veidi aega võtta';
+
+  @override
+  String get errorReprocessingTranscription => 'Viga transkriptsiooni uuesti töötlemisel. Proovi hiljem uuesti.';
+
+  @override
+  String get errorNoStoredAudio => 'Selle vestluse jaoks pole salvestatud heli.';
 }

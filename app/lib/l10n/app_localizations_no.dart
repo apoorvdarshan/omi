@@ -13073,4 +13073,17 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'Glem andre enhet';
+
+  @override
+  String get reprocessTranscription => 'Behandle transkripsjon på nytt';
+
+  @override
+  String get retranscribingConversation =>
+      'Transkriberer samtalen på nytt...\nDette kan ta litt tid for lengre samtaler';
+
+  @override
+  String get errorReprocessingTranscription => 'Feil under ny behandling av transkripsjonen. Prøv igjen senere.';
+
+  @override
+  String get errorNoStoredAudio => 'Ingen lagret lyd tilgjengelig for denne samtalen.';
 }

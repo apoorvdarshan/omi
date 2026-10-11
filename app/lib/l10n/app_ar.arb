@@ -4022,5 +4022,9 @@
     "pairSecondDeviceDescription": "اربط OmiGlass بجانب جهاز Omi حتى تذهب الصور والصوت إلى المحادثة نفسها.",
     "pairSecondDevice": "إقران جهاز ثانٍ",
     "forgetSecondDevice": "نسيان الجهاز الثاني",
-    "secondDevice": "الجهاز الثاني"
+    "secondDevice": "الجهاز الثاني",
+    "reprocessTranscription": "إعادة معالجة التفريغ النصي",
+    "retranscribingConversation": "إعادة تحويل المحادثة نصيًا...\nقد يستغرق هذا بعض الوقت في المحادثات الأطول",
+    "errorReprocessingTranscription": "حدث خطأ أثناء إعادة معالجة التفريغ النصي. يرجى المحاولة لاحقًا.",
+    "errorNoStoredAudio": "لا يوجد صوت محفوظ لهذه المحادثة."
 }

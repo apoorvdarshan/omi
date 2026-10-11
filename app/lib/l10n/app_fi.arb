@@ -4022,5 +4022,9 @@
     "pairSecondDeviceDescription": "Yhdistä OmiGlass Omi-laitteesi rinnalle, jotta kuvat ja ääni päätyvät samaan keskusteluun.",
     "pairSecondDevice": "Yhdistä toinen laite",
     "forgetSecondDevice": "Unohda toinen laite",
-    "secondDevice": "Toinen laite"
+    "secondDevice": "Toinen laite",
+    "reprocessTranscription": "Käsittele litterointi uudelleen",
+    "retranscribingConversation": "Transkroi keskustelua uudelleen...\nTämä voi kestää hetken pidempien keskustelujen kohdalla",
+    "errorReprocessingTranscription": "Virhe litteroinnin uudelleenkäsittelyssä. Yritä myöhemmin uudelleen.",
+    "errorNoStoredAudio": "Tälle keskustelulle ei ole tallennettua ääntä."
 }

@@ -13179,4 +13179,17 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'Kalimutan ang ikalawang device';
+
+  @override
+  String get reprocessTranscription => 'Muling Proseso ang Transkripsyon';
+
+  @override
+  String get retranscribingConversation =>
+      'Muling transkripsiyon ng usapan...\nMaaari itong tumagal nang kaunti sa mas mahahabang usapan';
+
+  @override
+  String get errorReprocessingTranscription => 'Error sa muling pagproseso ng transkripsyon. Subukan ulit mamaya.';
+
+  @override
+  String get errorNoStoredAudio => 'Walang naka-store na audio para sa pag-uusap na ito.';
 }

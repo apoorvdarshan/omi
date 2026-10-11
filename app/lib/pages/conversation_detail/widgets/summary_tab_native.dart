@@ -44,6 +44,17 @@ extension _NativeSummaryPresentation on _SummaryTabState {
       final selection = provider.getSummarySelection();
       final l10n = context.l10n;
       final rows = <NativeRow>[];
+      if (provider.loadingReprocessTranscription && provider.reprocessConversationId == conversation.id) {
+        widget.onNativePresentation!([
+          NativeSection(
+              'detail_summary',
+              [
+                NativeRow('detail_summary_status', l10n.retranscribingConversation, kind: 'label'),
+              ],
+              title: l10n.summary),
+        ]);
+        return;
+      }
       if (conversation.discarded || selection.kind == ConversationSummaryKind.empty) {
         final processing =
             provider.isReprocessingOpenConversation || conversation.status == ConversationStatus.processing;
@@ -116,7 +127,10 @@ extension _NativeSummaryPresentation on _SummaryTabState {
 
   Future<void> _editNativeSummary(ConversationSummarySelection selection) async {
     final provider = context.read<ConversationDetailProvider>();
-    if (_isEditing || !selection.canEdit(provider.conversation) || provider.loadingReprocessConversation) return;
+    if (_isEditing ||
+        !selection.canEdit(provider.conversation) ||
+        provider.loadingReprocessConversation ||
+        provider.loadingReprocessTranscription) return;
     if (!context.read<ConnectivityProvider>().isConnected) {
       ConnectivityProvider.showNoInternetDialog(context);
       return;
@@ -148,6 +162,8 @@ extension _NativeSummaryPresentation on _SummaryTabState {
         text is String &&
         text != selection.content &&
         provider.conversationOrNull?.id == conversationId &&
+        !provider.loadingReprocessConversation &&
+        !provider.loadingReprocessTranscription &&
         selection.canEdit(provider.conversation)) {
       PlatformManager.instance.analytics.editSummarySaved();
       await provider.saveEditingSummarySelection(selection, text);

@@ -644,6 +644,30 @@ void main() {
       expect(detail.speakerLabelingSessionActive, isFalse);
     });
 
+    for (final sameConversation in [true, false]) {
+      testWidgets('native transcript tracks retranscription for the open conversation: $sameConversation',
+          (tester) async {
+        await project(tester, const ConversationSpeakers(status: 'resolved', participantSpeakerIds: [1, 2]));
+        final detail =
+            Provider.of<ConversationDetailProvider>(tester.element(find.byType(TranscriptWidgets)), listen: false);
+        detail.updateReprocessConversationId(sameConversation ? detail.conversation.id : 'another-conversation');
+        detail.updateReprocessTranscriptionLoadingState(true);
+        await tester.pump();
+        await tester.pump();
+        final rows = published.expand((section) => section.rows).toList();
+        if (sameConversation) {
+          expect(rows.map((row) => row.id), ['detail_transcript_status']);
+          expect(rows.single.title, _l10n.retranscribingConversation);
+          expect(rows.single.action, isNull);
+        } else {
+          expect(rows.map((row) => row.id), contains('detail_segment:a'));
+        }
+        detail.updateReprocessTranscriptionLoadingState(false);
+        await tester.pumpAndSettle();
+        expect(published.expand((section) => section.rows).map((row) => row.id), contains('detail_segment:a'));
+      });
+    }
+
     testWidgets('the heading matches the Flutter heading and its count', (tester) async {
       final rows = await project(tester, const ConversationSpeakers(status: 'resolved', participantSpeakerIds: [1, 2]));
       final heading = rows.firstWhere((row) => row.id == 'detail_transcript_heading');

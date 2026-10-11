@@ -13088,4 +13088,17 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'دوسرا ڈیوائس بھول جائیں';
+
+  @override
+  String get reprocessTranscription => 'نقل کو دوبارہ پروسیس کریں';
+
+  @override
+  String get retranscribingConversation =>
+      'گفتگو کو دوبارہ ٹرانسکرائب کیا جا رہا ہے...\nلمبی گفتگو کے لیے اس میں کچھ وقت لگ سکتا ہے';
+
+  @override
+  String get errorReprocessingTranscription => 'نقل کو دوبارہ پروسیس کرتے وقت خرابی۔ بعد میں دوبارہ کوشش کریں۔';
+
+  @override
+  String get errorNoStoredAudio => 'اس بات چیت کے لیے کوئی محفوظ آڈیو دستیاب نہیں۔';
 }

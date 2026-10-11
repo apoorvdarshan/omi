@@ -13103,4 +13103,17 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'Забути другий пристрій';
+
+  @override
+  String get reprocessTranscription => 'Перепрацювати транскрипцію';
+
+  @override
+  String get retranscribingConversation =>
+      'Повторна транскрипція розмови...\nЦе може зайняти деякий час для довших розмов';
+
+  @override
+  String get errorReprocessingTranscription => 'Помилка під час повторної обробки транскрипції. Спробуйте пізніше.';
+
+  @override
+  String get errorNoStoredAudio => 'Для цієї розмови немає збереженого аудіо.';
 }

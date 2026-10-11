@@ -11459,5 +11459,21 @@
     "pairSecondDevice": "Спалучыць другую прыладу",
     "forgetSecondDevice": "Забыць другую прыладу",
     "pairSecondDeviceDescription": "Падключыце OmiGlass разам з Omi, каб фота і аўдыя траплялі ў адну размову.",
-    "secondDevice": "Другая прылада"
+    "secondDevice": "Другая прылада",
+    "reprocessTranscription": "Перапрацаваць транскрыпцыю",
+    "@reprocessTranscription": {
+        "description": "Menu item to re-run speech-to-text on stored conversation audio"
+    },
+    "retranscribingConversation": "Паўторная транскрыпцыя размовы...\nГэта можа заняць некаторы час для даўжэйшых размоў",
+    "@retranscribingConversation": {
+        "description": "Loading message shown while transcription is being reprocessed"
+    },
+    "errorReprocessingTranscription": "Памылка пры паўторнай апрацоўцы транскрыпцыі. Паспрабуйце пазней.",
+    "@errorReprocessingTranscription": {
+        "description": "Error message when transcription reprocess fails"
+    },
+    "errorNoStoredAudio": "Для гэтай размовы няма захаванага аўдыё.",
+    "@errorNoStoredAudio": {
+        "description": "Error message when a conversation has no stored audio to retranscribe"
+    }
 }

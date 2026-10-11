@@ -4022,5 +4022,9 @@
     "pairSecondDeviceDescription": "Připojte OmiGlass k vašemu Omi, aby fotky a zvuk šly do stejné konverzace.",
     "pairSecondDevice": "Spárovat druhé zařízení",
     "forgetSecondDevice": "Zapomenout druhé zařízení",
-    "secondDevice": "Druhé zařízení"
+    "secondDevice": "Druhé zařízení",
+    "reprocessTranscription": "Znovu zpracovat přepis",
+    "retranscribingConversation": "Přepis konverzace se opakuje...\nTo může u delších konverzací chvíli trvat",
+    "errorReprocessingTranscription": "Chyba při opětovném zpracování přepisu. Zkuste to později.",
+    "errorNoStoredAudio": "Pro tuto konverzaci není k dispozici uložený zvuk."
 }

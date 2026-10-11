@@ -4022,5 +4022,9 @@
     "pairSecondDeviceDescription": "Kết nối OmiGlass cùng với Omi để ảnh và âm thanh đi vào cùng một cuộc trò chuyện.",
     "pairSecondDevice": "Ghép nối thiết bị thứ hai",
     "forgetSecondDevice": "Quên thiết bị thứ hai",
-    "secondDevice": "Thiết bị thứ hai"
+    "secondDevice": "Thiết bị thứ hai",
+    "reprocessTranscription": "Xử lý lại bản ghi",
+    "retranscribingConversation": "Đang ghi lại bản chép lời cuộc trò chuyện...\nViệc này có thể mất một chút đối với cuộc trò chuyện dài",
+    "errorReprocessingTranscription": "Lỗi khi xử lý lại bản ghi. Vui lòng thử lại sau.",
+    "errorNoStoredAudio": "Không có âm thanh đã lưu cho cuộc trò chuyện này."
 }

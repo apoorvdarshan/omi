@@ -4064,5 +4064,9 @@
     "pairSecondDeviceDescription": "Forbind OmiGlass sammen med din Omi, så billeder og lyd ender i samme samtale.",
     "pairSecondDevice": "Par en anden enhed",
     "forgetSecondDevice": "Glem anden enhed",
-    "secondDevice": "Anden enhed"
+    "secondDevice": "Anden enhed",
+    "reprocessTranscription": "Genbehandl transskription",
+    "retranscribingConversation": "Transskriberer samtalen igen...\nDette kan tage lidt tid ved længere samtaler",
+    "errorReprocessingTranscription": "Fejl under genbehandling af transskription. Prøv igen senere.",
+    "errorNoStoredAudio": "Ingen gemt lyd tilgængelig for denne samtale."
 }

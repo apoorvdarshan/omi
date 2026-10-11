@@ -13128,4 +13128,17 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'Uită al doilea dispozitiv';
+
+  @override
+  String get reprocessTranscription => 'Reprocesează transcrierea';
+
+  @override
+  String get retranscribingConversation =>
+      'Retranscriere conversației...\nAcest lucru poate dura ceva mai mult pentru conversații lungi';
+
+  @override
+  String get errorReprocessingTranscription => 'Eroare la reprocesarea transcrierii. Încearcă din nou mai târziu.';
+
+  @override
+  String get errorNoStoredAudio => 'Nu există audio stocat pentru această conversație.';
 }

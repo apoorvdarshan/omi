@@ -11459,5 +11459,21 @@
     "pairSecondDevice": "צימוד מכשיר שני",
     "forgetSecondDevice": "שכח את המכשיר השני",
     "pairSecondDeviceDescription": "חברו את OmiGlass לצד ה-Omi שלכם כדי שתמונות ואודיו ייכנסו לאותה שיחה.",
-    "secondDevice": "מכשיר שני"
+    "secondDevice": "מכשיר שני",
+    "reprocessTranscription": "עבד מחדש תמלול",
+    "@reprocessTranscription": {
+        "description": "Menu item to re-run speech-to-text on stored conversation audio"
+    },
+    "retranscribingConversation": "מתבצעת תמלול מחדש של השיחה...\nזו עשויה להימשך זמן מה בשיחות ארוכות יותר",
+    "@retranscribingConversation": {
+        "description": "Loading message shown while transcription is being reprocessed"
+    },
+    "errorReprocessingTranscription": "שגיאה בעיבוד מחדש של התמלול. נסה שוב מאוחר יותר.",
+    "@errorReprocessingTranscription": {
+        "description": "Error message when transcription reprocess fails"
+    },
+    "errorNoStoredAudio": "אין שמע שמור לשיחה זו.",
+    "@errorNoStoredAudio": {
+        "description": "Error message when a conversation has no stored audio to retranscribe"
+    }
 }

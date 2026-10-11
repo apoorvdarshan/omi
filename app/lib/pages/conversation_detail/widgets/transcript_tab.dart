@@ -110,6 +110,17 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
       final conversation = provider.conversation;
       final segments = conversation.transcriptSegments;
       final l10n = context.l10n;
+      if (provider.loadingReprocessTranscription && provider.reprocessConversationId == conversation.id) {
+        widget.onNativePresentation!([
+          NativeSection(
+              'detail_transcript',
+              [
+                NativeRow('detail_transcript_status', l10n.retranscribingConversation, kind: 'label'),
+              ],
+              title: l10n.transcript),
+        ]);
+        return;
+      }
       final names = SpeakerNames.forSegments(segments,
           people: context.read<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople,
           l10n: l10n,
@@ -323,7 +334,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
   /// Transcript and speaker edits wait while the conversation is being reprocessed (the reprocess replaces the
   /// lines they would change); say so instead of ignoring the tap.
   bool _readyForTranscriptEdit(ConversationDetailProvider provider) {
-    if (!provider.loadingReprocessConversation) return _requireConnection();
+    if (!provider.loadingReprocessConversation && !provider.loadingReprocessTranscription) return _requireConnection();
     OmiFeedback.info(context, context.l10n.waitForReprocessing);
     return false;
   }
@@ -566,6 +577,14 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
         child: Consumer<ConversationDetailProvider>(
           builder: (context, provider, child) {
             _publishNativePresentation();
+            if (provider.loadingReprocessTranscription &&
+                provider.reprocessConversationId == provider.conversation.id) {
+              return Padding(
+                padding: const EdgeInsets.only(top: 18.0),
+                child: OmiLoadingState(label: context.l10n.retranscribingConversation),
+              );
+            }
+
             final conversation = provider.conversation;
             final segments = conversation.transcriptSegments;
             final photos = conversation.photos;

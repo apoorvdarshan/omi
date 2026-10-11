@@ -392,6 +392,42 @@ void main() {
       return published.last.single.rows;
     }
 
+    for (final sameConversation in [true, false]) {
+      testWidgets('native summary tracks retranscription for the open conversation: $sameConversation', (tester) async {
+        await summaryRows(tester, {'writer': writer});
+        final element = tester.element(find.byType(SummaryTab));
+        final owner = Provider.of<ConversationDetailProvider>(element, listen: false);
+        final widget = tester.widget<SummaryTab>(find.byType(SummaryTab));
+        var latest = <NativeSection>[];
+        final original = widget.onNativePresentation!;
+        await tester.pumpWidget(MultiProvider(
+            providers: [ChangeNotifierProvider<ConversationDetailProvider>.value(value: owner)],
+            child: MaterialApp(
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                supportedLocales: const [Locale('en')],
+                home: Scaffold(body: SummaryTab(onNativePresentation: (value) {
+                  original(value);
+                  latest = value;
+                })))));
+        owner.updateReprocessConversationId(sameConversation ? owner.conversation.id : 'another-conversation');
+        owner.updateReprocessTranscriptionLoadingState(true);
+        await tester.pump();
+        await tester.pump();
+        final rows = latest.expand((section) => section.rows).toList();
+        if (sameConversation) {
+          expect(rows.map((row) => row.id), ['detail_summary_status']);
+          expect(rows.single.title, _l10n.retranscribingConversation);
+          expect(rows.single.action, isNull);
+        } else {
+          expect(rows.map((row) => row.id), contains('detail_summary_content'));
+        }
+        owner.updateReprocessTranscriptionLoadingState(false);
+        await tester.pump();
+        await tester.pump();
+        expect(latest.expand((section) => section.rows).map((row) => row.id), contains('detail_summary_content'));
+      });
+    }
+
     testWidgets('an app-written summary names its app in a row that opens the app', (tester) async {
       final rows = await summaryRows(tester, {'writer': writer});
       final app = rows.singleWhere((row) => row.id == 'detail_summary_app');

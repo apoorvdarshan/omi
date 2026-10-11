@@ -13053,4 +13053,18 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'दूसरा डिवाइस भूल जाएँ';
+
+  @override
+  String get reprocessTranscription => 'ट्रांसक्रिप्शन पुनः संसाधित करें';
+
+  @override
+  String get retranscribingConversation =>
+      'बातचीत का फिर से ट्रांसक्रिप्शन हो रहा है...\nलंबी बातचीत में इसमें कुछ समय लग सकता है';
+
+  @override
+  String get errorReprocessingTranscription =>
+      'ट्रांसक्रिप्शन पुनः संसाधित करते समय त्रुटि हुई। बाद में पुनः प्रयास करें।';
+
+  @override
+  String get errorNoStoredAudio => 'इस बातचीत के लिए कोई संग्रहीत ऑडियो उपलब्ध नहीं है।';
 }

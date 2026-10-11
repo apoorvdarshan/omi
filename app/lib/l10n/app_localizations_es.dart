@@ -13113,4 +13113,17 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'Olvidar segundo dispositivo';
+
+  @override
+  String get reprocessTranscription => 'Reprocesar transcripción';
+
+  @override
+  String get retranscribingConversation =>
+      'Volviendo a transcribir la conversación...\nEsto puede tardar un poco en conversaciones largas';
+
+  @override
+  String get errorReprocessingTranscription => 'Error al reprocesar la transcripción. Inténtalo de nuevo más tarde.';
+
+  @override
+  String get errorNoStoredAudio => 'No hay audio guardado para esta conversación.';
 }

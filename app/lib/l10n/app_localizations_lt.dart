@@ -13098,4 +13098,17 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'Pamiršti antrą įrenginį';
+
+  @override
+  String get reprocessTranscription => 'Iš naujo apdoroti transkripciją';
+
+  @override
+  String get retranscribingConversation =>
+      'Pakartotinė pokalbio transkribavimas...\nTai gali užtrukti ilgesnių pokalbių atveju';
+
+  @override
+  String get errorReprocessingTranscription => 'Klaida iš naujo apdorojant transkripciją. Bandykite vėliau.';
+
+  @override
+  String get errorNoStoredAudio => 'Šiam pokalbiui nėra išsaugoto garso.';
 }

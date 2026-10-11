@@ -4022,5 +4022,9 @@
     "pairSecondDeviceDescription": "Omi와 함께 OmiGlass를 연결하면 사진과 오디오가 같은 대화에 담깁니다.",
     "pairSecondDevice": "두 번째 기기 페어링",
     "forgetSecondDevice": "두 번째 기기 삭제",
-    "secondDevice": "두 번째 기기"
+    "secondDevice": "두 번째 기기",
+    "reprocessTranscription": "전사 다시 처리",
+    "retranscribingConversation": "대화를 다시 전사하고 있습니다...\n긴 대화의 경우 시간이 조금 더 걸릴 수 있습니다",
+    "errorReprocessingTranscription": "전사를 다시 처리하는 중 오류가 발생했습니다. 나중에 다시 시도하세요.",
+    "errorNoStoredAudio": "이 대화에 저장된 오디오가 없습니다."
 }

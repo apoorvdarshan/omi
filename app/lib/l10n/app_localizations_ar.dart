@@ -12997,4 +12997,16 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'نسيان الجهاز الثاني';
+
+  @override
+  String get reprocessTranscription => 'إعادة معالجة التفريغ النصي';
+
+  @override
+  String get retranscribingConversation => 'إعادة تحويل المحادثة نصيًا...\nقد يستغرق هذا بعض الوقت في المحادثات الأطول';
+
+  @override
+  String get errorReprocessingTranscription => 'حدث خطأ أثناء إعادة معالجة التفريغ النصي. يرجى المحاولة لاحقًا.';
+
+  @override
+  String get errorNoStoredAudio => 'لا يوجد صوت محفوظ لهذه المحادثة.';
 }

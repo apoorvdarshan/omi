@@ -11459,5 +11459,21 @@
     "pairSecondDevice": "రెండవ పరికరాన్ని జోడించండి",
     "forgetSecondDevice": "రెండవ పరికరాన్ని మర్చిపోండి",
     "pairSecondDeviceDescription": "ఫోటోలు మరియు ఆడియో ఒకే సంభాషణలోకి వెళ్లేలా మీ Omi తో పాటు OmiGlass ను కనెక్ట్ చేయండి.",
-    "secondDevice": "రెండవ పరికరం"
+    "secondDevice": "రెండవ పరికరం",
+    "reprocessTranscription": "ట్రాన్స్‌క్రిప్షన్‌ను తిరిగి ప్రక్రియ చేయండి",
+    "@reprocessTranscription": {
+        "description": "Menu item to re-run speech-to-text on stored conversation audio"
+    },
+    "retranscribingConversation": "సంభాషణను మళ్లీ ట్రాన్స్‌క్రిప్షన్ చేస్తోంది...\nపొడవైన సంభాషణలకు ఇందుకు కొంచెం సమయం పట్టవచ్చు",
+    "@retranscribingConversation": {
+        "description": "Loading message shown while transcription is being reprocessed"
+    },
+    "errorReprocessingTranscription": "ట్రాన్స్‌క్రిప్షన్‌ను తిరిగి ప్రక్రియ చేసేటప్పుడు త్రుటి. దయచేసి తరువాత మళ్లీ ప్రయత్నించండి.",
+    "@errorReprocessingTranscription": {
+        "description": "Error message when transcription reprocess fails"
+    },
+    "errorNoStoredAudio": "ఈ సంభాషణకు నిల్వ చేసిన ఆడియో లేదు.",
+    "@errorNoStoredAudio": {
+        "description": "Error message when a conversation has no stored audio to retranscribe"
+    }
 }

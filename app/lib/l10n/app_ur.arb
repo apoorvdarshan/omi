@@ -11459,5 +11459,21 @@
     "pairSecondDevice": "دوسرا ڈیوائس جوڑیں",
     "forgetSecondDevice": "دوسرا ڈیوائس بھول جائیں",
     "pairSecondDeviceDescription": "اپنے Omi کے ساتھ OmiGlass کو کنیکٹ کریں تاکہ تصاویر اور آڈیو ایک ہی گفتگو میں جائیں۔",
-    "secondDevice": "دوسرا ڈیوائس"
+    "secondDevice": "دوسرا ڈیوائس",
+    "reprocessTranscription": "نقل کو دوبارہ پروسیس کریں",
+    "@reprocessTranscription": {
+        "description": "Menu item to re-run speech-to-text on stored conversation audio"
+    },
+    "retranscribingConversation": "گفتگو کو دوبارہ ٹرانسکرائب کیا جا رہا ہے...\nلمبی گفتگو کے لیے اس میں کچھ وقت لگ سکتا ہے",
+    "@retranscribingConversation": {
+        "description": "Loading message shown while transcription is being reprocessed"
+    },
+    "errorReprocessingTranscription": "نقل کو دوبارہ پروسیس کرتے وقت خرابی۔ بعد میں دوبارہ کوشش کریں۔",
+    "@errorReprocessingTranscription": {
+        "description": "Error message when transcription reprocess fails"
+    },
+    "errorNoStoredAudio": "اس بات چیت کے لیے کوئی محفوظ آڈیو دستیاب نہیں۔",
+    "@errorNoStoredAudio": {
+        "description": "Error message when a conversation has no stored audio to retranscribe"
+    }
 }

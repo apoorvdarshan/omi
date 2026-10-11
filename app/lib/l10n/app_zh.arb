@@ -4022,5 +4022,9 @@
     "pairSecondDeviceDescription": "将 OmiGlass 与你的 Omi 一起连接，让照片和音频进入同一段对话。",
     "pairSecondDevice": "配对第二台设备",
     "forgetSecondDevice": "忘记第二台设备",
-    "secondDevice": "第二台设备"
+    "secondDevice": "第二台设备",
+    "reprocessTranscription": "重新处理转写",
+    "retranscribingConversation": "正在重新转录对话...\n较长的对话可能需要稍长时间",
+    "errorReprocessingTranscription": "重新处理转写时出错。请稍后再试。",
+    "errorNoStoredAudio": "此对话没有已存储的音频。"
 }

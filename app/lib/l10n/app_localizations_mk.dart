@@ -13135,4 +13135,18 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'Заборави го вториот уред';
+
+  @override
+  String get reprocessTranscription => 'Преработи транскрипција';
+
+  @override
+  String get retranscribingConversation =>
+      'Повторна транскрипција на разговорот...\nОва може да потрачи кај подолги разговори';
+
+  @override
+  String get errorReprocessingTranscription =>
+      'Грешка при повторна обработка на транскрипцијата. Обидете се повторно подоцна.';
+
+  @override
+  String get errorNoStoredAudio => 'Нема зачувано аудио за овој разговор.';
 }

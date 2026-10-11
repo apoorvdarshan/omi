@@ -13102,4 +13102,17 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'Aizmirst otro ierīci';
+
+  @override
+  String get reprocessTranscription => 'Atkārtoti apstrādāt transkripciju';
+
+  @override
+  String get retranscribingConversation =>
+      'Atkārtota sarunas transcribēšana...\nTas var aizņemt nedaudz laika garākām sarunām';
+
+  @override
+  String get errorReprocessingTranscription => 'Kļūda, atkārtoti apstrādājot transkripciju. Mēģiniet vēlāk.';
+
+  @override
+  String get errorNoStoredAudio => 'Šai sarunai nav saglabāta audioieraksta.';
 }

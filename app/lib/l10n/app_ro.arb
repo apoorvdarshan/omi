@@ -4022,5 +4022,9 @@
     "pairSecondDeviceDescription": "Conectează OmiGlass alături de Omi, astfel încât fotografiile și sunetul să ajungă în aceeași conversație.",
     "pairSecondDevice": "Asociază un al doilea dispozitiv",
     "forgetSecondDevice": "Uită al doilea dispozitiv",
-    "secondDevice": "Al doilea dispozitiv"
+    "secondDevice": "Al doilea dispozitiv",
+    "reprocessTranscription": "Reprocesează transcrierea",
+    "retranscribingConversation": "Retranscriere conversației...\nAcest lucru poate dura ceva mai mult pentru conversații lungi",
+    "errorReprocessingTranscription": "Eroare la reprocesarea transcrierii. Încearcă din nou mai târziu.",
+    "errorNoStoredAudio": "Nu există audio stocat pentru această conversație."
 }

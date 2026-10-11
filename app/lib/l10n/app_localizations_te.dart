@@ -13125,4 +13125,18 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'రెండవ పరికరాన్ని మర్చిపోండి';
+
+  @override
+  String get reprocessTranscription => 'ట్రాన్స్‌క్రిప్షన్‌ను తిరిగి ప్రక్రియ చేయండి';
+
+  @override
+  String get retranscribingConversation =>
+      'సంభాషణను మళ్లీ ట్రాన్స్‌క్రిప్షన్ చేస్తోంది...\nపొడవైన సంభాషణలకు ఇందుకు కొంచెం సమయం పట్టవచ్చు';
+
+  @override
+  String get errorReprocessingTranscription =>
+      'ట్రాన్స్‌క్రిప్షన్‌ను తిరిగి ప్రక్రియ చేసేటప్పుడు త్రుటి. దయచేసి తరువాత మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get errorNoStoredAudio => 'ఈ సంభాషణకు నిల్వ చేసిన ఆడియో లేదు.';
 }

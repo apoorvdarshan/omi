@@ -4022,5 +4022,9 @@
     "pairSecondDeviceDescription": "Omi と一緒に OmiGlass を接続すると、写真と音声が同じ会話にまとまります。",
     "pairSecondDevice": "2台目のデバイスをペアリング",
     "forgetSecondDevice": "2台目のデバイスを忘れる",
-    "secondDevice": "2台目のデバイス"
+    "secondDevice": "2台目のデバイス",
+    "reprocessTranscription": "文字起こしを再処理",
+    "retranscribingConversation": "会話を再文字起こししています...\n長い会話では時間がかかることがあります",
+    "errorReprocessingTranscription": "文字起こしの再処理中にエラーが発生しました。後でもう一度お試しください。",
+    "errorNoStoredAudio": "この会話には保存された音声がありません。"
 }

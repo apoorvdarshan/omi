@@ -4022,5 +4022,9 @@
     "pairSecondDeviceDescription": "Свържете OmiGlass заедно с вашия Omi, така че снимките и звукът да влизат в един и същ разговор.",
     "pairSecondDevice": "Сдвояване на второ устройство",
     "forgetSecondDevice": "Забрави второто устройство",
-    "secondDevice": "Второ устройство"
+    "secondDevice": "Второ устройство",
+    "reprocessTranscription": "Преработи транскрипцията",
+    "retranscribingConversation": "Повторно транскрибиране на разговора...\nТова може да отнеме малко време при по-дълги разговори",
+    "errorReprocessingTranscription": "Грешка при повторна обработка на транскрипцията. Опитайте отново по-късно.",
+    "errorNoStoredAudio": "Няма запазено аудио за този разговор."
 }

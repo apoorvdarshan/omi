@@ -4022,5 +4022,9 @@
     "pairSecondDeviceDescription": "Conecta OmiGlass junto a tu Omi para que las fotos y el audio vayan a la misma conversación.",
     "pairSecondDevice": "Emparejar un segundo dispositivo",
     "forgetSecondDevice": "Olvidar segundo dispositivo",
-    "secondDevice": "Segundo dispositivo"
+    "secondDevice": "Segundo dispositivo",
+    "reprocessTranscription": "Reprocesar transcripción",
+    "retranscribingConversation": "Volviendo a transcribir la conversación...\nEsto puede tardar un poco en conversaciones largas",
+    "errorReprocessingTranscription": "Error al reprocesar la transcripción. Inténtalo de nuevo más tarde.",
+    "errorNoStoredAudio": "No hay audio guardado para esta conversación."
 }

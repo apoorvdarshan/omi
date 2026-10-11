@@ -4022,5 +4022,9 @@
     "pairSecondDeviceDescription": "अपने Omi के साथ OmiGlass कनेक्ट करें ताकि फ़ोटो और ऑडियो एक ही बातचीत में जाएँ।",
     "pairSecondDevice": "दूसरा डिवाइस पेयर करें",
     "forgetSecondDevice": "दूसरा डिवाइस भूल जाएँ",
-    "secondDevice": "दूसरा डिवाइस"
+    "secondDevice": "दूसरा डिवाइस",
+    "reprocessTranscription": "ट्रांसक्रिप्शन पुनः संसाधित करें",
+    "retranscribingConversation": "बातचीत का फिर से ट्रांसक्रिप्शन हो रहा है...\nलंबी बातचीत में इसमें कुछ समय लग सकता है",
+    "errorReprocessingTranscription": "ट्रांसक्रिप्शन पुनः संसाधित करते समय त्रुटि हुई। बाद में पुनः प्रयास करें।",
+    "errorNoStoredAudio": "इस बातचीत के लिए कोई संग्रहीत ऑडियो उपलब्ध नहीं है।"
 }

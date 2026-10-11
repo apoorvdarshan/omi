@@ -4057,5 +4057,9 @@
     "pairSecondDeviceDescription": "Podłącz OmiGlass obok swojego Omi, aby zdjęcia i dźwięk trafiały do tej samej rozmowy.",
     "pairSecondDevice": "Sparuj drugie urządzenie",
     "forgetSecondDevice": "Zapomnij drugie urządzenie",
-    "secondDevice": "Drugie urządzenie"
+    "secondDevice": "Drugie urządzenie",
+    "reprocessTranscription": "Przetwórz transkrypcję ponownie",
+    "retranscribingConversation": "Ponowna transkrypcja rozmowy...\nMoże to chwilę potrwać w przypadku dłuższych rozmów",
+    "errorReprocessingTranscription": "Błąd podczas ponownego przetwarzania transkrypcji. Spróbuj ponownie później.",
+    "errorNoStoredAudio": "Brak zapisanego dźwięku dla tej rozmowy."
 }

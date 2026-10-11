@@ -4022,5 +4022,9 @@
     "pairSecondDeviceDescription": "เชื่อมต่อ OmiGlass ควบคู่กับ Omi ของคุณ เพื่อให้รูปภาพและเสียงอยู่ในบทสนทนาเดียวกัน",
     "pairSecondDevice": "จับคู่อุปกรณ์เครื่องที่สอง",
     "forgetSecondDevice": "ลืมอุปกรณ์เครื่องที่สอง",
-    "secondDevice": "อุปกรณ์เครื่องที่สอง"
+    "secondDevice": "อุปกรณ์เครื่องที่สอง",
+    "reprocessTranscription": "ประมวลผลการถอดเสียงใหม่",
+    "retranscribingConversation": "กำลังถอดเสียงบทสนทนาใหม่...\nอาจใช้เวลาสักครู่สำหรับบทสนทนาที่ยาวนาน",
+    "errorReprocessingTranscription": "เกิดข้อผิดพลาดขณะประมวลผลการถอดเสียงใหม่ โปรดลองอีกครั้งในภายหลัง",
+    "errorNoStoredAudio": "ไม่มีเสียงที่จัดเก็บไว้สำหรับบทสนทนานี้"
 }

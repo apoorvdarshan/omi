@@ -12977,4 +12977,16 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'שכח את המכשיר השני';
+
+  @override
+  String get reprocessTranscription => 'עבד מחדש תמלול';
+
+  @override
+  String get retranscribingConversation => 'מתבצעת תמלול מחדש של השיחה...\nזו עשויה להימשך זמן מה בשיחות ארוכות יותר';
+
+  @override
+  String get errorReprocessingTranscription => 'שגיאה בעיבוד מחדש של התמלול. נסה שוב מאוחר יותר.';
+
+  @override
+  String get errorNoStoredAudio => 'אין שמע שמור לשיחה זו.';
 }

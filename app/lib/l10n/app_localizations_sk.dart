@@ -13069,4 +13069,17 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'Zabudnúť druhé zariadenie';
+
+  @override
+  String get reprocessTranscription => 'Znovu spracovať prepis';
+
+  @override
+  String get retranscribingConversation =>
+      'Opätovný prepis konverzácie...\nTo môže pri dlhších konverzáciách chvíľu trvať';
+
+  @override
+  String get errorReprocessingTranscription => 'Chyba pri opätovnom spracovaní prepisu. Skúste to neskôr.';
+
+  @override
+  String get errorNoStoredAudio => 'Pre túto konverzáciu nie je k dispozícii uložený zvuk.';
 }

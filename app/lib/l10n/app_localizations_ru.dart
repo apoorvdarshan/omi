@@ -13119,4 +13119,17 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'Забыть второе устройство';
+
+  @override
+  String get reprocessTranscription => 'Переобработать транскрипцию';
+
+  @override
+  String get retranscribingConversation =>
+      'Повторная расшифровка разговора...\nЭто может занять некоторое время для длинных разговоров';
+
+  @override
+  String get errorReprocessingTranscription => 'Ошибка при повторной обработке транскрипции. Попробуйте позже.';
+
+  @override
+  String get errorNoStoredAudio => 'Для этого разговора нет сохранённого аудио.';
 }

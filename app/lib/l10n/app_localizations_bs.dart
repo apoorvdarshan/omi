@@ -13102,4 +13102,17 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get forgetSecondDevice => 'Zaboravi drugi uređaj';
+
+  @override
+  String get reprocessTranscription => 'Ponovo obradi transkripciju';
+
+  @override
+  String get retranscribingConversation =>
+      'Ponovna transkripcija razgovora...\nOvo može potrajati malo duže kod dužih razgovora';
+
+  @override
+  String get errorReprocessingTranscription => 'Greška pri ponovnoj obradi transkripcije. Pokušajte ponovo kasnije.';
+
+  @override
+  String get errorNoStoredAudio => 'Nema sačuvanog zvuka za ovaj razgovor.';
 }
