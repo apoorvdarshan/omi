@@ -12,10 +12,12 @@ LOG_MODULE_REGISTER(app_settings, CONFIG_LOG_DEFAULT_LEVEL);
 // Default values if not found in flash
 #define DEFAULT_DIM_LIGHT_RATIO 50
 #define DEFAULT_MIC_GAIN 6
+#define DEFAULT_MUTED 0
 
 // In-memory cache for the settings
 static uint8_t dim_light_ratio = DEFAULT_DIM_LIGHT_RATIO;
 static uint8_t mic_gain = DEFAULT_MIC_GAIN;
+static uint8_t muted = DEFAULT_MUTED;
 static struct rtc_time rtc_timestamp = {0};
 static uint64_t rtc_epoch = 0;
 /* Empty string means "no custom name stored": fall back to CONFIG_BT_DEVICE_NAME. */
@@ -78,6 +80,19 @@ static int settings_set(const char *name, size_t len, settings_read_cb read_cb, 
         device_name[len] = '\0';
         LOG_INF("Loaded dev_name: %s", device_name);
         return 0;
+    }
+
+    if (settings_name_steq(name, "muted", &next) && !next) {
+        if (len != sizeof(muted)) {
+            return -EINVAL;
+        }
+        rc = read_cb(cb_arg, &muted, sizeof(muted));
+        if (rc >= 0) {
+            muted = muted ? 1U : 0U;
+            LOG_INF("Loaded muted: %u", muted);
+            return 0;
+        }
+        return rc;
     }
 
     if (settings_name_steq(name, "rtc_timestamp", &next) && !next) {
@@ -240,10 +255,12 @@ int app_settings_init(void)
         LOG_ERR("Failed to load app settings (err %d)", err);
     }
 
-    LOG_INF("Settings initialized. dim_ratio=%u mic_gain=%u rtc_epoch=%llu lsm6_base_epoch=%llu lsm6_base_ts=0x%08x "
+    LOG_INF("Settings initialized. dim_ratio=%u mic_gain=%u muted=%u rtc_epoch=%llu lsm6_base_epoch=%llu "
+            "lsm6_base_ts=0x%08x "
             "dev_name=%s",
             dim_light_ratio,
             mic_gain,
+            muted,
             rtc_epoch,
             lsm6dsl_time_base.epoch_s,
             lsm6dsl_time_base.ts,
@@ -319,4 +336,22 @@ int app_settings_clear_device_name(void)
 const char *app_settings_get_device_name(void)
 {
     return device_name[0] != '\0' ? device_name : CONFIG_BT_DEVICE_NAME;
+}
+
+int app_settings_save_muted(uint8_t new_muted)
+{
+    const uint8_t requested = new_muted ? 1U : 0U;
+    int err = settings_save_one("omi/muted", &requested, sizeof(requested));
+    if (err) {
+        LOG_ERR("Failed to save muted (err %d)", err);
+    } else {
+        muted = requested;
+        LOG_INF("Saved muted: %u", muted);
+    }
+    return err;
+}
+
+uint8_t app_settings_get_muted(void)
+{
+    return muted;
 }

@@ -21,6 +21,7 @@ Shared contract for device SDKs (`sdks/python`, `sdks/swift`, `sdks/react-native
 | Mic gain (read/write) | `19b10012-e8f2-537e-4f6c-d104768a1214` | 1 byte, 0–8 |
 | Charging status (read/notify) | `19b10013-e8f2-537e-4f6c-d104768a1214` | 1 byte, 0/1 |
 | Device name (read/write) | `19b10014-e8f2-537e-4f6c-d104768a1214` | UTF-8, 1–20 bytes |
+| Capture mute (read/write) | `19b10015-e8f2-537e-4f6c-d104768a1214` | 1 byte, 0=capturing, 1=muted |
 
 Device name: the pendant persists the written name in NVS, applies it to GAP and to the
 advertisement/scan response, and restores it on every boot, so any phone that pairs later
@@ -30,6 +31,19 @@ factory name. Invalid values are refused with an ATT error and nothing changes. 
 advertisement carries at most 8 bytes of the name (shortened, UTF-8 safe) next to the Omi
 service UUID; the scan response always carries the complete name. Support is announced by
 bit 9 (`0x200`) of the features characteristic (`19b10021-e8f2-537e-4f6c-d104768a1214`).
+
+
+Capture mute is persisted in NVS (`muted`). Disconnect must not resume capture;
+only an explicit unmute (app write or offline double-tap) does. Support is
+announced by bit 10 (`0x400`) of the features characteristic
+(`19b10021-e8f2-537e-4f6c-d104768a1214`). `19b10014` / bit 9 is allocated to
+device name in #13704. These two PRs must preserve both allocations when
+combined. The alternative firmware proposal #10604 reuses both UUIDs and
+feature bits for different meanings; its protocol must be reconciled before
+combining it with these changes.
+A write succeeds only after NVS persistence. Storage failure returns ATT
+`Unlikely Error` and preserves the last confirmed runtime value. Clients must
+await the write and verify readback before confirming the pause/resume locally.
 
 ## Codec IDs (first byte of codec characteristic)
 

@@ -31,6 +31,8 @@
 #ifdef CONFIG_OMI_ENABLE_MONITOR
 #include "monitor.h"
 #endif
+#include "capture_mute.h"
+#include "capture_mute_gatt.h"
 #include "rtc.h"
 #include "sd_card.h"
 #include "settings.h"
@@ -98,6 +100,17 @@ static ssize_t settings_mic_gain_read_handler(struct bt_conn *conn,
                                               void *buf,
                                               uint16_t len,
                                               uint16_t offset);
+static ssize_t settings_mute_write_handler(struct bt_conn *conn,
+                                           const struct bt_gatt_attr *attr,
+                                           const void *buf,
+                                           uint16_t len,
+                                           uint16_t offset,
+                                           uint8_t flags);
+static ssize_t settings_mute_read_handler(struct bt_conn *conn,
+                                          const struct bt_gatt_attr *attr,
+                                          void *buf,
+                                          uint16_t len,
+                                          uint16_t offset);
 static void charging_status_ccc_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
 static ssize_t settings_charging_status_read_handler(struct bt_conn *conn,
                                                      const struct bt_gatt_attr *attr,
@@ -205,6 +218,8 @@ BUILD_ASSERT(sizeof(CONFIG_BT_DEVICE_NAME) - 1 <= OMI_DEVICE_NAME_MAX_LEN,
 BUILD_ASSERT(OMI_DEVICE_NAME_MAX_LEN <= CONFIG_BT_DEVICE_NAME_MAX,
              "OMI_DEVICE_NAME_MAX_LEN must not exceed the Zephyr dynamic name buffer");
 #endif
+static struct bt_uuid_128 settings_mute_characteristic_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10015, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
 
 static struct bt_gatt_attr settings_service_attr[] = {
     BT_GATT_PRIMARY_SERVICE(&settings_service_uuid),
@@ -234,6 +249,13 @@ static struct bt_gatt_attr settings_service_attr[] = {
                            BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
                            settings_device_name_read_handler,
                            settings_device_name_write_handler,
+                           NULL),
+    /* Appended so charging notify stays on attrs[6]. */
+    BT_GATT_CHARACTERISTIC(&settings_mute_characteristic_uuid.uuid,
+                           BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE,
+                           BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
+                           settings_mute_read_handler,
+                           settings_mute_write_handler,
                            NULL),
 };
 
@@ -485,6 +507,9 @@ static ssize_t settings_dim_ratio_write_handler(struct bt_conn *conn,
                                                 uint16_t offset,
                                                 uint8_t flags)
 {
+    if (offset != 0) {
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
+    }
     if (len != 1) {
         LOG_WRN("Invalid length for dim ratio write: %u", len);
         return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
@@ -635,6 +660,27 @@ static ssize_t settings_device_name_read_handler(struct bt_conn *conn,
     return bt_gatt_attr_read(conn, attr, buf, len, offset, name, strlen(name));
 }
 
+static ssize_t settings_mute_write_handler(struct bt_conn *conn,
+                                           const struct bt_gatt_attr *attr,
+                                           const void *buf,
+                                           uint16_t len,
+                                           uint16_t offset,
+                                           uint8_t flags)
+{
+    return capture_mute_gatt_write(buf, len, offset);
+}
+
+static ssize_t settings_mute_read_handler(struct bt_conn *conn,
+                                          const struct bt_gatt_attr *attr,
+                                          void *buf,
+                                          uint16_t len,
+                                          uint16_t offset)
+{
+    uint8_t current_muted = capture_mute_is_set() ? 1U : 0U;
+    LOG_INF("Reading capture mute: %u", current_muted);
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, &current_muted, sizeof(current_muted));
+}
+
 static ssize_t settings_charging_status_read_handler(struct bt_conn *conn,
                                                      const struct bt_gatt_attr *attr,
                                                      void *buf,
@@ -680,6 +726,8 @@ features_read_handler(struct bt_conn *conn, const struct bt_gatt_attr *attr, voi
     if (IS_ENABLED(CONFIG_BT_DEVICE_NAME_DYNAMIC)) {
         features |= OMI_FEATURE_DEVICE_NAME;
     }
+    // Persistent capture mute (NVS + BLE). Always present on this firmware.
+    features |= OMI_FEATURE_CAPTURE_MUTE;
 
     return bt_gatt_attr_read(conn, attr, buf, len, offset, &features, sizeof(features));
 }
@@ -1426,6 +1474,14 @@ void pusher(void)
                 if (current_mtu >= MINIMAL_PACKET_SIZE) {
                     is_subscribed = bt_gatt_is_subscribed(conn, &audio_service.attrs[1], BT_GATT_CCC_NOTIFY);
                 }
+            }
+
+            /* Issue #5054: muted packets are dropped, not stored, even offline. */
+            if (!capture_mute_should_capture()) {
+                if (conn) {
+                    bt_conn_unref(conn);
+                }
+                continue;
             }
 
             if (conn && is_subscribed) {

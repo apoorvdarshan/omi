@@ -13,6 +13,7 @@
 #include <zephyr/sys/poweroff.h>
 
 #include "button_gesture.h"
+#include "capture_mute.h"
 #include "haptic.h"
 #include "imu.h"
 #include "led.h"
@@ -108,6 +109,10 @@ void check_button_level(struct k_work *work_item)
         break;
     case BUTTON_GESTURE_DOUBLE_TAP:
         notify_button_state(DOUBLE_TAP, "double tap");
+        /* Without the app connection, persist the local pause intent. */
+        if (get_current_connection() == NULL) {
+            (void) capture_mute_set(!capture_mute_is_set());
+        }
         break;
     case BUTTON_GESTURE_TRIPLE_TAP:
         notify_button_state(TRIPLE_TAP, "triple tap");

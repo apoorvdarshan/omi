@@ -121,4 +121,19 @@ int app_settings_clear_device_name(void);
  */
 const char *app_settings_get_device_name(void);
 
+/**
+ * @brief Persist the capture mute/pause flag (issue #5054).
+ *
+ * This is the pendant's source of truth. Disconnect must not clear it.
+ * 0 = capturing, 1 = muted.
+ */
+int app_settings_save_muted(uint8_t muted);
+
+/**
+ * @brief Get the persisted capture mute/pause flag.
+ *
+ * @return 1 when muted, 0 otherwise (default unmuted).
+ */
+uint8_t app_settings_get_muted(void);
+
 #endif // SETTINGS_H
