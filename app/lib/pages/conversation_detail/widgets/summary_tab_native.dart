@@ -130,7 +130,9 @@ extension _NativeSummaryPresentation on _SummaryTabState {
     if (_isEditing ||
         !selection.canEdit(provider.conversation) ||
         provider.loadingReprocessConversation ||
-        provider.loadingReprocessTranscription) return;
+        provider.loadingReprocessTranscription) {
+      return;
+    }
     if (!context.read<ConnectivityProvider>().isConnected) {
       ConnectivityProvider.showNoInternetDialog(context);
       return;

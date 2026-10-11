@@ -16,6 +16,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
+import 'package:omi/mobile/native_ui/ios_native_feedback.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/models/omi_button_action.dart';
 import 'package:omi/pages/settings/device_diagnostics.dart';
@@ -397,6 +398,18 @@ void main() {
 
     testWidgets('native device name reaches confirmed rename and clears the action on disconnect', (tester) async {
       final host = NativeTestHost.install();
+      NativeFeedbackHost.debugActiveForTest = true;
+      addTearDown(() => NativeFeedbackHost.debugActiveForTest = false);
+      final toasts = <Map>[];
+      final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(_config, (call) async {
+        if (call.method == 'toast') {
+          toasts.add(call.arguments as Map);
+          return 'timeout';
+        }
+        return null;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(_config, null));
       final provider = _StubDeviceProvider(
         device: BtDevice(id: 'rename-omi', name: 'Omi', type: DeviceType.omi, rssi: -40),
       );
@@ -413,6 +426,8 @@ void main() {
       expect(provider.renameRequests, ['Trail Omi']);
       expect(find.byType(RenameDeviceWidget), findsNothing);
       expect(_rows(tester)['device_name']!.title, 'Trail Omi');
+      expect(toasts, hasLength(1));
+      expect(toasts.single['message'], contains('Trail Omi'));
 
       provider.disconnect();
       await NativeTestHost.settle(tester);
@@ -508,7 +523,7 @@ void main() {
 
         for (final action in OmiButtonAction.values) {
           _send(host, id, '${action.storedValue}');
-          await tester.pump();
+          await NativeTestHost.settle(tester);
           expect(SharedPreferencesUtil().buttonActionFor(gesture), action);
           expect(_rows(tester)[id]!.value, '${action.storedValue}');
         }

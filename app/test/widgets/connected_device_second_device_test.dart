@@ -142,7 +142,10 @@ void main() {
     expect(find.text('Connected · 64%'), findsOneWidget);
     expect(find.byKey(const Key('pair_second_device_button')), findsNothing);
 
-    await tester.tap(find.byKey(const Key('forget_second_device_button')));
+    final forget = find.byKey(const Key('forget_second_device_button'));
+    await tester.ensureVisible(forget);
+    await tester.pumpAndSettle();
+    await tester.tap(forget);
     await tester.pump();
 
     expect(provider.forgetCompanionCalls, 1);

@@ -157,6 +157,7 @@ void main() {
 
     final longPress = find.byKey(const Key('button_gesture_longPress'));
     await tester.ensureVisible(longPress);
+    await tester.pumpAndSettle();
     await tester.tap(longPress);
     await tester.pumpAndSettle();
 
