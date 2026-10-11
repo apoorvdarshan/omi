@@ -13159,4 +13159,17 @@ class AppLocalizationsDe extends AppLocalizations {
   String deviceRenamed(String name) {
     return 'Gerät umbenannt in $name';
   }
+
+  @override
+  String get pairSecondDevice => 'Zweites Gerät koppeln';
+
+  @override
+  String get secondDevice => 'Zweites Gerät';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Verbinde OmiGlass zusätzlich zu deinem Omi, damit Fotos und Audio in dieselbe Unterhaltung fließen.';
+
+  @override
+  String get forgetSecondDevice => 'Zweites Gerät vergessen';
 }

@@ -4018,5 +4018,9 @@
     "deviceNameCannotBeEmpty": "ชื่ออุปกรณ์ต้องไม่ว่างเปล่า",
     "deviceNameInvalidCharacters": "ชื่อมีตัวอักษรที่ไม่รองรับ",
     "deviceNameTooLong": "ชื่อยาวเกินไป (สูงสุด {maxBytes} ตัวอักษร อีโมจิและอักษรไทยนับมากกว่าหนึ่งตัว)",
-    "deviceRenamed": "เปลี่ยนชื่ออุปกรณ์เป็น {name} แล้ว"
+    "deviceRenamed": "เปลี่ยนชื่ออุปกรณ์เป็น {name} แล้ว",
+    "pairSecondDeviceDescription": "เชื่อมต่อ OmiGlass ควบคู่กับ Omi ของคุณ เพื่อให้รูปภาพและเสียงอยู่ในบทสนทนาเดียวกัน",
+    "pairSecondDevice": "จับคู่อุปกรณ์เครื่องที่สอง",
+    "forgetSecondDevice": "ลืมอุปกรณ์เครื่องที่สอง",
+    "secondDevice": "อุปกรณ์เครื่องที่สอง"
 }

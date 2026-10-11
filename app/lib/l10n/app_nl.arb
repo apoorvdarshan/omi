@@ -4018,5 +4018,9 @@
     "deviceNameCannotBeEmpty": "De apparaatnaam mag niet leeg zijn",
     "deviceNameInvalidCharacters": "De naam bevat niet-ondersteunde tekens",
     "deviceNameTooLong": "Naam is te lang (maximaal {maxBytes} tekens; emoji en accenten tellen extra)",
-    "deviceRenamed": "Apparaat hernoemd naar {name}"
+    "deviceRenamed": "Apparaat hernoemd naar {name}",
+    "pairSecondDeviceDescription": "Verbind OmiGlass naast je Omi zodat foto's en audio in hetzelfde gesprek terechtkomen.",
+    "pairSecondDevice": "Tweede apparaat koppelen",
+    "forgetSecondDevice": "Tweede apparaat vergeten",
+    "secondDevice": "Tweede apparaat"
 }

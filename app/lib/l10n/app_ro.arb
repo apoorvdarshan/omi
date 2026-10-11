@@ -4018,5 +4018,9 @@
     "deviceNameCannotBeEmpty": "Numele dispozitivului nu poate fi gol",
     "deviceNameInvalidCharacters": "Numele conține caractere neacceptate",
     "deviceNameTooLong": "Numele este prea lung (până la {maxBytes} caractere; emoji-urile și diacriticele contează mai mult)",
-    "deviceRenamed": "Dispozitivul a fost redenumit în {name}"
+    "deviceRenamed": "Dispozitivul a fost redenumit în {name}",
+    "pairSecondDeviceDescription": "Conectează OmiGlass alături de Omi, astfel încât fotografiile și sunetul să ajungă în aceeași conversație.",
+    "pairSecondDevice": "Asociază un al doilea dispozitiv",
+    "forgetSecondDevice": "Uită al doilea dispozitiv",
+    "secondDevice": "Al doilea dispozitiv"
 }

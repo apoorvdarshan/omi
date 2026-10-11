@@ -4018,5 +4018,9 @@
     "deviceNameCannotBeEmpty": "Enhetsnamnet får inte vara tomt",
     "deviceNameInvalidCharacters": "Namnet innehåller tecken som inte stöds",
     "deviceNameTooLong": "Namnet är för långt (upp till {maxBytes} tecken; emoji och accenter räknas extra)",
-    "deviceRenamed": "Enheten har fått namnet {name}"
+    "deviceRenamed": "Enheten har fått namnet {name}",
+    "pairSecondDeviceDescription": "Anslut OmiGlass tillsammans med din Omi så att bilder och ljud hamnar i samma konversation.",
+    "pairSecondDevice": "Para ihop en andra enhet",
+    "forgetSecondDevice": "Glöm andra enhet",
+    "secondDevice": "Andra enhet"
 }

@@ -11455,5 +11455,9 @@
     "deviceNameCannotBeEmpty": "שם המכשיר לא יכול להיות ריק",
     "deviceNameInvalidCharacters": "השם מכיל תווים שאינם נתמכים",
     "deviceNameTooLong": "השם ארוך מדי (עד {maxBytes} תווים; אמוג'י וניקוד נספרים יותר)",
-    "deviceRenamed": "שם המכשיר שונה ל-{name}"
+    "deviceRenamed": "שם המכשיר שונה ל-{name}",
+    "pairSecondDevice": "צימוד מכשיר שני",
+    "forgetSecondDevice": "שכח את המכשיר השני",
+    "pairSecondDeviceDescription": "חברו את OmiGlass לצד ה-Omi שלכם כדי שתמונות ואודיו ייכנסו לאותה שיחה.",
+    "secondDevice": "מכשיר שני"
 }

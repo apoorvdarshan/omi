@@ -13056,4 +13056,17 @@ class AppLocalizationsSk extends AppLocalizations {
   String deviceRenamed(String name) {
     return 'Zariadenie premenované na $name';
   }
+
+  @override
+  String get pairSecondDevice => 'Spárovať druhé zariadenie';
+
+  @override
+  String get secondDevice => 'Druhé zariadenie';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Pripojte OmiGlass k svojmu Omi, aby fotky a zvuk išli do rovnakej konverzácie.';
+
+  @override
+  String get forgetSecondDevice => 'Zabudnúť druhé zariadenie';
 }

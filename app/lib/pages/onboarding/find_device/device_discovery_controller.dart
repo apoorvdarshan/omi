@@ -117,10 +117,12 @@ class DeviceDiscoveryController {
 
       if (!_context.mounted) return;
 
-      // Show firmware warning after successful connection
+      // Resolve the newly paired device in either slot before showing its warning.
       if (provider.isConnected) {
-        final connectedDevice = provider.deviceProvider?.connectedDevice ?? device;
-        await showFirmwareWarningIfNeeded(connectedDevice);
+        final devices = provider.deviceProvider;
+        final connectedDevice = [devices?.connectedDevice, devices?.companionDevice]
+            .firstWhereOrNull((connected) => connected?.id == device.id);
+        if (connectedDevice != null) await showFirmwareWarningIfNeeded(connectedDevice);
       }
     }
   }

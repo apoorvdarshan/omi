@@ -4018,5 +4018,9 @@
     "deviceNameCannotBeEmpty": "Įrenginio pavadinimas negali būti tuščias",
     "deviceNameInvalidCharacters": "Pavadinime yra nepalaikomų simbolių",
     "deviceNameTooLong": "Pavadinimas per ilgas (iki {maxBytes} simbolių; jaustukai ir diakritiniai ženklai užima daugiau)",
-    "deviceRenamed": "Įrenginys pervadintas į {name}"
+    "deviceRenamed": "Įrenginys pervadintas į {name}",
+    "pairSecondDeviceDescription": "Prijunkite OmiGlass kartu su savo Omi, kad nuotraukos ir garsas patektų į tą patį pokalbį.",
+    "pairSecondDevice": "Susieti antrą įrenginį",
+    "forgetSecondDevice": "Pamiršti antrą įrenginį",
+    "secondDevice": "Antras įrenginys"
 }

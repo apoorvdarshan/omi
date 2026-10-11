@@ -4114,5 +4114,9 @@
     "deviceNameCannotBeEmpty": "Az eszköz neve nem lehet üres",
     "deviceNameInvalidCharacters": "A név nem támogatott karaktereket tartalmaz",
     "deviceNameTooLong": "A név túl hosszú (legfeljebb {maxBytes} karakter; az emodzsik és ékezetek többet számítanak)",
-    "deviceRenamed": "Az eszköz új neve: {name}"
+    "deviceRenamed": "Az eszköz új neve: {name}",
+    "pairSecondDeviceDescription": "Csatlakoztasd az OmiGlass-t az Omi mellé, hogy a fotók és a hang ugyanabba a beszélgetésbe kerüljenek.",
+    "pairSecondDevice": "Második eszköz párosítása",
+    "forgetSecondDevice": "Második eszköz elfelejtése",
+    "secondDevice": "Második eszköz"
 }

@@ -4018,5 +4018,9 @@
     "deviceNameCannotBeEmpty": "设备名称不能为空",
     "deviceNameInvalidCharacters": "名称包含不支持的字符",
     "deviceNameTooLong": "名称过长（最多 {maxBytes} 个字符；表情符号和汉字按多个字符计算）",
-    "deviceRenamed": "设备已重命名为 {name}"
+    "deviceRenamed": "设备已重命名为 {name}",
+    "pairSecondDeviceDescription": "将 OmiGlass 与你的 Omi 一起连接，让照片和音频进入同一段对话。",
+    "pairSecondDevice": "配对第二台设备",
+    "forgetSecondDevice": "忘记第二台设备",
+    "secondDevice": "第二台设备"
 }

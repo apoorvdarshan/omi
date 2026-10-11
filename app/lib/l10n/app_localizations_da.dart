@@ -13046,4 +13046,17 @@ class AppLocalizationsDa extends AppLocalizations {
   String deviceRenamed(String name) {
     return 'Enheden er omdøbt til $name';
   }
+
+  @override
+  String get pairSecondDevice => 'Par en anden enhed';
+
+  @override
+  String get secondDevice => 'Anden enhed';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Forbind OmiGlass sammen med din Omi, så billeder og lyd ender i samme samtale.';
+
+  @override
+  String get forgetSecondDevice => 'Glem anden enhed';
 }

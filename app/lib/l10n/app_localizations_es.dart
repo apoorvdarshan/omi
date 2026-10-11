@@ -13100,4 +13100,17 @@ class AppLocalizationsEs extends AppLocalizations {
   String deviceRenamed(String name) {
     return 'Dispositivo renombrado a $name';
   }
+
+  @override
+  String get pairSecondDevice => 'Emparejar un segundo dispositivo';
+
+  @override
+  String get secondDevice => 'Segundo dispositivo';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Conecta OmiGlass junto a tu Omi para que las fotos y el audio vayan a la misma conversación.';
+
+  @override
+  String get forgetSecondDevice => 'Olvidar segundo dispositivo';
 }

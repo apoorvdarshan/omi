@@ -4018,5 +4018,9 @@
     "deviceNameCannotBeEmpty": "Ім'я пристрою не може бути порожнім",
     "deviceNameInvalidCharacters": "Ім'я містить непідтримувані символи",
     "deviceNameTooLong": "Ім'я надто довге (до {maxBytes} символів; емодзі та кирилиця займають більше)",
-    "deviceRenamed": "Пристрій перейменовано на {name}"
+    "deviceRenamed": "Пристрій перейменовано на {name}",
+    "pairSecondDeviceDescription": "Підключіть OmiGlass разом з Omi, щоб фото та звук потрапляли в одну розмову.",
+    "pairSecondDevice": "Підключити другий пристрій",
+    "forgetSecondDevice": "Забути другий пристрій",
+    "secondDevice": "Другий пристрій"
 }

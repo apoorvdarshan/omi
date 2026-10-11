@@ -13090,4 +13090,17 @@ class AppLocalizationsSl extends AppLocalizations {
   String deviceRenamed(String name) {
     return 'Naprava je preimenovana v $name';
   }
+
+  @override
+  String get pairSecondDevice => 'Seznani drugo napravo';
+
+  @override
+  String get secondDevice => 'Druga naprava';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Povežite OmiGlass ob svojem Omi, da gredo fotografije in zvok v isti pogovor.';
+
+  @override
+  String get forgetSecondDevice => 'Pozabi drugo napravo';
 }

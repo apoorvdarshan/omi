@@ -13066,4 +13066,17 @@ class AppLocalizationsSv extends AppLocalizations {
   String deviceRenamed(String name) {
     return 'Enheten har fått namnet $name';
   }
+
+  @override
+  String get pairSecondDevice => 'Para ihop en andra enhet';
+
+  @override
+  String get secondDevice => 'Andra enhet';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Anslut OmiGlass tillsammans med din Omi så att bilder och ljud hamnar i samma konversation.';
+
+  @override
+  String get forgetSecondDevice => 'Glöm andra enhet';
 }

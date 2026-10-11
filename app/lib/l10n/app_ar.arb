@@ -4018,5 +4018,9 @@
     "deviceNameCannotBeEmpty": "لا يمكن أن يكون اسم الجهاز فارغًا",
     "deviceNameInvalidCharacters": "يحتوي الاسم على أحرف غير مدعومة",
     "deviceNameTooLong": "الاسم طويل جدًا (حتى {maxBytes} حرفًا؛ الرموز التعبيرية وعلامات التشكيل تُحسب أكثر)",
-    "deviceRenamed": "تمت إعادة تسمية الجهاز إلى {name}"
+    "deviceRenamed": "تمت إعادة تسمية الجهاز إلى {name}",
+    "pairSecondDeviceDescription": "اربط OmiGlass بجانب جهاز Omi حتى تذهب الصور والصوت إلى المحادثة نفسها.",
+    "pairSecondDevice": "إقران جهاز ثانٍ",
+    "forgetSecondDevice": "نسيان الجهاز الثاني",
+    "secondDevice": "الجهاز الثاني"
 }

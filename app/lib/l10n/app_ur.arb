@@ -11455,5 +11455,9 @@
     "deviceNameCannotBeEmpty": "ڈیوائس کا نام خالی نہیں ہو سکتا",
     "deviceNameInvalidCharacters": "نام میں غیر معاون حروف شامل ہیں",
     "deviceNameTooLong": "نام بہت لمبا ہے (زیادہ سے زیادہ {maxBytes} حروف؛ ایموجی اور اعراب زیادہ شمار ہوتے ہیں)",
-    "deviceRenamed": "ڈیوائس کا نام بدل کر {name} کر دیا گیا"
+    "deviceRenamed": "ڈیوائس کا نام بدل کر {name} کر دیا گیا",
+    "pairSecondDevice": "دوسرا ڈیوائس جوڑیں",
+    "forgetSecondDevice": "دوسرا ڈیوائس بھول جائیں",
+    "pairSecondDeviceDescription": "اپنے Omi کے ساتھ OmiGlass کو کنیکٹ کریں تاکہ تصاویر اور آڈیو ایک ہی گفتگو میں جائیں۔",
+    "secondDevice": "دوسرا ڈیوائس"
 }

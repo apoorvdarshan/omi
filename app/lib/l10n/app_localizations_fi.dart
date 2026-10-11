@@ -13066,4 +13066,17 @@ class AppLocalizationsFi extends AppLocalizations {
   String deviceRenamed(String name) {
     return 'Laite nimettiin uudelleen: $name';
   }
+
+  @override
+  String get pairSecondDevice => 'Yhdistä toinen laite';
+
+  @override
+  String get secondDevice => 'Toinen laite';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Yhdistä OmiGlass Omi-laitteesi rinnalle, jotta kuvat ja ääni päätyvät samaan keskusteluun.';
+
+  @override
+  String get forgetSecondDevice => 'Unohda toinen laite';
 }

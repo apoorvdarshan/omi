@@ -4018,5 +4018,9 @@
     "deviceNameCannotBeEmpty": "Tên thiết bị không được để trống",
     "deviceNameInvalidCharacters": "Tên chứa ký tự không được hỗ trợ",
     "deviceNameTooLong": "Tên quá dài (tối đa {maxBytes} ký tự; emoji và chữ có dấu được tính nhiều hơn)",
-    "deviceRenamed": "Đã đổi tên thiết bị thành {name}"
+    "deviceRenamed": "Đã đổi tên thiết bị thành {name}",
+    "pairSecondDeviceDescription": "Kết nối OmiGlass cùng với Omi để ảnh và âm thanh đi vào cùng một cuộc trò chuyện.",
+    "pairSecondDevice": "Ghép nối thiết bị thứ hai",
+    "forgetSecondDevice": "Quên thiết bị thứ hai",
+    "secondDevice": "Thiết bị thứ hai"
 }

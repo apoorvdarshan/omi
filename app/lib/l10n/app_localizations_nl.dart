@@ -13097,4 +13097,17 @@ class AppLocalizationsNl extends AppLocalizations {
   String deviceRenamed(String name) {
     return 'Apparaat hernoemd naar $name';
   }
+
+  @override
+  String get pairSecondDevice => 'Tweede apparaat koppelen';
+
+  @override
+  String get secondDevice => 'Tweede apparaat';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Verbind OmiGlass naast je Omi zodat foto\'s en audio in hetzelfde gesprek terechtkomen.';
+
+  @override
+  String get forgetSecondDevice => 'Tweede apparaat vergeten';
 }

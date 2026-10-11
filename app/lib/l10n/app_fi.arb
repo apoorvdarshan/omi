@@ -4018,5 +4018,9 @@
     "deviceNameCannotBeEmpty": "Laitteen nimi ei voi olla tyhjä",
     "deviceNameInvalidCharacters": "Nimi sisältää merkkejä, joita ei tueta",
     "deviceNameTooLong": "Nimi on liian pitkä (enintään {maxBytes} merkkiä; emojit ja ääkköset vievät enemmän)",
-    "deviceRenamed": "Laite nimettiin uudelleen: {name}"
+    "deviceRenamed": "Laite nimettiin uudelleen: {name}",
+    "pairSecondDeviceDescription": "Yhdistä OmiGlass Omi-laitteesi rinnalle, jotta kuvat ja ääni päätyvät samaan keskusteluun.",
+    "pairSecondDevice": "Yhdistä toinen laite",
+    "forgetSecondDevice": "Unohda toinen laite",
+    "secondDevice": "Toinen laite"
 }

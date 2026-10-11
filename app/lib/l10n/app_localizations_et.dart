@@ -13054,4 +13054,17 @@ class AppLocalizationsEt extends AppLocalizations {
   String deviceRenamed(String name) {
     return 'Seade nimetati ümber: $name';
   }
+
+  @override
+  String get pairSecondDevice => 'Seo teine seade';
+
+  @override
+  String get secondDevice => 'Teine seade';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Ühenda OmiGlass oma Omi kõrvale, et fotod ja heli jõuaksid samasse vestlusse.';
+
+  @override
+  String get forgetSecondDevice => 'Unusta teine seade';
 }

@@ -11455,5 +11455,9 @@
     "deviceNameCannotBeEmpty": "डिव्हाइसचे नाव रिकामे असू शकत नाही",
     "deviceNameInvalidCharacters": "नावात असमर्थित अक्षरे आहेत",
     "deviceNameTooLong": "नाव खूप लांब आहे (कमाल {maxBytes} अक्षरे; इमोजी आणि मात्रा जास्त मोजल्या जातात)",
-    "deviceRenamed": "डिव्हाइसचे नाव बदलून {name} केले"
+    "deviceRenamed": "डिव्हाइसचे नाव बदलून {name} केले",
+    "pairSecondDevice": "दुसरे डिव्हाइस जोडा",
+    "forgetSecondDevice": "दुसरे डिव्हाइस विसरा",
+    "pairSecondDeviceDescription": "फोटो आणि ऑडिओ एकाच संभाषणात जाण्यासाठी तुमच्या Omi सोबत OmiGlass कनेक्ट करा.",
+    "secondDevice": "दुसरे डिव्हाइस"
 }

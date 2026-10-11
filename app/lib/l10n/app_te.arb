@@ -11455,5 +11455,9 @@
     "deviceNameCannotBeEmpty": "పరికరం పేరు ఖాళీగా ఉండకూడదు",
     "deviceNameInvalidCharacters": "పేరులో మద్దతు లేని అక్షరాలు ఉన్నాయి",
     "deviceNameTooLong": "పేరు చాలా పొడవుగా ఉంది (గరిష్ఠంగా {maxBytes} అక్షరాలు; ఎమోజీలు మరియు గుణింతాలు ఎక్కువగా లెక్కించబడతాయి)",
-    "deviceRenamed": "పరికరం పేరు {name} గా మార్చబడింది"
+    "deviceRenamed": "పరికరం పేరు {name} గా మార్చబడింది",
+    "pairSecondDevice": "రెండవ పరికరాన్ని జోడించండి",
+    "forgetSecondDevice": "రెండవ పరికరాన్ని మర్చిపోండి",
+    "pairSecondDeviceDescription": "ఫోటోలు మరియు ఆడియో ఒకే సంభాషణలోకి వెళ్లేలా మీ Omi తో పాటు OmiGlass ను కనెక్ట్ చేయండి.",
+    "secondDevice": "రెండవ పరికరం"
 }

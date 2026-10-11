@@ -13085,4 +13085,17 @@ class AppLocalizationsLt extends AppLocalizations {
   String deviceRenamed(String name) {
     return 'Įrenginys pervadintas į $name';
   }
+
+  @override
+  String get pairSecondDevice => 'Susieti antrą įrenginį';
+
+  @override
+  String get secondDevice => 'Antras įrenginys';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Prijunkite OmiGlass kartu su savo Omi, kad nuotraukos ir garsas patektų į tą patį pokalbį.';
+
+  @override
+  String get forgetSecondDevice => 'Pamiršti antrą įrenginį';
 }

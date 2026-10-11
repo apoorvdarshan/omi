@@ -4018,5 +4018,9 @@
     "deviceNameCannotBeEmpty": "Název zařízení nemůže být prázdný",
     "deviceNameInvalidCharacters": "Název obsahuje nepodporované znaky",
     "deviceNameTooLong": "Název je příliš dlouhý (max. {maxBytes} znaků; emoji a diakritika se počítají víc)",
-    "deviceRenamed": "Zařízení přejmenováno na {name}"
+    "deviceRenamed": "Zařízení přejmenováno na {name}",
+    "pairSecondDeviceDescription": "Připojte OmiGlass k vašemu Omi, aby fotky a zvuk šly do stejné konverzace.",
+    "pairSecondDevice": "Spárovat druhé zařízení",
+    "forgetSecondDevice": "Zapomenout druhé zařízení",
+    "secondDevice": "Druhé zařízení"
 }

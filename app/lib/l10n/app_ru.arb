@@ -4053,5 +4053,9 @@
     "deviceNameCannotBeEmpty": "Имя устройства не может быть пустым",
     "deviceNameInvalidCharacters": "Имя содержит неподдерживаемые символы",
     "deviceNameTooLong": "Имя слишком длинное (до {maxBytes} символов; эмодзи и кириллица занимают больше)",
-    "deviceRenamed": "Устройство переименовано в {name}"
+    "deviceRenamed": "Устройство переименовано в {name}",
+    "pairSecondDeviceDescription": "Подключите OmiGlass вместе с Omi, чтобы фото и звук попадали в один разговор.",
+    "pairSecondDevice": "Подключить второе устройство",
+    "forgetSecondDevice": "Забыть второе устройство",
+    "secondDevice": "Второе устройство"
 }

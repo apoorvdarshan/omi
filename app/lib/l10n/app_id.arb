@@ -4053,5 +4053,9 @@
     "deviceNameCannotBeEmpty": "Nama perangkat tidak boleh kosong",
     "deviceNameInvalidCharacters": "Nama mengandung karakter yang tidak didukung",
     "deviceNameTooLong": "Nama terlalu panjang (maksimal {maxBytes} karakter; emoji dan aksen dihitung lebih)",
-    "deviceRenamed": "Nama perangkat diubah menjadi {name}"
+    "deviceRenamed": "Nama perangkat diubah menjadi {name}",
+    "pairSecondDeviceDescription": "Sambungkan OmiGlass bersama Omi Anda agar foto dan audio masuk ke percakapan yang sama.",
+    "pairSecondDevice": "Pasangkan perangkat kedua",
+    "forgetSecondDevice": "Lupakan perangkat kedua",
+    "secondDevice": "Perangkat kedua"
 }

@@ -13115,4 +13115,17 @@ class AppLocalizationsRo extends AppLocalizations {
   String deviceRenamed(String name) {
     return 'Dispozitivul a fost redenumit în $name';
   }
+
+  @override
+  String get pairSecondDevice => 'Asociază un al doilea dispozitiv';
+
+  @override
+  String get secondDevice => 'Al doilea dispozitiv';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Conectează OmiGlass alături de Omi, astfel încât fotografiile și sunetul să ajungă în aceeași conversație.';
+
+  @override
+  String get forgetSecondDevice => 'Uită al doilea dispozitiv';
 }

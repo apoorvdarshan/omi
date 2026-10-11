@@ -4018,5 +4018,9 @@
     "deviceNameCannotBeEmpty": "デバイス名を空にすることはできません",
     "deviceNameInvalidCharacters": "名前にサポートされていない文字が含まれています",
     "deviceNameTooLong": "名前が長すぎます（最大{maxBytes}文字。絵文字や日本語などは複数文字分としてカウントされます）",
-    "deviceRenamed": "デバイス名を{name}に変更しました"
+    "deviceRenamed": "デバイス名を{name}に変更しました",
+    "pairSecondDeviceDescription": "Omi と一緒に OmiGlass を接続すると、写真と音声が同じ会話にまとまります。",
+    "pairSecondDevice": "2台目のデバイスをペアリング",
+    "forgetSecondDevice": "2台目のデバイスを忘れる",
+    "secondDevice": "2台目のデバイス"
 }

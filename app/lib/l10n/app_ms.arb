@@ -4018,5 +4018,9 @@
     "deviceNameCannotBeEmpty": "Nama peranti tidak boleh kosong",
     "deviceNameInvalidCharacters": "Nama mengandungi aksara yang tidak disokong",
     "deviceNameTooLong": "Nama terlalu panjang (maksimum {maxBytes} aksara; emoji dan aksen dikira lebih)",
-    "deviceRenamed": "Peranti dinamakan semula kepada {name}"
+    "deviceRenamed": "Peranti dinamakan semula kepada {name}",
+    "pairSecondDeviceDescription": "Sambungkan OmiGlass bersama Omi anda supaya foto dan audio masuk ke perbualan yang sama.",
+    "pairSecondDevice": "Pasangkan peranti kedua",
+    "forgetSecondDevice": "Lupakan peranti kedua",
+    "secondDevice": "Peranti kedua"
 }

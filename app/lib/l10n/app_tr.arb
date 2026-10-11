@@ -4053,5 +4053,9 @@
     "deviceNameCannotBeEmpty": "Cihaz adı boş olamaz",
     "deviceNameInvalidCharacters": "Ad desteklenmeyen karakterler içeriyor",
     "deviceNameTooLong": "Ad çok uzun (en fazla {maxBytes} karakter; emoji ve aksanlı harfler daha fazla sayılır)",
-    "deviceRenamed": "Cihaz adı {name} olarak değiştirildi"
+    "deviceRenamed": "Cihaz adı {name} olarak değiştirildi",
+    "pairSecondDeviceDescription": "Fotoğraflar ve ses aynı sohbete gitsin diye OmiGlass'ı Omi'nizin yanına bağlayın.",
+    "pairSecondDevice": "İkinci cihazı eşleştir",
+    "forgetSecondDevice": "İkinci cihazı unut",
+    "secondDevice": "İkinci cihaz"
 }

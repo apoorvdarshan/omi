@@ -4053,5 +4053,9 @@
     "deviceNameCannotBeEmpty": "Nazwa urządzenia nie może być pusta",
     "deviceNameInvalidCharacters": "Nazwa zawiera nieobsługiwane znaki",
     "deviceNameTooLong": "Nazwa jest za długa (maks. {maxBytes} znaków; emoji i znaki diakrytyczne liczą się więcej)",
-    "deviceRenamed": "Zmieniono nazwę urządzenia na {name}"
+    "deviceRenamed": "Zmieniono nazwę urządzenia na {name}",
+    "pairSecondDeviceDescription": "Podłącz OmiGlass obok swojego Omi, aby zdjęcia i dźwięk trafiały do tej samej rozmowy.",
+    "pairSecondDevice": "Sparuj drugie urządzenie",
+    "forgetSecondDevice": "Zapomnij drugie urządzenie",
+    "secondDevice": "Drugie urządzenie"
 }

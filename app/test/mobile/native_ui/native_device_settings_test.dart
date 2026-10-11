@@ -38,11 +38,13 @@ import 'native_test_host.dart';
 // Device Settings.
 
 class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
-  _StubDeviceProvider({required this.device, this.connected = true});
+  _StubDeviceProvider({required this.device, this.connected = true, this.companion});
 
   final BtDevice device;
   bool connected;
   bool paired = true;
+  BtDevice? companion;
+  int forgetCompanionRequests = 0;
   final renameRequests = <String>[];
 
   void disconnect() {
@@ -56,6 +58,19 @@ class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
   BtDevice? get connectedDevice => connected ? device : null;
   @override
   BtDevice? get pairedDevice => paired ? device : null;
+  @override
+  BtDevice? get pairedCompanionDevice => companion;
+  @override
+  BtDevice? get companionDevice => companion;
+  @override
+  int get companionBatteryLevel => 55;
+  @override
+  Future<void> forgetCompanionDevice() async {
+    forgetCompanionRequests++;
+    companion = null;
+    notifyListeners();
+  }
+
   @override
   int get batteryLevel => 0;
   @override
@@ -423,6 +438,23 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       await tester.pump(const Duration(seconds: 1));
       expect(connection.dimWrites, [64]);
+    });
+
+    testWidgets('native companion status and forget reach the existing device owner', (tester) async {
+      final host = NativeTestHost.install();
+      final provider = _StubDeviceProvider(
+        device: _omi,
+        companion: BtDevice(id: 'glass-companion', name: 'OmiGlass', type: DeviceType.openglass, rssi: -40),
+      );
+      addTearDown(provider.dispose);
+      await _pumpSettings(tester, provider, _FakeOmiConnection());
+      final companion = _rows(tester).values.singleWhere((row) => row.title == 'OmiGlass');
+      expect(companion.subtitle, contains('55%'));
+      _send(host, 'forget_second_device_button', null);
+      await NativeTestHost.settle(tester);
+      expect(provider.forgetCompanionRequests, 1);
+      expect(_rows(tester).containsKey('forget_second_device_button'), isFalse);
+      expect(_rows(tester).containsKey('pair_second_device_button'), isTrue);
     });
 
     testWidgets('leaving the page writes a pending level at once', (tester) async {

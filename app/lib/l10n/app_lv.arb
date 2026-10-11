@@ -4018,5 +4018,9 @@
     "deviceNameCannotBeEmpty": "Ierīces nosaukums nevar būt tukšs",
     "deviceNameInvalidCharacters": "Nosaukumā ir neatbalstītas rakstzīmes",
     "deviceNameTooLong": "Nosaukums ir pārāk garš (līdz {maxBytes} rakstzīmēm; emocijzīmes un diakritiskās zīmes aizņem vairāk)",
-    "deviceRenamed": "Ierīce pārdēvēta par {name}"
+    "deviceRenamed": "Ierīce pārdēvēta par {name}",
+    "pairSecondDeviceDescription": "Pievienojiet OmiGlass līdzās savam Omi, lai fotoattēli un audio nonāktu vienā sarunā.",
+    "pairSecondDevice": "Savienot pārī otro ierīci",
+    "forgetSecondDevice": "Aizmirst otro ierīci",
+    "secondDevice": "Otrā ierīce"
 }

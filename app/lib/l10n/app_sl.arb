@@ -11455,5 +11455,9 @@
     "deviceNameCannotBeEmpty": "Ime naprave ne sme biti prazno",
     "deviceNameInvalidCharacters": "Ime vsebuje nepodprte znake",
     "deviceNameTooLong": "Ime je predolgo (do {maxBytes} znakov; emojiji in šumniki štejejo več)",
-    "deviceRenamed": "Naprava je preimenovana v {name}"
+    "deviceRenamed": "Naprava je preimenovana v {name}",
+    "pairSecondDevice": "Seznani drugo napravo",
+    "forgetSecondDevice": "Pozabi drugo napravo",
+    "pairSecondDeviceDescription": "Povežite OmiGlass ob svojem Omi, da gredo fotografije in zvok v isti pogovor.",
+    "secondDevice": "Druga naprava"
 }

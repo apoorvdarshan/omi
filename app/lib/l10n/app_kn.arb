@@ -11455,5 +11455,9 @@
     "deviceNameCannotBeEmpty": "ಸಾಧನದ ಹೆಸರು ಖಾಲಿಯಾಗಿರಲು ಸಾಧ್ಯವಿಲ್ಲ",
     "deviceNameInvalidCharacters": "ಹೆಸರಿನಲ್ಲಿ ಬೆಂಬಲವಿಲ್ಲದ ಅಕ್ಷರಗಳಿವೆ",
     "deviceNameTooLong": "ಹೆಸರು ತುಂಬಾ ಉದ್ದವಾಗಿದೆ (ಗರಿಷ್ಠ {maxBytes} ಅಕ್ಷರಗಳು; ಎಮೋಜಿ ಮತ್ತು ಒತ್ತಕ್ಷರಗಳು ಹೆಚ್ಚು ಎಣಿಸಲ್ಪಡುತ್ತವೆ)",
-    "deviceRenamed": "ಸಾಧನದ ಹೆಸರನ್ನು {name} ಎಂದು ಬದಲಿಸಲಾಗಿದೆ"
+    "deviceRenamed": "ಸಾಧನದ ಹೆಸರನ್ನು {name} ಎಂದು ಬದಲಿಸಲಾಗಿದೆ",
+    "pairSecondDevice": "ಎರಡನೇ ಸಾಧನವನ್ನು ಜೋಡಿಸಿ",
+    "forgetSecondDevice": "ಎರಡನೇ ಸಾಧನವನ್ನು ಮರೆತುಬಿಡಿ",
+    "pairSecondDeviceDescription": "ಫೋಟೋಗಳು ಮತ್ತು ಆಡಿಯೊ ಒಂದೇ ಸಂವಾದಕ್ಕೆ ಹೋಗಲು ನಿಮ್ಮ Omi ಜೊತೆಗೆ OmiGlass ಅನ್ನು ಸಂಪರ್ಕಿಸಿ.",
+    "secondDevice": "ಎರಡನೇ ಸಾಧನ"
 }

@@ -11455,5 +11455,9 @@
     "deviceNameCannotBeEmpty": "Hindi maaaring blangko ang pangalan ng device",
     "deviceNameInvalidCharacters": "May hindi sinusuportahang character ang pangalan",
     "deviceNameTooLong": "Masyadong mahaba ang pangalan (hanggang {maxBytes} character; mas malaki ang bilang ng emoji at accent)",
-    "deviceRenamed": "Pinalitan ang pangalan ng device sa {name}"
+    "deviceRenamed": "Pinalitan ang pangalan ng device sa {name}",
+    "pairSecondDevice": "Ipares ang ikalawang device",
+    "forgetSecondDevice": "Kalimutan ang ikalawang device",
+    "pairSecondDeviceDescription": "Ikonekta ang OmiGlass kasama ng iyong Omi para mapunta sa iisang usapan ang mga larawan at audio.",
+    "secondDevice": "Ikalawang device"
 }

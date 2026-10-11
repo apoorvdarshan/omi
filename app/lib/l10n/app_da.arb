@@ -4060,5 +4060,9 @@
     "deviceNameCannotBeEmpty": "Enhedsnavnet må ikke være tomt",
     "deviceNameInvalidCharacters": "Navnet indeholder tegn, der ikke understøttes",
     "deviceNameTooLong": "Navnet er for langt (op til {maxBytes} tegn; emoji og accenter tæller ekstra)",
-    "deviceRenamed": "Enheden er omdøbt til {name}"
+    "deviceRenamed": "Enheden er omdøbt til {name}",
+    "pairSecondDeviceDescription": "Forbind OmiGlass sammen med din Omi, så billeder og lyd ender i samme samtale.",
+    "pairSecondDevice": "Par en anden enhed",
+    "forgetSecondDevice": "Glem anden enhed",
+    "secondDevice": "Anden enhed"
 }

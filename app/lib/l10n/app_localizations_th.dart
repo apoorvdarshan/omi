@@ -12992,4 +12992,17 @@ class AppLocalizationsTh extends AppLocalizations {
   String deviceRenamed(String name) {
     return 'เปลี่ยนชื่ออุปกรณ์เป็น $name แล้ว';
   }
+
+  @override
+  String get pairSecondDevice => 'จับคู่อุปกรณ์เครื่องที่สอง';
+
+  @override
+  String get secondDevice => 'อุปกรณ์เครื่องที่สอง';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'เชื่อมต่อ OmiGlass ควบคู่กับ Omi ของคุณ เพื่อให้รูปภาพและเสียงอยู่ในบทสนทนาเดียวกัน';
+
+  @override
+  String get forgetSecondDevice => 'ลืมอุปกรณ์เครื่องที่สอง';
 }

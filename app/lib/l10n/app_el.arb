@@ -4018,5 +4018,9 @@
     "deviceNameCannotBeEmpty": "Το όνομα της συσκευής δεν μπορεί να είναι κενό",
     "deviceNameInvalidCharacters": "Το όνομα περιέχει μη υποστηριζόμενους χαρακτήρες",
     "deviceNameTooLong": "Το όνομα είναι πολύ μεγάλο (έως {maxBytes} χαρακτήρες· τα emoji και οι τόνοι μετρούν περισσότερο)",
-    "deviceRenamed": "Η συσκευή μετονομάστηκε σε {name}"
+    "deviceRenamed": "Η συσκευή μετονομάστηκε σε {name}",
+    "pairSecondDeviceDescription": "Συνδέστε τα OmiGlass μαζί με το Omi σας, ώστε φωτογραφίες και ήχος να πηγαίνουν στην ίδια συζήτηση.",
+    "pairSecondDevice": "Σύζευξη δεύτερης συσκευής",
+    "forgetSecondDevice": "Διαγραφή δεύτερης συσκευής",
+    "secondDevice": "Δεύτερη συσκευή"
 }

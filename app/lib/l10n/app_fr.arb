@@ -4053,5 +4053,9 @@
     "deviceNameCannotBeEmpty": "Le nom de l'appareil ne peut pas être vide",
     "deviceNameInvalidCharacters": "Le nom contient des caractères non pris en charge",
     "deviceNameTooLong": "Le nom est trop long (jusqu'à {maxBytes} caractères ; les emojis et accents comptent davantage)",
-    "deviceRenamed": "Appareil renommé en {name}"
+    "deviceRenamed": "Appareil renommé en {name}",
+    "pairSecondDeviceDescription": "Connectez OmiGlass en plus de votre Omi pour que les photos et l'audio rejoignent la même conversation.",
+    "pairSecondDevice": "Associer un deuxième appareil",
+    "forgetSecondDevice": "Oublier le deuxième appareil",
+    "secondDevice": "Deuxième appareil"
 }

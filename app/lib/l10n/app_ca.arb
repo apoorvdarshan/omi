@@ -4018,5 +4018,9 @@
     "deviceNameCannotBeEmpty": "El nom del dispositiu no pot estar buit",
     "deviceNameInvalidCharacters": "El nom conté caràcters no compatibles",
     "deviceNameTooLong": "El nom és massa llarg (fins a {maxBytes} caràcters; els emojis i els accents compten més)",
-    "deviceRenamed": "Dispositiu reanomenat a {name}"
+    "deviceRenamed": "Dispositiu reanomenat a {name}",
+    "pairSecondDeviceDescription": "Connecta les OmiGlass al costat del teu Omi perquè les fotos i l'àudio vagin a la mateixa conversa.",
+    "pairSecondDevice": "Vincula un segon dispositiu",
+    "forgetSecondDevice": "Oblida el segon dispositiu",
+    "secondDevice": "Segon dispositiu"
 }

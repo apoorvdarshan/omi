@@ -11479,5 +11479,9 @@
     "deviceNameCannotBeEmpty": "نام دستگاه نمی‌تواند خالی باشد",
     "deviceNameInvalidCharacters": "نام شامل نویسه‌های پشتیبانی‌نشده است",
     "deviceNameTooLong": "نام خیلی طولانی است (حداکثر {maxBytes} نویسه؛ ایموجی و اعراب بیشتر حساب می‌شوند)",
-    "deviceRenamed": "نام دستگاه به {name} تغییر یافت"
+    "deviceRenamed": "نام دستگاه به {name} تغییر یافت",
+    "pairSecondDevice": "جفت‌کردن دستگاه دوم",
+    "forgetSecondDevice": "فراموش‌کردن دستگاه دوم",
+    "pairSecondDeviceDescription": "OmiGlass را در کنار Omi خود متصل کنید تا عکس‌ها و صدا در همان گفتگو قرار بگیرند.",
+    "secondDevice": "دستگاه دوم"
 }

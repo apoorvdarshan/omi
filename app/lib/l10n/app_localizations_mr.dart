@@ -13066,4 +13066,17 @@ class AppLocalizationsMr extends AppLocalizations {
   String deviceRenamed(String name) {
     return 'डिव्हाइसचे नाव बदलून $name केले';
   }
+
+  @override
+  String get pairSecondDevice => 'दुसरे डिव्हाइस जोडा';
+
+  @override
+  String get secondDevice => 'दुसरे डिव्हाइस';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'फोटो आणि ऑडिओ एकाच संभाषणात जाण्यासाठी तुमच्या Omi सोबत OmiGlass कनेक्ट करा.';
+
+  @override
+  String get forgetSecondDevice => 'दुसरे डिव्हाइस विसरा';
 }

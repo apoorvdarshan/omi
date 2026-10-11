@@ -12985,4 +12985,16 @@ class AppLocalizationsAr extends AppLocalizations {
   String deviceRenamed(String name) {
     return 'تمت إعادة تسمية الجهاز إلى $name';
   }
+
+  @override
+  String get pairSecondDevice => 'إقران جهاز ثانٍ';
+
+  @override
+  String get secondDevice => 'الجهاز الثاني';
+
+  @override
+  String get pairSecondDeviceDescription => 'اربط OmiGlass بجانب جهاز Omi حتى تذهب الصور والصوت إلى المحادثة نفسها.';
+
+  @override
+  String get forgetSecondDevice => 'نسيان الجهاز الثاني';
 }

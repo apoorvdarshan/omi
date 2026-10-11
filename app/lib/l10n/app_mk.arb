@@ -11455,5 +11455,9 @@
     "deviceNameCannotBeEmpty": "Името на уредот не може да биде празно",
     "deviceNameInvalidCharacters": "Името содржи неподдржани знаци",
     "deviceNameTooLong": "Името е предолго (до {maxBytes} знаци; емоџи и акценти се бројат повеќе)",
-    "deviceRenamed": "Уредот е преименуван во {name}"
+    "deviceRenamed": "Уредот е преименуван во {name}",
+    "pairSecondDevice": "Спари втор уред",
+    "forgetSecondDevice": "Заборави го вториот уред",
+    "pairSecondDeviceDescription": "Поврзете OmiGlass заедно со вашиот Omi за фотографиите и звукот да одат во истиот разговор.",
+    "secondDevice": "Втор уред"
 }
