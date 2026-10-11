@@ -17,6 +17,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
+import 'package:omi/models/omi_button_action.dart';
 import 'package:omi/pages/settings/device_diagnostics.dart';
 import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/pages/settings/rename_device_widget.dart';
@@ -454,27 +455,34 @@ void main() {
       expect(connection.dimWrites, isEmpty);
     });
 
-    testWidgets('the double-tap choice persists options and rejects anything else', (tester) async {
-      final host = NativeTestHost.install();
-      final provider = _StubDeviceProvider(device: _omi);
-      addTearDown(provider.dispose);
-      await _pumpSettings(tester, provider, _FakeOmiConnection());
+    for (final gesture in OmiButtonGesture.values) {
+      testWidgets('the native ${gesture.name} choice persists every supported action and rejects others',
+          (tester) async {
+        final host = NativeTestHost.install();
+        final provider = _StubDeviceProvider(device: _omi);
+        addTearDown(provider.dispose);
+        await _pumpSettings(tester, provider, _FakeOmiConnection());
 
-      final choice = _rows(tester)['device_double_tap']!;
-      expect((choice.kind, choice.value), ('choice', '1'));
-      expect(choice.options.keys, ['0', '1', '2']);
-      expect(choice.accepts('3'), isFalse);
-      expect(choice.accepts(2), isFalse);
+        final id = 'button_gesture_${gesture.name}';
+        final choice = _rows(tester)[id]!;
+        expect((choice.kind, choice.value), ('choice', '${gesture.defaultAction.storedValue}'));
+        expect(choice.options.keys, ['0', '1', '2', '3', '4']);
+        expect(choice.accepts('9'), isFalse);
+        expect(choice.accepts(2), isFalse);
 
-      _send(host, 'device_double_tap', '3');
-      await tester.pump();
-      expect(SharedPreferencesUtil().doubleTapAction, 1);
+        _send(host, id, '9');
+        await tester.pump();
+        expect(SharedPreferencesUtil().buttonActionFor(gesture), gesture.defaultAction);
 
-      _send(host, 'device_double_tap', '2');
-      await tester.pump();
-      expect(SharedPreferencesUtil().doubleTapAction, 2);
-      expect(_rows(tester)['device_double_tap']!.value, '2');
-    });
+        for (final action in OmiButtonAction.values) {
+          _send(host, id, '${action.storedValue}');
+          await tester.pump();
+          expect(SharedPreferencesUtil().buttonActionFor(gesture), action);
+          expect(_rows(tester)[id]!.value, '${action.storedValue}');
+        }
+        expect(_rows(tester)['button_gesture_longPress']!.kind, 'label');
+      });
+    }
 
     testWidgets('mic gain presets write Quiet 2, Normal 4 and High 6', (tester) async {
       final host = NativeTestHost.install();

@@ -12,6 +12,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/models/omi_button_action.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
@@ -311,21 +312,57 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     );
   }
 
-  String _doubleTapActionLabel(int action) {
-    switch (action) {
-      case 1:
-        return context.l10n.deviceOnboardingMuteUnmute;
-      case 2:
-        return context.l10n.starConversation;
-      default:
-        return context.l10n.endConversation;
-    }
+  String _gestureTitle(OmiButtonGesture gesture) {
+    return switch (gesture) {
+      OmiButtonGesture.singleTap => context.l10n.singleTap,
+      OmiButtonGesture.doubleTap => context.l10n.doubleTap,
+      OmiButtonGesture.tripleTap => context.l10n.tripleTap,
+    };
   }
 
-  Future<void> _pickDoubleTapAction() async {
-    final action = await showDoubleTapActionSheet(context, current: SharedPreferencesUtil().doubleTapAction);
+  String _buttonActionLabel(OmiButtonAction action) {
+    return switch (action) {
+      OmiButtonAction.endConversation => context.l10n.endConversation,
+      OmiButtonAction.muteUnmute => context.l10n.deviceOnboardingMuteUnmute,
+      OmiButtonAction.starConversation => context.l10n.starConversation,
+      OmiButtonAction.askQuestion => context.l10n.deviceOnboardingAskQuestionTitle,
+      OmiButtonAction.none => context.l10n.doNothing,
+    };
+  }
+
+  Future<void> _pickButtonAction(OmiButtonGesture gesture) async {
+    final action = await showButtonActionSheet(
+      context,
+      gesture: gesture,
+      current: SharedPreferencesUtil().buttonActionFor(gesture),
+    );
     if (action == null || !mounted) return;
-    setState(() => SharedPreferencesUtil().doubleTapAction = action);
+    // Persist first: setButtonActionFor returns a Future, which setState must not see.
+    await SharedPreferencesUtil().setButtonActionFor(gesture, action);
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  List<Widget> _remappableButtonGestureRows() {
+    return [
+      for (final gesture in OmiButtonGesture.values)
+        OmiSettingsRow(
+          key: Key('button_gesture_${gesture.name}'),
+          leading: const FaIcon(FontAwesomeIcons.handPointer),
+          title: _gestureTitle(gesture),
+          value: _buttonActionLabel(SharedPreferencesUtil().buttonActionFor(gesture)),
+          onTap: () => _pickButtonAction(gesture),
+          showChevron: true,
+        ),
+      OmiSettingsRow(
+        key: const Key('button_gesture_longPress'),
+        leading: const FaIcon(FontAwesomeIcons.powerOff),
+        title: context.l10n.longPress,
+        subtitle: context.l10n.longPressFixedSubtitle,
+        value: context.l10n.powerOnOff,
+        showChevron: false,
+      ),
+    ];
   }
 
   Future<void> _findDevice(DeviceProvider provider) async {
@@ -530,14 +567,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     final l10n = context.l10n;
     final isOmi = device?.type == DeviceType.omi;
     final supportsFind = isOmi && !FirmwareUpdateBuildPolicy.current.isOpenGlassDevice(device);
-    final doubleTapRow = OmiSettingsRow(
-      key: const ValueKey('device_double_tap'),
-      leading: const FaIcon(FontAwesomeIcons.handPointer),
-      title: l10n.doubleTap,
-      value: _doubleTapActionLabel(SharedPreferencesUtil().doubleTapAction),
-      onTap: _pickDoubleTapAction,
-      showChevron: true,
-    );
     return OmiSettingsGroup(
       header: l10n.customizationSection,
       children: [
@@ -566,10 +595,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               }
             },
           ),
-          // Double tap is only configurable while Omi button actions are enabled.
-          if (_omiButtonActionsEnabled) doubleTapRow,
+          if (_omiButtonActionsEnabled) ..._remappableButtonGestureRows(),
         ] else
-          doubleTapRow,
+          ..._remappableButtonGestureRows(),
         if (_isDimRatioLoaded && _hasDimmingFeature == true)
           OmiSettingsRow(
             key: const ValueKey('device_led'),
@@ -703,26 +731,31 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     );
   }
 
-  /// Replaces the projected double-tap, LED and mic-gain rows with native controls. Values are
+  /// Replaces the projected gesture, LED and mic-gain rows with native controls. Values are
   /// clamped to their ranges, so a device reporting an out-of-range level never invalidates the page.
   List<NativeSection> _nativeDeviceControls(List<NativeSection> sections) {
     final l10n = context.l10n;
     Iterable<NativeRow> control(NativeRow row) sync* {
       switch (row.id) {
-        case 'device_double_tap':
-          final current = SharedPreferencesUtil().doubleTapAction;
+        case 'button_gesture_singleTap':
+        case 'button_gesture_doubleTap':
+        case 'button_gesture_tripleTap':
+          final gesture = OmiButtonGesture.values.singleWhere((gesture) => row.id == 'button_gesture_${gesture.name}');
+          final current = SharedPreferencesUtil().buttonActionFor(gesture);
           yield NativeRow(row.id, row.title,
               kind: 'choice',
               symbol: row.symbol,
-              // An unknown stored action reads as the default, as the classic row's label does.
-              value: '${current >= 0 && current <= 2 ? current : 0}',
+              value: '${current.storedValue}',
               options: {
                 '0': l10n.endAndProcess,
                 '1': l10n.deviceOnboardingMuteUnmute,
                 '2': l10n.starOngoing,
-              }, action: (value) {
-            final action = int.parse(value! as String);
-            if (mounted) setState(() => SharedPreferencesUtil().doubleTapAction = action);
+                '3': l10n.deviceOnboardingAskQuestionTitle,
+                '4': l10n.doNothing,
+              }, action: (value) async {
+            final action = OmiButtonAction.fromStoredValue(int.parse(value! as String))!;
+            await SharedPreferencesUtil().setButtonActionFor(gesture, action);
+            if (mounted) setState(() {});
           });
         case 'device_led':
           final ratio = _dimRatio.round().clamp(0, 100);
