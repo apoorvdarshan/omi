@@ -13035,4 +13035,34 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get openInMaps => 'Atvērt Kartēs';
+
+  @override
+  String get renameDevice => 'Pārdēvēt ierīci';
+
+  @override
+  String get deviceRenameFailed =>
+      'Nosaukumu neizdevās saglabāt Omi ierīcē. Pārbaudiet, vai tā ir pievienota, un mēģiniet vēlreiz.';
+
+  @override
+  String get renameDeviceDescription =>
+      'Nosaukums tiek saglabāts pašā Omi, tāpēc tas parādās jebkurā tālrunī, ar kuru to savienosiet pārī.';
+
+  @override
+  String get tapToRename => 'Pieskarieties, lai pārdēvētu';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Ierīces nosaukums nevar būt tukšs';
+
+  @override
+  String get deviceNameInvalidCharacters => 'Nosaukumā ir neatbalstītas rakstzīmes';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Nosaukums ir pārāk garš (līdz $maxBytes rakstzīmēm; emocijzīmes un diakritiskās zīmes aizņem vairāk)';
+  }
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Ierīce pārdēvēta par $name';
+  }
 }

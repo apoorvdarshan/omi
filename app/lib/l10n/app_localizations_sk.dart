@@ -13002,4 +13002,34 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get openInMaps => 'Otvoriť v Mapách';
+
+  @override
+  String get renameDevice => 'Premenovať zariadenie';
+
+  @override
+  String get deviceRenameFailed =>
+      'Názov sa nepodarilo uložiť do Omi. Skontrolujte, či je pripojené, a skúste to znova.';
+
+  @override
+  String get renameDeviceDescription =>
+      'Názov sa ukladá priamo do Omi, takže sa zobrazí na každom telefóne, s ktorým ho spárujete.';
+
+  @override
+  String get tapToRename => 'Ťuknutím premenujete';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Názov zariadenia nemôže byť prázdny';
+
+  @override
+  String get deviceNameInvalidCharacters => 'Názov obsahuje nepodporované znaky';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Názov je príliš dlhý (max. $maxBytes znakov; emoji a diakritika sa počítajú viac)';
+  }
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Zariadenie premenované na $name';
+  }
 }

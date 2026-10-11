@@ -4002,5 +4002,13 @@
     "reviewProposalConflict": "Od návrhu Dream se to změnilo, takže se nic nepoužilo.",
     "dateRangeStart": "Počáteční datum",
     "dateRangeEnd": "Koncové datum",
-    "openInMaps": "Otevřít v Mapách"
+    "openInMaps": "Otevřít v Mapách",
+    "renameDevice": "Přejmenovat zařízení",
+    "deviceRenameFailed": "Název se nepodařilo uložit do Omi. Zkontrolujte, že je připojeno, a zkuste to znovu.",
+    "renameDeviceDescription": "Název se ukládá přímo do Omi, takže se zobrazí na každém telefonu, se kterým ho spárujete.",
+    "tapToRename": "Klepnutím přejmenujete",
+    "deviceNameCannotBeEmpty": "Název zařízení nemůže být prázdný",
+    "deviceNameInvalidCharacters": "Název obsahuje nepodporované znaky",
+    "deviceNameTooLong": "Název je příliš dlouhý (max. {maxBytes} znaků; emoji a diakritika se počítají víc)",
+    "deviceRenamed": "Zařízení přejmenováno na {name}"
 }

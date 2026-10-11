@@ -19,6 +19,7 @@ import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/mobile/native_ui/ios_native_surface.dart';
 import 'package:omi/pages/settings/device_diagnostics.dart';
 import 'package:omi/pages/settings/device_settings.dart';
+import 'package:omi/pages/settings/rename_device_widget.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/auth_service.dart';
@@ -41,6 +42,12 @@ class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
   final BtDevice device;
   bool connected;
   bool paired = true;
+  final renameRequests = <String>[];
+
+  void disconnect() {
+    connected = false;
+    notifyListeners();
+  }
 
   @override
   bool get isConnected => connected;
@@ -59,16 +66,28 @@ class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
   @override
   Future<void> getDeviceInfo() async {}
   @override
+  Future<bool> renameConnectedDevice(String name) async {
+    renameRequests.add(name);
+    device.name = name;
+    notifyListeners();
+    return true;
+  }
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 /// An Omi with LED dimming and mic gain that records every write.
 class _FakeOmiConnection implements DeviceConnection {
+  _FakeOmiConnection({this.canRename = false});
+
+  final bool canRename;
   final dimWrites = <int>[];
   final gainWrites = <int>[];
 
   @override
-  Future<int> getFeatures() async => OmiFeatures.ledDimming | OmiFeatures.micGain;
+  Future<int> getFeatures() async =>
+      OmiFeatures.ledDimming | OmiFeatures.micGain | (canRename ? OmiFeatures.deviceName : 0);
   @override
   Future<int?> getLedDimRatio() async => 50;
   @override
@@ -358,6 +377,30 @@ void main() {
       final camera = _rows(tester).values.singleWhere((row) => row.title == 'Camera');
       expect(camera.subtitle, 'Image capture ready');
       expect(camera.valid, isTrue);
+    });
+
+    testWidgets('native device name reaches confirmed rename and clears the action on disconnect', (tester) async {
+      final host = NativeTestHost.install();
+      final provider = _StubDeviceProvider(
+        device: BtDevice(id: 'rename-omi', name: 'Omi', type: DeviceType.omi, rssi: -40),
+      );
+      addTearDown(provider.dispose);
+      await _pumpSettings(tester, provider, _FakeOmiConnection(canRename: true));
+
+      final rename = _rows(tester).values.singleWhere((row) => row.title == 'Device Name');
+      _send(host, rename.id, null);
+      await NativeTestHost.settle(tester);
+      expect(find.byType(RenameDeviceWidget), findsOneWidget);
+      await tester.enterText(find.byType(TextField), 'Trail Omi');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await NativeTestHost.settle(tester);
+      expect(provider.renameRequests, ['Trail Omi']);
+      expect(find.byType(RenameDeviceWidget), findsNothing);
+      expect(_rows(tester)['device_name']!.title, 'Trail Omi');
+
+      provider.disconnect();
+      await NativeTestHost.settle(tester);
+      expect(_rows(tester).values.where((row) => row.subtitle.contains('Tap to rename')), isEmpty);
     });
 
     testWidgets('a burst of LED changes writes the final value once, after the debounce', (tester) async {

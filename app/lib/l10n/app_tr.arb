@@ -4037,5 +4037,13 @@
     "reviewProposalConflict": "Bu, Dream önerdikten sonra değişti; bu yüzden hiçbir şey uygulanmadı.",
     "dateRangeStart": "Başlangıç tarihi",
     "dateRangeEnd": "Bitiş tarihi",
-    "openInMaps": "Haritalar'da aç"
+    "openInMaps": "Haritalar'da aç",
+    "renameDevice": "Cihazı Yeniden Adlandır",
+    "deviceRenameFailed": "Ad Omi'nize kaydedilemedi. Bağlı olduğunu kontrol edip yeniden deneyin.",
+    "renameDeviceDescription": "Ad Omi'nin kendisine kaydedilir, böylece eşleştirdiğiniz her telefonda görünür.",
+    "tapToRename": "Yeniden adlandırmak için dokunun",
+    "deviceNameCannotBeEmpty": "Cihaz adı boş olamaz",
+    "deviceNameInvalidCharacters": "Ad desteklenmeyen karakterler içeriyor",
+    "deviceNameTooLong": "Ad çok uzun (en fazla {maxBytes} karakter; emoji ve aksanlı harfler daha fazla sayılır)",
+    "deviceRenamed": "Cihaz adı {name} olarak değiştirildi"
 }

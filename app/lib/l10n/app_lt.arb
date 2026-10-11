@@ -4002,5 +4002,13 @@
     "reviewProposalConflict": "Tai pasikeitė po Dream pasiūlymo, todėl nieko nepritaikyta.",
     "dateRangeStart": "Pradžios data",
     "dateRangeEnd": "Pabaigos data",
-    "openInMaps": "Atidaryti „Žemėlapiuose“"
+    "openInMaps": "Atidaryti „Žemėlapiuose“",
+    "renameDevice": "Pervadinti įrenginį",
+    "deviceRenameFailed": "Nepavyko išsaugoti pavadinimo Omi įrenginyje. Patikrinkite, ar jis prijungtas, ir bandykite dar kartą.",
+    "renameDeviceDescription": "Pavadinimas išsaugomas pačiame Omi, todėl jis rodomas visuose telefonuose, su kuriais jį susiesite.",
+    "tapToRename": "Palieskite, kad pervadintumėte",
+    "deviceNameCannotBeEmpty": "Įrenginio pavadinimas negali būti tuščias",
+    "deviceNameInvalidCharacters": "Pavadinime yra nepalaikomų simbolių",
+    "deviceNameTooLong": "Pavadinimas per ilgas (iki {maxBytes} simbolių; jaustukai ir diakritiniai ženklai užima daugiau)",
+    "deviceRenamed": "Įrenginys pervadintas į {name}"
 }

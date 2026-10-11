@@ -4002,5 +4002,13 @@
     "reviewProposalConflict": "Kopš Dream to ieteica, tas ir mainījies, tāpēc nekas netika lietots.",
     "dateRangeStart": "Sākuma datums",
     "dateRangeEnd": "Beigu datums",
-    "openInMaps": "Atvērt Kartēs"
+    "openInMaps": "Atvērt Kartēs",
+    "renameDevice": "Pārdēvēt ierīci",
+    "deviceRenameFailed": "Nosaukumu neizdevās saglabāt Omi ierīcē. Pārbaudiet, vai tā ir pievienota, un mēģiniet vēlreiz.",
+    "renameDeviceDescription": "Nosaukums tiek saglabāts pašā Omi, tāpēc tas parādās jebkurā tālrunī, ar kuru to savienosiet pārī.",
+    "tapToRename": "Pieskarieties, lai pārdēvētu",
+    "deviceNameCannotBeEmpty": "Ierīces nosaukums nevar būt tukšs",
+    "deviceNameInvalidCharacters": "Nosaukumā ir neatbalstītas rakstzīmes",
+    "deviceNameTooLong": "Nosaukums ir pārāk garš (līdz {maxBytes} rakstzīmēm; emocijzīmes un diakritiskās zīmes aizņem vairāk)",
+    "deviceRenamed": "Ierīce pārdēvēta par {name}"
 }

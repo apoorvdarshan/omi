@@ -4002,5 +4002,13 @@
     "reviewProposalConflict": "Dream के सुझाव के बाद यह बदल गया, इसलिए कुछ भी लागू नहीं किया गया।",
     "dateRangeStart": "शुरू होने की तारीख",
     "dateRangeEnd": "समाप्त होने की तारीख",
-    "openInMaps": "मानचित्र में खोलें"
+    "openInMaps": "मानचित्र में खोलें",
+    "renameDevice": "डिवाइस का नाम बदलें",
+    "deviceRenameFailed": "आपके Omi पर नाम सहेजा नहीं जा सका। जाँचें कि यह कनेक्ट है और फिर से कोशिश करें।",
+    "renameDeviceDescription": "नाम आपके Omi पर ही सहेजा जाता है, इसलिए यह हर उस फ़ोन पर दिखेगा जिससे आप इसे जोड़ेंगे।",
+    "tapToRename": "नाम बदलने के लिए टैप करें",
+    "deviceNameCannotBeEmpty": "डिवाइस का नाम खाली नहीं हो सकता",
+    "deviceNameInvalidCharacters": "नाम में असमर्थित वर्ण हैं",
+    "deviceNameTooLong": "नाम बहुत लंबा है (अधिकतम {maxBytes} वर्ण; इमोजी और मात्राएँ ज़्यादा गिनी जाती हैं)",
+    "deviceRenamed": "डिवाइस का नाम बदलकर {name} कर दिया गया"
 }

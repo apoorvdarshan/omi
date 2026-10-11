@@ -4002,5 +4002,13 @@
     "reviewProposalConflict": "Mục này đã thay đổi sau khi Dream đề xuất nên không có gì được áp dụng.",
     "dateRangeStart": "Ngày bắt đầu",
     "dateRangeEnd": "Ngày kết thúc",
-    "openInMaps": "Mở trong Bản đồ"
+    "openInMaps": "Mở trong Bản đồ",
+    "renameDevice": "Đổi tên thiết bị",
+    "deviceRenameFailed": "Không thể lưu tên vào Omi. Hãy kiểm tra thiết bị đã kết nối rồi thử lại.",
+    "renameDeviceDescription": "Tên được lưu ngay trên Omi, nên sẽ hiển thị trên mọi điện thoại mà bạn ghép nối.",
+    "tapToRename": "Chạm để đổi tên",
+    "deviceNameCannotBeEmpty": "Tên thiết bị không được để trống",
+    "deviceNameInvalidCharacters": "Tên chứa ký tự không được hỗ trợ",
+    "deviceNameTooLong": "Tên quá dài (tối đa {maxBytes} ký tự; emoji và chữ có dấu được tính nhiều hơn)",
+    "deviceRenamed": "Đã đổi tên thiết bị thành {name}"
 }

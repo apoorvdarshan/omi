@@ -12940,4 +12940,32 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get openInMaps => 'เปิดในแผนที่';
+
+  @override
+  String get renameDevice => 'เปลี่ยนชื่ออุปกรณ์';
+
+  @override
+  String get deviceRenameFailed => 'ไม่สามารถบันทึกชื่อลงใน Omi ได้ ตรวจสอบว่าอุปกรณ์เชื่อมต่ออยู่แล้วลองอีกครั้ง';
+
+  @override
+  String get renameDeviceDescription => 'ชื่อจะถูกบันทึกไว้ในตัว Omi จึงแสดงบนโทรศัพท์ทุกเครื่องที่คุณจับคู่ด้วย';
+
+  @override
+  String get tapToRename => 'แตะเพื่อเปลี่ยนชื่อ';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'ชื่ออุปกรณ์ต้องไม่ว่างเปล่า';
+
+  @override
+  String get deviceNameInvalidCharacters => 'ชื่อมีตัวอักษรที่ไม่รองรับ';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'ชื่อยาวเกินไป (สูงสุด $maxBytes ตัวอักษร อีโมจิและอักษรไทยนับมากกว่าหนึ่งตัว)';
+  }
+
+  @override
+  String deviceRenamed(String name) {
+    return 'เปลี่ยนชื่ออุปกรณ์เป็น $name แล้ว';
+  }
 }

@@ -11439,5 +11439,13 @@
     "reviewProposalConflict": "Ovo se promijenilo nakon što je Dream to predložio, pa ništa nije primijenjeno.",
     "dateRangeStart": "Datum početka",
     "dateRangeEnd": "Datum završetka",
-    "openInMaps": "Otvori u Mapama"
+    "openInMaps": "Otvori u Mapama",
+    "renameDevice": "Preimenuj uređaj",
+    "deviceRenameFailed": "Ime nije moglo biti sačuvano na Omi. Provjerite je li povezan i pokušajte ponovo.",
+    "renameDeviceDescription": "Ime se čuva na samom Omi uređaju, pa se prikazuje na svakom telefonu s kojim ga uparite.",
+    "tapToRename": "Dodirnite za preimenovanje",
+    "deviceNameCannotBeEmpty": "Ime uređaja ne može biti prazno",
+    "deviceNameInvalidCharacters": "Ime sadrži nepodržane znakove",
+    "deviceNameTooLong": "Ime je predugo (do {maxBytes} znakova; emoji i dijakritici se računaju više)",
+    "deviceRenamed": "Uređaj je preimenovan u {name}"
 }

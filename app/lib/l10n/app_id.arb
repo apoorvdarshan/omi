@@ -4037,5 +4037,13 @@
     "reviewProposalConflict": "Ini berubah sejak Dream menyarankannya, jadi tidak ada yang diterapkan.",
     "dateRangeStart": "Tanggal mulai",
     "dateRangeEnd": "Tanggal berakhir",
-    "openInMaps": "Buka di Peta"
+    "openInMaps": "Buka di Peta",
+    "renameDevice": "Ubah Nama Perangkat",
+    "deviceRenameFailed": "Nama tidak dapat disimpan ke Omi Anda. Pastikan perangkat terhubung, lalu coba lagi.",
+    "renameDeviceDescription": "Nama disimpan di Omi itu sendiri, sehingga muncul di ponsel mana pun yang Anda pasangkan.",
+    "tapToRename": "Ketuk untuk mengubah nama",
+    "deviceNameCannotBeEmpty": "Nama perangkat tidak boleh kosong",
+    "deviceNameInvalidCharacters": "Nama mengandung karakter yang tidak didukung",
+    "deviceNameTooLong": "Nama terlalu panjang (maksimal {maxBytes} karakter; emoji dan aksen dihitung lebih)",
+    "deviceRenamed": "Nama perangkat diubah menjadi {name}"
 }

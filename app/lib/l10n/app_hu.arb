@@ -4098,5 +4098,13 @@
     "reviewProposalConflict": "Ez megváltozott, mióta a Dream javasolta, így semmi sem lett alkalmazva.",
     "dateRangeStart": "Kezdő dátum",
     "dateRangeEnd": "Befejező dátum",
-    "openInMaps": "Megnyitás a Térképekben"
+    "openInMaps": "Megnyitás a Térképekben",
+    "renameDevice": "Eszköz átnevezése",
+    "deviceRenameFailed": "A nevet nem sikerült elmenteni az Omira. Ellenőrizd, hogy csatlakoztatva van, majd próbáld újra.",
+    "renameDeviceDescription": "A név magán az Omin tárolódik, így minden telefonon megjelenik, amellyel párosítod.",
+    "tapToRename": "Koppints az átnevezéshez",
+    "deviceNameCannotBeEmpty": "Az eszköz neve nem lehet üres",
+    "deviceNameInvalidCharacters": "A név nem támogatott karaktereket tartalmaz",
+    "deviceNameTooLong": "A név túl hosszú (legfeljebb {maxBytes} karakter; az emodzsik és ékezetek többet számítanak)",
+    "deviceRenamed": "Az eszköz új neve: {name}"
 }

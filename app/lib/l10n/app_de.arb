@@ -4002,5 +4002,13 @@
     "reviewProposalConflict": "Das hat sich geändert, seit Dream es vorgeschlagen hat. Es wurde nichts übernommen.",
     "dateRangeStart": "Startdatum",
     "dateRangeEnd": "Enddatum",
-    "openInMaps": "In Karten öffnen"
+    "openInMaps": "In Karten öffnen",
+    "renameDevice": "Gerät umbenennen",
+    "deviceRenameFailed": "Der Name konnte nicht auf deinem Omi gespeichert werden. Prüfe, ob es verbunden ist, und versuche es erneut.",
+    "renameDeviceDescription": "Der Name wird auf deinem Omi gespeichert und erscheint daher auf jedem Telefon, mit dem du es koppelst.",
+    "tapToRename": "Zum Umbenennen tippen",
+    "deviceNameCannotBeEmpty": "Der Gerätename darf nicht leer sein",
+    "deviceNameInvalidCharacters": "Der Name enthält nicht unterstützte Zeichen",
+    "deviceNameTooLong": "Name ist zu lang (bis zu {maxBytes} Zeichen; Emojis und Akzente zählen mehr)",
+    "deviceRenamed": "Gerät umbenannt in {name}"
 }

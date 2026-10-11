@@ -11439,5 +11439,13 @@
     "reviewProposalConflict": "Dream کی تجویز کے بعد یہ بدل گیا، اس لیے کچھ بھی لاگو نہیں کیا گیا۔",
     "dateRangeStart": "شروع ہونے کی تاریخ",
     "dateRangeEnd": "ختم ہونے کی تاریخ",
-    "openInMaps": "نقشے میں کھولیں"
+    "openInMaps": "نقشے میں کھولیں",
+    "renameDevice": "ڈیوائس کا نام بدلیں",
+    "deviceRenameFailed": "آپ کے Omi پر نام محفوظ نہیں ہو سکا۔ یقینی بنائیں کہ یہ منسلک ہے اور دوبارہ کوشش کریں۔",
+    "renameDeviceDescription": "نام آپ کے Omi پر ہی محفوظ ہوتا ہے، اس لیے یہ ہر اس فون پر نظر آتا ہے جس کے ساتھ آپ اسے جوڑتے ہیں۔",
+    "tapToRename": "نام بدلنے کے لیے ٹیپ کریں",
+    "deviceNameCannotBeEmpty": "ڈیوائس کا نام خالی نہیں ہو سکتا",
+    "deviceNameInvalidCharacters": "نام میں غیر معاون حروف شامل ہیں",
+    "deviceNameTooLong": "نام بہت لمبا ہے (زیادہ سے زیادہ {maxBytes} حروف؛ ایموجی اور اعراب زیادہ شمار ہوتے ہیں)",
+    "deviceRenamed": "ڈیوائس کا نام بدل کر {name} کر دیا گیا"
 }

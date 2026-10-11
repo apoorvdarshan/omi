@@ -4037,5 +4037,13 @@
     "reviewProposalConflict": "To się zmieniło od czasu sugestii Dream, więc nic nie zostało zastosowane.",
     "dateRangeStart": "Data początkowa",
     "dateRangeEnd": "Data końcowa",
-    "openInMaps": "Otwórz w Mapach"
+    "openInMaps": "Otwórz w Mapach",
+    "renameDevice": "Zmień nazwę urządzenia",
+    "deviceRenameFailed": "Nie udało się zapisać nazwy w Omi. Sprawdź, czy jest połączone, i spróbuj ponownie.",
+    "renameDeviceDescription": "Nazwa jest zapisywana w samym Omi, więc pojawia się na każdym telefonie, z którym je sparujesz.",
+    "tapToRename": "Dotknij, aby zmienić nazwę",
+    "deviceNameCannotBeEmpty": "Nazwa urządzenia nie może być pusta",
+    "deviceNameInvalidCharacters": "Nazwa zawiera nieobsługiwane znaki",
+    "deviceNameTooLong": "Nazwa jest za długa (maks. {maxBytes} znaków; emoji i znaki diakrytyczne liczą się więcej)",
+    "deviceRenamed": "Zmieniono nazwę urządzenia na {name}"
 }

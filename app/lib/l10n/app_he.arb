@@ -11439,5 +11439,13 @@
     "reviewProposalConflict": "זה השתנה מאז ש־Dream הציע אותו, ולכן שום דבר לא הוחל.",
     "dateRangeStart": "תאריך התחלה",
     "dateRangeEnd": "תאריך סיום",
-    "openInMaps": "פתיחה במפות"
+    "openInMaps": "פתיחה במפות",
+    "renameDevice": "שינוי שם המכשיר",
+    "deviceRenameFailed": "לא ניתן היה לשמור את השם על ה-Omi. ודאו שהוא מחובר ונסו שוב.",
+    "renameDeviceDescription": "השם נשמר על ה-Omi עצמו, ולכן יופיע בכל טלפון שתצמידו אליו.",
+    "tapToRename": "הקישו לשינוי השם",
+    "deviceNameCannotBeEmpty": "שם המכשיר לא יכול להיות ריק",
+    "deviceNameInvalidCharacters": "השם מכיל תווים שאינם נתמכים",
+    "deviceNameTooLong": "השם ארוך מדי (עד {maxBytes} תווים; אמוג'י וניקוד נספרים יותר)",
+    "deviceRenamed": "שם המכשיר שונה ל-{name}"
 }

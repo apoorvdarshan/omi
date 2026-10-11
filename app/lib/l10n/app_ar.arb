@@ -4002,5 +4002,13 @@
     "reviewProposalConflict": "تغيّر هذا منذ أن اقترحه Dream، لذا لم يُطبَّق أي شيء.",
     "dateRangeStart": "تاريخ البدء",
     "dateRangeEnd": "تاريخ الانتهاء",
-    "openInMaps": "فتح في الخرائط"
+    "openInMaps": "فتح في الخرائط",
+    "renameDevice": "إعادة تسمية الجهاز",
+    "deviceRenameFailed": "تعذّر حفظ الاسم على جهاز Omi. تأكد من أنه متصل وحاول مرة أخرى.",
+    "renameDeviceDescription": "يُحفظ الاسم على جهاز Omi نفسه، لذا يظهر على أي هاتف تقرنه به.",
+    "tapToRename": "انقر لإعادة التسمية",
+    "deviceNameCannotBeEmpty": "لا يمكن أن يكون اسم الجهاز فارغًا",
+    "deviceNameInvalidCharacters": "يحتوي الاسم على أحرف غير مدعومة",
+    "deviceNameTooLong": "الاسم طويل جدًا (حتى {maxBytes} حرفًا؛ الرموز التعبيرية وعلامات التشكيل تُحسب أكثر)",
+    "deviceRenamed": "تمت إعادة تسمية الجهاز إلى {name}"
 }

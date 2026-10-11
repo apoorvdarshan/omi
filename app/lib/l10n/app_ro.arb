@@ -4002,5 +4002,13 @@
     "reviewProposalConflict": "S-a schimbat de când Dream a sugerat asta, așa că nu s-a aplicat nimic.",
     "dateRangeStart": "Data de început",
     "dateRangeEnd": "Data de sfârșit",
-    "openInMaps": "Deschide în Hărți"
+    "openInMaps": "Deschide în Hărți",
+    "renameDevice": "Redenumește dispozitivul",
+    "deviceRenameFailed": "Numele nu a putut fi salvat pe Omi. Verifică dacă este conectat și încearcă din nou.",
+    "renameDeviceDescription": "Numele este salvat pe Omi, așa că apare pe orice telefon cu care îl asociezi.",
+    "tapToRename": "Atinge pentru a redenumi",
+    "deviceNameCannotBeEmpty": "Numele dispozitivului nu poate fi gol",
+    "deviceNameInvalidCharacters": "Numele conține caractere neacceptate",
+    "deviceNameTooLong": "Numele este prea lung (până la {maxBytes} caractere; emoji-urile și diacriticele contează mai mult)",
+    "deviceRenamed": "Dispozitivul a fost redenumit în {name}"
 }

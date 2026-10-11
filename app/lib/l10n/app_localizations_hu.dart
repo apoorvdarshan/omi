@@ -13058,4 +13058,34 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get openInMaps => 'Megnyitás a Térképekben';
+
+  @override
+  String get renameDevice => 'Eszköz átnevezése';
+
+  @override
+  String get deviceRenameFailed =>
+      'A nevet nem sikerült elmenteni az Omira. Ellenőrizd, hogy csatlakoztatva van, majd próbáld újra.';
+
+  @override
+  String get renameDeviceDescription =>
+      'A név magán az Omin tárolódik, így minden telefonon megjelenik, amellyel párosítod.';
+
+  @override
+  String get tapToRename => 'Koppints az átnevezéshez';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Az eszköz neve nem lehet üres';
+
+  @override
+  String get deviceNameInvalidCharacters => 'A név nem támogatott karaktereket tartalmaz';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'A név túl hosszú (legfeljebb $maxBytes karakter; az emodzsik és ékezetek többet számítanak)';
+  }
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Az eszköz új neve: $name';
+  }
 }

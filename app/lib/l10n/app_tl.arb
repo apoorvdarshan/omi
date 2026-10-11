@@ -11439,5 +11439,13 @@
     "reviewProposalConflict": "Nagbago ito mula nang imungkahi ng Dream, kaya walang nailapat.",
     "dateRangeStart": "Petsa ng simula",
     "dateRangeEnd": "Petsa ng pagtatapos",
-    "openInMaps": "Buksan sa Maps"
+    "openInMaps": "Buksan sa Maps",
+    "renameDevice": "Palitan ang Pangalan ng Device",
+    "deviceRenameFailed": "Hindi ma-save ang pangalan sa iyong Omi. Tiyaking nakakonekta ito at subukang muli.",
+    "renameDeviceDescription": "Naka-save ang pangalan sa mismong Omi, kaya lalabas ito sa anumang teleponong ipapares mo.",
+    "tapToRename": "I-tap para palitan ang pangalan",
+    "deviceNameCannotBeEmpty": "Hindi maaaring blangko ang pangalan ng device",
+    "deviceNameInvalidCharacters": "May hindi sinusuportahang character ang pangalan",
+    "deviceNameTooLong": "Masyadong mahaba ang pangalan (hanggang {maxBytes} character; mas malaki ang bilang ng emoji at accent)",
+    "deviceRenamed": "Pinalitan ang pangalan ng device sa {name}"
 }

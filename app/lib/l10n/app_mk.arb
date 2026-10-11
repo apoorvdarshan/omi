@@ -11439,5 +11439,13 @@
     "reviewProposalConflict": "Ова се промени откако Dream го предложи, па ништо не е применето.",
     "dateRangeStart": "Датум на почеток",
     "dateRangeEnd": "Датум на завршување",
-    "openInMaps": "Отвори во Мапи"
+    "openInMaps": "Отвори во Мапи",
+    "renameDevice": "Преименувај го уредот",
+    "deviceRenameFailed": "Името не можеше да се зачува на Omi. Проверете дали е поврзан и обидете се повторно.",
+    "renameDeviceDescription": "Името се чува на самиот Omi, па се прикажува на секој телефон со кој ќе го спарите.",
+    "tapToRename": "Допрете за преименување",
+    "deviceNameCannotBeEmpty": "Името на уредот не може да биде празно",
+    "deviceNameInvalidCharacters": "Името содржи неподдржани знаци",
+    "deviceNameTooLong": "Името е предолго (до {maxBytes} знаци; емоџи и акценти се бројат повеќе)",
+    "deviceRenamed": "Уредот е преименуван во {name}"
 }

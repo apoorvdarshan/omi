@@ -4002,5 +4002,13 @@
     "reviewProposalConflict": "Det här har ändrats sedan Dream föreslog det, så inget tillämpades.",
     "dateRangeStart": "Startdatum",
     "dateRangeEnd": "Slutdatum",
-    "openInMaps": "Öppna i Kartor"
+    "openInMaps": "Öppna i Kartor",
+    "renameDevice": "Byt namn på enheten",
+    "deviceRenameFailed": "Namnet kunde inte sparas på din Omi. Kontrollera att den är ansluten och försök igen.",
+    "renameDeviceDescription": "Namnet sparas på själva Omi-enheten, så det visas på alla telefoner du parkopplar den med.",
+    "tapToRename": "Tryck för att byta namn",
+    "deviceNameCannotBeEmpty": "Enhetsnamnet får inte vara tomt",
+    "deviceNameInvalidCharacters": "Namnet innehåller tecken som inte stöds",
+    "deviceNameTooLong": "Namnet är för långt (upp till {maxBytes} tecken; emoji och accenter räknas extra)",
+    "deviceRenamed": "Enheten har fått namnet {name}"
 }

@@ -13036,4 +13036,34 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get openInMaps => 'Odpri v Zemljevidih';
+
+  @override
+  String get renameDevice => 'Preimenuj napravo';
+
+  @override
+  String get deviceRenameFailed =>
+      'Imena ni bilo mogoče shraniti v Omi. Preverite, ali je povezan, in poskusite znova.';
+
+  @override
+  String get renameDeviceDescription =>
+      'Ime se shrani v sam Omi, zato se prikaže na vsakem telefonu, s katerim ga povežete.';
+
+  @override
+  String get tapToRename => 'Tapnite za preimenovanje';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Ime naprave ne sme biti prazno';
+
+  @override
+  String get deviceNameInvalidCharacters => 'Ime vsebuje nepodprte znake';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Ime je predolgo (do $maxBytes znakov; emojiji in šumniki štejejo več)';
+  }
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Naprava je preimenovana v $name';
+  }
 }

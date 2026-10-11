@@ -4002,5 +4002,13 @@
     "reviewProposalConflict": "Això ha canviat des que Dream ho va suggerir, així que no s'ha aplicat res.",
     "dateRangeStart": "Data d'inici",
     "dateRangeEnd": "Data de finalització",
-    "openInMaps": "Obre a Mapes"
+    "openInMaps": "Obre a Mapes",
+    "renameDevice": "Canvia el nom del dispositiu",
+    "deviceRenameFailed": "No s'ha pogut desar el nom a l'Omi. Comprova que estigui connectat i torna-ho a provar.",
+    "renameDeviceDescription": "El nom es desa al mateix Omi, així que apareix a qualsevol telèfon amb què l'emparellis.",
+    "tapToRename": "Toca per canviar el nom",
+    "deviceNameCannotBeEmpty": "El nom del dispositiu no pot estar buit",
+    "deviceNameInvalidCharacters": "El nom conté caràcters no compatibles",
+    "deviceNameTooLong": "El nom és massa llarg (fins a {maxBytes} caràcters; els emojis i els accents compten més)",
+    "deviceRenamed": "Dispositiu reanomenat a {name}"
 }
