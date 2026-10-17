@@ -20,10 +20,11 @@ DRIVERS: dict[str, DriverEntry] = {}
 COVERED_BY: dict[str, CoveredByEntry] = {}
 SKIPS: dict[str, SkipEntry] = {}
 BODY_DIGEST = {
+    'routers.fleet_telemetry.read_summary': '3152b3a9ec2e644280e6b176d02ed8174772586d713f314944dd5e305d0942d6',
     'parakeet.stream_handler._NemoRNNTStreamingDecoder.decode_pcm': '37cecadaf2adcc0650d318d4ac7adb316dade33610927e6ac663f9d386c9edd6',
-    'routers.desktop_proxy._read_request_body': 'e71ed271b768274df479a8429ce363d1152a85073b59c8d034445bd8fc87c6b7',
-    'utils.multipart._size_limited_stream': 'b77a69f35b7e37aa7b68cc93748bb83fdf159e7e5f98f03ae2ee0d473efe857d',
-    'utils.multipart.parse_multipart_form': 'cf7bb921eb61427b97be7c4ab3a8a22fc11b8b2a12788dbe44a1884a1beb58fa',
+    'utils.llm.desktop_proxy_lifetime.read_body': '2c4a2dc281f1af068e6d0da229683697afbdb29d97fc250628fc03e1955be2b9',
+    'utils.multipart._size_limited_stream': '9d743f14fb64633072a7b3e213236643e3bd74825c4bc73221f1fdbd867fc7b6',
+    'utils.multipart.parse_multipart_form': 'bf33b0fe208c6ed0fceb935908a2396c47596bc730543543b4c0bb3c10435495',
     'utils.memory.canonical_graph._build_canonical_graph_items_query': '55a8b4ccfc9b7e98d6482495590fdf15f04a6f325485b2345043419846862bbd',
 }
 LIMIT = (25, 'bounds the read window, not filters or ordering')
@@ -361,11 +362,10 @@ _driver(
     serving=False,
 )
 _driver(
-    'utils.memory.canonical_consolidation.list_pending_consolidation_items',
+    'utils.memory.canonical_consolidation._required_intake_page',
     base={'uid': UID},
-    domains={'start_after': [None, (T0, 'memory-1')]},
-    neutrals={'now': NOW, 'limit': LIMIT},
-    profile='maintenance-consolidation',
+    domains={'cursor': [None, {'captured_at': T0, 'memory_id': 'memory-1'}]},
+    profile='maintenance-required-intake',
     serving=False,
 )
 _driver(
@@ -387,13 +387,6 @@ _driver(
     base={'deadline': T1},
     neutrals={'limit': LIMIT},
     profile='maintenance-global-expiry',
-    serving=False,
-)
-_driver(
-    'utils.memory.canonical_short_term_maintenance_cron.count_active_short_term',
-    base={'uid': UID},
-    neutrals={'cap': (11, 'caps tally only')},
-    profile='maintenance-short-term-count',
     serving=False,
 )
 for function in (
@@ -643,7 +636,6 @@ DRIVERS['utils.task_intelligence.chat_first_materialization_health._documents'] 
 _driver(
     'utils.x_connector.run_x_sync_job',
     neutrals={'job_started_at': (None, 'model budget clock only')},
-    patchers=(_stub('database.redis_db.try_acquire_x_sync_window_lock', True),),
     profile='scheduled-x-sync',
 )
 
@@ -702,8 +694,9 @@ COVERED_BY['utils.memory.canonical_graph._build_canonical_graph_items_query'] = 
     body_digest=BODY_DIGEST['utils.memory.canonical_graph._build_canonical_graph_items_query'],
 )
 for key, reason in {
+    'routers.fleet_telemetry.read_summary': 'AST false positive: Request.stream reads the incoming fleet HTTP body',
     'parakeet.stream_handler._NemoRNNTStreamingDecoder.decode_pcm': 'AST false positive: torch.where selects tensor elements, not a Firestore query',
-    'routers.desktop_proxy._read_request_body': 'AST false positive: Request.stream reads the incoming HTTP body',
+    'utils.llm.desktop_proxy_lifetime.read_body': 'AST false positive: Request.stream reads the incoming HTTP body',
     'utils.multipart._size_limited_stream': 'AST false positive: Request.stream reads the incoming multipart HTTP body',
     'utils.multipart.parse_multipart_form': 'AST false positive: Request.stream reads the incoming multipart HTTP body',
 }.items():

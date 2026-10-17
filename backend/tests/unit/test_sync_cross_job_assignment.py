@@ -160,7 +160,8 @@ def test_seventy_minutes_of_identical_narration_is_one_recording():
     assert rows[0]['discarded'] is False
 
 
-def test_reverse_order_retry_and_deleted_target():
+def test_reverse_order_retry_and_deleted_target(monkeypatch):
+    monkeypatch.setenv('SYNC_BACKFILL_ORDER', 'newest')
     store = StrictFirestore()
     later, _, _ = intake(store, chunk('later', 1060))
     earlier, _, _ = intake(store, chunk('earlier', 1000))
@@ -235,7 +236,6 @@ def test_separated_fillers_are_hidden_without_deleting_transcript_or_audio():
         {'starred': True},
         {'folder_user_set': True},
         {'has_photos': True},
-        {'visibility': 'public'},
         {'sync_relevance_user_kept': True},
     ],
 )
@@ -244,6 +244,14 @@ def test_curated_filler_is_not_automatically_hidden(curation):
     short.update(curation)
     result, _, _ = intake(StrictFirestore(), short)
     assert result['discarded'] is False
+
+
+@pytest.mark.parametrize('metadata', [{'visibility': 'public'}, {'sync_live_target': True}])
+def test_published_or_finished_live_filler_is_not_curation(metadata):
+    short = chunk('filler', 1000, 'Mm-hmm.')
+    short.update(metadata)
+    result, _, _ = intake(StrictFirestore(), short)
+    assert result['discarded'] is True
 
 
 def test_explicitly_restored_fragment_stays_kept_when_live_target_gets_more_filler():
@@ -333,6 +341,7 @@ def test_real_process_segment_two_independent_job_responses(independent_job_pipe
     assert len(conversations(store)) == 1
 
     pipeline.conversations_db.get_conversation = lambda *a: {
+        'status': 'completed',
         'sync_relevance': 'review',
         'transcript_segments': chunk('a', 1000, 'Mm-hmm')['transcript_segments'],
     }

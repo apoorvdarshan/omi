@@ -86,6 +86,7 @@ def test_manifest_declares_both_projects_and_frame_retention_jobs_without_retire
     dev_jobs = {job["name"]: job for job in manifest["environments"]["dev"]["jobs"]}
     prod_jobs = {job["name"]: job for job in manifest["environments"]["prod"]["jobs"]}
     assert set(dev_jobs) == {
+        "dream-agent-canary-half-hourly",
         "daily-memory-sweep-hourly",
         "day3-reengagement-email-daily",
         "frame-request-retention-hourly",
@@ -94,15 +95,22 @@ def test_manifest_declares_both_projects_and_frame_retention_jobs_without_retire
         "sync-backfill-uid-sequencer",
     }
     assert set(prod_jobs) == {
+        "candidate-integration-sweep",
+        "dream-agent-canary-half-hourly",
+        "dream-agent-sweep-hourly",
         "day3-reengagement-email-daily",
         "finops-unit-cost-daily",
         "frame-request-retention-hourly",
+        "messaging-maintenance-hourly",
         "notifications-job-scheduler-trigger",
         "omi-admin-stats-precompute",
         "sentry-feedback-poll",
         "sync-backfill-uid-sequencer",
     }
     assert "agent-vm-reconciler-5m" not in dev_jobs
+    assert "candidate-integration-sweep" not in dev_jobs
+    assert prod_jobs["candidate-integration-sweep"]["state"] == "ENABLED"
+    assert "lifecycle" not in prod_jobs["candidate-integration-sweep"]  # active once backend-sync serves the route
     for env_jobs, project in ((dev_jobs, "based-hardware-dev"), (prod_jobs, "based-hardware")):
         job = env_jobs["frame-request-retention-hourly"]
         assert job["lifecycle"] == "planned"
@@ -182,9 +190,13 @@ def test_explicitly_selected_planned_job_can_be_created():
 
     assert differences == [resource]
     assert messages == [f"APPLIED {resource}: missing, state"]
-    assert [
-        (method, kwargs.get("params", {}).get("jobId")) for method, _, kwargs in session.calls if method == "post"
-    ] == [("post", "frame-request-retention-hourly")]
+    # Cloud Scheduler v1 create takes the full job name in the body; it has no jobId parameter.
+    posts = [(url, kwargs) for method, url, kwargs in session.calls if method == "post"]
+    assert len(posts) == 1
+    url, kwargs = posts[0]
+    assert url.endswith("/projects/based-hardware-dev/locations/us-central1/jobs")
+    assert "params" not in kwargs
+    assert kwargs["json"]["name"] == resource
 
 
 def test_check_validates_a_planned_job_after_it_exists():
@@ -310,3 +322,33 @@ def test_notifications_cadence_covers_every_local_hour_boundary():
         job['target']['oauth']['service_account']
         == 'notifications-job-scheduler@based-hardware.iam.gserviceaccount.com'
     )
+
+
+def test_operator_gcloud_auth_is_explicit_and_never_prints_tokens(monkeypatch, capsys):
+    import subprocess
+    from google.auth.transport import requests as auth_requests
+
+    seen = []
+    monkeypatch.setattr(
+        reconcile.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 0, "private-token\n", "")
+    )
+    monkeypatch.setattr(
+        auth_requests, "AuthorizedSession", lambda credentials: seen.append(credentials.token) or object()
+    )
+    monkeypatch.setattr(reconcile, "reconcile", lambda *a, **k: ([], ["MATCH messaging-maintenance-hourly"]))
+    assert (
+        reconcile.main(
+            [
+                "--gcloud-auth",
+                "--environment",
+                "prod",
+                "--project",
+                "based-hardware",
+                "--check",
+                "--jobs",
+                "messaging-maintenance-hourly",
+            ]
+        )
+        == 0
+    )
+    assert seen == ["private-token"] and "private-token" not in capsys.readouterr().out

@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, Callable, NamedTuple, Optional, TypeVar
 from config.conversation_smart_merge import smart_merge_flatten_enabled
 from config.sync_lineage import sync_lineage_resolve_active_for
 from config.sync_live_dedupe import sync_live_dedupe_active_for
+from config.sync_safety_wal import sync_safety_wal_enabled
 from config.sync_assignment_recovery import sync_assignment_recovery_enabled
 from database._client import firestore_document_kind, firestore_error_document_path, is_document_size_limit_error
 from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES, estimate_firestore_document_bytes
@@ -22,7 +23,8 @@ from utils.manual_speaker_assignments import apply_manual_assignments
 from utils.capture_evidence import bounded_envelope, merge_track_receipts
 
 from config import merge_ancestry
-from utils.conversations.fragment_visibility import is_low_signal_sync_fragment
+import config.speaker_match_scores as match_scores
+from utils.conversations.fragment_visibility import is_rule_discard_decision, is_user_curated
 from utils.conversations.relevance import sync_intake_decision
 from utils.conversations.smart_merge_policy import user_managed as _policy_user_managed
 from utils.conversations.relevance_rules import deterministic_relevance
@@ -126,6 +128,7 @@ def auto_mergeable(row: dict) -> bool:
         or row.get('starred')
         or row.get('folder_user_set')
         or row.get('sync_relevance_user_kept')
+        or row.get('has_transcript_corrections')
         or row.get('visibility', 'private') not in (None, 'private')
     )
 
@@ -389,6 +392,13 @@ def assign_in_transaction(
         created = current is None
         records = [decode(raw) for _, raw in sorted(matched.items())]
         result = deepcopy(next((row for row in records if row['id'] == canonical), records[0] if records else incoming))
+        try:
+            contributions = [r for record in records for r in record.get(match_scores.FIELD) or []]
+            if contributions:
+                result[match_scores.FIELD] = match_scores.merge(None, contributions)
+        except Exception:
+            # Preserve the canonical's existing blob; skip only the donor merge.
+            match_scores.record_failure(logger, reason='malformed_doc')
         result['id'] = canonical
         smart_live_target = bool(plan_target and (plan_target.get('smart_merge') or {}).get('role') == 'survivor')
         result['sync_live_target'] = bool(
@@ -441,8 +451,10 @@ def assign_in_transaction(
             segment['timestamp'] = incoming['started_at'].timestamp() + segment['start']
         indexed_new = list(zip(segment_indices, new))
         live_row = next((row for row in records if row['id'] == canonical), None)
+        fleet_live_dedupe = bool(result['sync_live_target'] and sync_safety_wal_enabled())
         live_dedupe = bool(
-            plan_target is not None
+            not fleet_live_dedupe
+            and plan_target is not None
             and canonical == plan_target_id
             and live_row is not None
             and result['sync_live_target']
@@ -487,8 +499,15 @@ def assign_in_transaction(
                 origin,
                 existing,
                 new,
+                fuzzy_live_overlap=fleet_live_dedupe,
                 text_match_slop_seconds=(
-                    600 if plan_target and (smart_live_target or not plan_target.get('sync_content_revision')) else 0
+                    60
+                    if fleet_live_dedupe
+                    else (
+                        600
+                        if plan_target and (smart_live_target or not plan_target.get('sync_content_revision'))
+                        else 0
+                    )
                 ),
                 # A bound safety WAL can mix one duplicate with genuinely new speech.
                 # Near-exact text, duration, and time are enough to drop that one line;
@@ -531,16 +550,22 @@ def assign_in_transaction(
                 result['capture_evidence'] = incoming['capture_evidence']
         result['has_content'] = bool(segments)
         result['sync_content_revision'] = max([row.get('sync_content_revision') or 0 for row in records] + [0]) + 1
+        verdict, rule = fragment_rule(segments)
+        curated = is_user_curated(result)
         result['sync_relevance'] = (
-            'review'
-            if not result.get('sync_relevance_user_kept') and (not segments or needs_fragment_review(segments))
-            else 'keep'
+            'review' if not curated and (not segments or needs_fragment_review(segments)) else 'keep'
         )
         # Discard is a recoverable list filter, never a deletion of captured speech.
         # Meaningful later intake automatically promotes the complete recording.
-        result['discarded'] = is_low_signal_sync_fragment(result)
+        result['discarded'] = bool(
+            verdict == 'discard'
+            and getattr(result.get('status'), 'value', result.get('status')) == 'completed'
+            and not curated
+        )
         if result['discarded']:
-            result['relevance_decision'] = sync_intake_decision(fragment_rule(segments)[1])
+            result['relevance_decision'] = sync_intake_decision(rule)
+        elif is_rule_discard_decision(result.get('relevance_decision')):
+            result['relevance_decision'] = None
         result['is_locked'] = bool(incoming.get('is_locked'))
         result['private_cloud_sync_enabled'] = any(
             row.get('private_cloud_sync_enabled') for row in [incoming, *records]

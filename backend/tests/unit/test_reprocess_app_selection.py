@@ -177,8 +177,7 @@ def test_valid_explicit_selection_reaches_processing_with_explicit_attribution()
     assert process.call_args.kwargs['app_usage_attribution'] is AppUsageAttribution.EXPLICIT_SELECTION
 
 
-@pytest.mark.parametrize('partial_proactive_engine', [False, True])
-def test_lazy_enrichment_uses_non_user_usage_attribution(monkeypatch, partial_proactive_engine):
+def test_lazy_enrichment_uses_non_user_usage_attribution(monkeypatch):
     conversation = {'id': 'c1', 'deferred': True}
     model = SimpleNamespace(language='en', deferred=True)
     monkeypatch.setattr(conv_router.lifecycle_service, 'reacquire_deferred_processing', lambda *_args: True)
@@ -187,20 +186,7 @@ def test_lazy_enrichment_uses_non_user_usage_attribution(monkeypatch, partial_pr
     )
     monkeypatch.setattr(conv_router, 'deserialize_conversation', lambda _conversation: model)
     monkeypatch.setattr(conv_router, 'submit_with_context', lambda _executor, function: function())
-    if partial_proactive_engine:
-        # CI reproduced this: the file-backed module was already in sys.modules
-        # without persist_desktop_meeting_arrival_best_effort (circular import
-        # left it partially initialized). monkeypatch.setattr raising=True then
-        # fails before the route is exercised.
-        partial = ModuleType('utils.task_intelligence.proactive_engine')
-        partial.__file__ = 'partial-proactive-engine'
-        monkeypatch.setitem(sys.modules, 'utils.task_intelligence.proactive_engine', partial)
-    # create=True binds the in-function import seam whether or not that name
-    # already exists on the cached module.
-    with patch(
-        'utils.task_intelligence.proactive_engine.persist_desktop_meeting_arrival_best_effort',
-        create=True,
-    ), patch.object(conv_router, 'process_conversation', return_value=model) as process:
+    with patch.object(conv_router, 'process_conversation', return_value=model) as process:
         result = conv_router._enrich_deferred_conversation('u1', conversation)
 
     assert result['deferred'] is False
@@ -225,3 +211,19 @@ def test_successful_reprocess_schedules_durable_learning():
     from utils.speaker_learning_jobs import run_speaker_learning_jobs
 
     assert tasks[0] == (run_speaker_learning_jobs, ('u1', 'c1'))
+
+
+@pytest.fixture(autouse=True)
+def retry_ledger(monkeypatch):
+    from database import processing_attention as attention
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
+    client = StrictFirestore({('users', 'u1', 'conversations', 'c1'): {'id': 'c1', 'status': 'completed'}})
+    monkeypatch.setattr(attention, 'db', client)
+    monkeypatch.setattr(attention.firestore, 'transactional', lambda fn: fn)
+
+    def run(client, fn, *args, **kwargs):
+        with client.lock:
+            return fn(client.transaction(), *args, **kwargs)
+
+    monkeypatch.setattr(attention, 'run_transactional', run)

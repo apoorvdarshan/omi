@@ -271,11 +271,19 @@ struct SettingsContentView: View {
   // Notification settings (from backend)
   @State var dailySummaryEnabled: Bool = true
   @State var dailySummaryHour: Int = 22
+  @State var dailySummaryDepth: DailySummaryDepth = .brief
+  @State var savedDailySummaryDepth: DailySummaryDepth = .brief
+  @State var dailySummaryDepthSaving = false
+  @State var dailySummaryDepthRevision = 0
+  @State var dailySummaryDepthError: String?
   // UI-only date for the Summary Time stepper field; the backend stores whole hours,
   // so this glides freely while only the hour component is persisted.
   @State var dailySummaryTime: Date = SettingsControlMetrics.dailySummaryDate(
     forHour: 22, referenceDate: Date())
   @State var notificationsEnabled: Bool = NotificationService.areNotificationsEnabled()
+  /// When proactive notifications are silenced until, or `nil`. Held here rather than read
+  /// per-render so choosing a duration updates the row immediately.
+  @State var notificationsSnoozedUntil: Date? = NotificationService.currentSnoozeExpiry()
   // Start from the synchronous persisted mirror so reopening Settings never flashes
   // Balanced while the authoritative backend value is still hydrating.
   @State var notificationFrequency: Int = NotificationService.currentFrequencyLevel()
@@ -310,6 +318,8 @@ struct SettingsContentView: View {
   @State var activeBillingWebFlow: BillingWebFlow?
   @State var pendingSubscriptionPriceId: String?
   @State var pendingCheckoutSessionId: String?
+  @State var pendingCheckoutPlanId: String = "unknown"
+  @State var pendingCheckoutInterval: String = "unknown"
 
   var isLoadingSettings: Bool {
     get { viewModel.isLoadingBackendSettings }
@@ -324,6 +334,11 @@ struct SettingsContentView: View {
   var subscriptionError: String? {
     get { viewModel.subscriptionError }
     nonmutating set { viewModel.subscriptionError = newValue }
+  }
+
+  var subscriptionConfirmation: String? {
+    get { viewModel.subscriptionConfirmation }
+    nonmutating set { viewModel.subscriptionConfirmation = newValue }
   }
 
   let cooldownOptions = [1, 2, 5, 10, 15, 30, 60]
@@ -491,7 +506,7 @@ struct SettingsContentView: View {
     case troubleshooting = "Troubleshooting"
     case gmailReader = "Gmail Reader"
     case calendarSync = "Calendar Sync"
-    case developerKeys = "Developer API Keys"
+    case developerKeys = "Model Provider Keys"
 
     var icon: String {
       switch self {

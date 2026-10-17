@@ -175,6 +175,9 @@ class TaskFirestore:
         self.events.append(('transaction',))
         return _Batch(immediate=True, events=self.events)
 
+    def get_all(self, refs):
+        return [ref.get() for ref in refs]
+
     def tasks(self, conversation_id: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
         prefix = f'users/{UID}/action_items/'
         return {
@@ -639,6 +642,14 @@ def test_apple_states_recreate_without_carrying_stale_markers(world, marker):
     world.process('conv-1', [_item(BUDGET, DUE)])
     old_id = world.ids()[BUDGET]
     action_items_db.update_action_item(UID, old_id, {**marker, 'completed': True})
+    if (
+        marker.get('export_platform') == 'asana'
+        and marker.get('sync_requested') is True
+        and marker.get('exported') is True
+    ):
+        # Model a legacy row written before #21530 cleared the flag on every
+        # export; update_action_item now correctly clears it for cloud exports.
+        world.store.tasks()[old_id]['sync_requested'] = True
     world.process('conv-1', [_item(BUDGET, DUE)])
     new_id = world.ids()[BUDGET]
     assert new_id != old_id and old_id not in world.store.tasks()

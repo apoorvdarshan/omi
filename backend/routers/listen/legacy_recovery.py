@@ -14,6 +14,7 @@ from typing import Any
 from routers.listen import receiver as owner
 from utils.stt import legacy_replay
 from utils.stt.live_failure import MAX_STT_FAILOVERS
+from utils.stt.replay_capture_accounting import record_replay_sends
 
 
 def _finishing(socket: Any) -> bool:
@@ -116,7 +117,7 @@ async def rebuild_stt_socket_locked(self: Any) -> bool:
     self._pending_live_failover = hop
     # Replay capture positions after the last emitted segment.
     rejected_sample = legacy_replay.replay_chunks(
-        raw,
+        record_replay_sends(raw, epoch),
         replay,
         source=window_ring,
         provider=dead_provider or 'parakeet',
@@ -155,12 +156,19 @@ async def monitor_stt_death(self: Any) -> None:
     (``stt_failed`` + WebSocket 1011) as soon as the death latch flips (#10028).
     """
     while self.host.state.active and not self.host.state.stt_terminal_failure:
+        admission = getattr(self, 'cap_admission', None)
+        if admission is not None and admission.funded_paused is True:
+            if await self.host.wait(owner.STT_DEATH_POLL_INTERVAL_SECONDS):
+                return
+            continue
         socket = self.stt_socket
         outcome = getattr(socket, 'leg_outcome', None)
         if outcome is not None and outcome.owner_closing:
             return
         if socket is not None and owner.live_stt_socket_is_dead(socket):
             if await self._failover_stt_socket():
+                continue
+            if admission is not None and admission.funded_paused is True:
                 continue
             if outcome is not None and outcome.owner_closing:
                 return

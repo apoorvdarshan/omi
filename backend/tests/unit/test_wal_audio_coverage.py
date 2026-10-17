@@ -2,6 +2,7 @@
 
 import os
 import wave
+from pathlib import Path
 
 import pytest
 
@@ -10,7 +11,7 @@ from utils.sync.audio_coverage import (
     plan_unreceived_frames,
     validated_live_ranges,
 )
-from utils.sync.wal_audio_coverage import apply_wal_audio_coverage
+from utils.sync.wal_audio_coverage import apply_wal_audio_coverage, build_sync_source_frame_maps
 
 ROOT = '123e4567-e89b-12d3-a456-426614174000'
 EPOCH = 7
@@ -541,17 +542,24 @@ def test_flag_parse_default_on_tokens_and_typo_off(monkeypatch):
     assert sync_wal_audio_coverage_active_for('other-uid') is True
 
 
-def test_registered_runtime_env_on_four_services_both_envs():
+@pytest.fixture(scope='module')
+def runtime_env_manifest():
     import yaml
     from pathlib import Path
 
-    manifest = yaml.safe_load((Path(__file__).resolve().parents[2] / 'deploy' / 'runtime_env.yaml').read_text())
+    return yaml.safe_load((Path(__file__).resolve().parents[2] / 'deploy' / 'runtime_env.yaml').read_text())
+
+
+def test_registered_runtime_env_on_four_services_both_envs(runtime_env_manifest):
+    manifest = runtime_env_manifest
     for env_name in ('dev', 'prod'):
         services = manifest['environments'][env_name]['cloud_run']['services']
         for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
             entry = services[service]['env']['SYNC_WAL_AUDIO_COVERAGE_ENABLED']
             assert entry['value'] == 'true'
             assert entry['category'] == 'rollout'
+            fleet = services[service]['env']['SYNC_SAFETY_WAL_DEDUPE_ENABLED']
+            assert fleet == {'value': 'true', 'category': 'rollout'}
     classification = __import__('json').loads(
         (Path(__file__).resolve().parents[2] / '..' / 'config' / 'deployment-setting-classification.json')
         .resolve()
@@ -570,3 +578,24 @@ def test_registered_runtime_env_on_four_services_both_envs():
 
     walk(classification)
     assert 'SYNC_WAL_AUDIO_COVERAGE_ENABLED' in found
+    assert 'SYNC_SAFETY_WAL_DEDUPE_ENABLED' in found
+
+
+def test_opus_fs320_claim_maps_320_sample_frames(monkeypatch, tmp_path):
+    """An `opus` claim on an `_opus_fs320_` basename maps decoded frames to ordinals."""
+    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'true')
+    stem = 'audio_pendant1_opus_fs320_16000_1_fs320_1700000000'
+    wav_path = tmp_path / f'{stem}.wav'
+    with wave.open(str(wav_path), 'wb') as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(16000)
+        wav.writeframes(b'\x00' * 320 * 2 * 3)
+    claim = {**CLAIM, 'codec': 'opus', 'frame_count': 3}
+    maps = build_sync_source_frame_maps(
+        {f'{stem}.bin': claim},
+        [str(wav_path)],
+        {str(wav_path): [320, 320, 320]},
+    )
+    assert maps[str(wav_path)]['offsets'] == [0, 320, 640, 960]
+    assert maps[str(wav_path)]['incomplete'] is False

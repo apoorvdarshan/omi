@@ -23,7 +23,7 @@ real modules behind that later files could not re-import cleanly.
 import os
 from pathlib import Path
 from types import ModuleType
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -70,8 +70,10 @@ def _build_pipeline_fakes() -> dict:
         'utils.byok',
         'utils.cloud_tasks',
         'utils.conversations.factory',
+        'utils.conversations.lifecycle',
         'utils.conversations.location',
         'utils.conversations.process_conversation',
+        'utils.dream_vocabulary',
         'utils.sync.bridge',
         'utils.executors',
         'utils.fair_use',
@@ -94,6 +96,7 @@ def _build_pipeline_fakes() -> dict:
     ]
     for name in heavy_leaves:
         fakes[name] = AutoMockModule(name)
+    fakes['utils.dream_vocabulary'].keyterms = AsyncMock(side_effect=lambda uid, existing: existing)
     return fakes
 
 
@@ -115,7 +118,9 @@ def _prepare(pipeline, wav_paths):
 
     pipeline.run_blocking = _passthrough_run_blocking
     pipeline.decode_files_to_wav = MagicMock(return_value=list(wav_paths))
-    pipeline.retrieve_vad_segments = MagicMock(side_effect=lambda path, segmented, errors: segmented.add(path))
+    pipeline.retrieve_vad_segments = MagicMock(
+        side_effect=lambda path, segmented, errors, **_kwargs: segmented.add(path)
+    )
     pipeline._cleanup_files = MagicMock()
     pipeline.get_timestamp_from_path = MagicMock(return_value=123)
     pipeline.get_prerecorded_service = MagicMock(return_value=('deepgram', 'multi', 'nova-3'))

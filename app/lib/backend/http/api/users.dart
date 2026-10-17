@@ -762,6 +762,9 @@ Future<({List<DailySummary> items, bool ok})> getDailySummaries({int limit = 30,
 
   try {
     final data = wire.GeneratedDailySummariesResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    if (data.summaries == null) {
+      throw const FormatException('Invalid daily recap list response');
+    }
     return (items: data.summaries?.map(DailySummary.fromGenerated).toList() ?? <DailySummary>[], ok: true);
   } catch (e) {
     Logger.debug('Error parsing daily summaries: $e');
@@ -859,26 +862,6 @@ Future<bool> deleteDailySummary(String summaryId) async {
   return data.status == 'ok';
 }
 
-/// Generate a daily summary for a specific date (or today if not specified)
-/// Returns the summary_id on success, null on failure
-Future<String?> generateDailySummary({String? date}) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/daily-summary-settings/test',
-    headers: {},
-    method: 'POST',
-    body: date != null ? jsonEncode({'date': date}) : '',
-  );
-  if (response == null || response.statusCode != 200) return null;
-
-  try {
-    final data = wire.GeneratedDailySummaryTestResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    return data.summaryId;
-  } catch (e) {
-    Logger.debug('Error parsing generate summary response: $e');
-    return null;
-  }
-}
-
 // Onboarding State
 
 Future<Map<String, dynamic>?> getUserOnboardingState() async {
@@ -892,6 +875,7 @@ Future<Map<String, dynamic>?> getUserOnboardingState() async {
 }
 
 Future<bool> updateUserOnboardingState({
+  required AuthSessionSnapshot session,
   bool? completed,
   String? acquisitionSource,
   bool? deviceOnboardingCompleted,
@@ -907,17 +891,20 @@ Future<bool> updateUserOnboardingState({
     body['device_onboarding_completed'] = deviceOnboardingCompleted;
   }
 
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/onboarding',
-    headers: {},
-    method: 'PATCH',
-    body: jsonEncode(body),
-  );
-  if (response == null) return false;
-  Logger.debug('updateUserOnboardingState response: ${response.body}');
-  if (response.statusCode != 200) return false;
-  final data = wire.GeneratedUserStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-  return data.status == 'ok';
+  try {
+    final response = await sendUncaughtApiCall(
+      url: '${Env.apiBaseUrl}v1/users/onboarding',
+      headers: {},
+      method: 'PATCH',
+      body: jsonEncode(body),
+      canSend: () => AuthService.instance.isSessionSnapshotCurrent(session),
+    );
+    if (!AuthService.instance.isSessionSnapshotCurrent(session) || response.statusCode != 200) return false;
+    final data = wire.GeneratedUserStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return data.status == 'ok';
+  } catch (_) {
+    return false;
+  }
 }
 
 // Mentor Notification Settings

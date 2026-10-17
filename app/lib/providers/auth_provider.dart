@@ -47,6 +47,7 @@ class AuthenticationProvider extends BaseProvider {
   String? authToken;
   bool _loading = false;
   bool _requiresReauthentication = false;
+  AuthSessionExpirationReason? _sessionExpirationReason;
   int _sessionExpirationGeneration = 0;
   StreamSubscription<User?>? _authStateSubscription;
   StreamSubscription<User?>? _idTokenSubscription;
@@ -55,6 +56,9 @@ class AuthenticationProvider extends BaseProvider {
   @override
   bool get loading => _loading;
   bool get requiresReauthentication => _requiresReauthentication;
+
+  /// Why the current session expired, while [requiresReauthentication] is true.
+  AuthSessionExpirationReason? get sessionExpirationReason => _sessionExpirationReason;
   int get sessionExpirationGeneration => _sessionExpirationGeneration;
 
   AuthenticationProvider({bool initializeListeners = true}) {
@@ -122,6 +126,7 @@ class AuthenticationProvider extends BaseProvider {
       });
       _sessionExpiredSubscription = AuthService.instance.sessionExpiredEvents.listen((event) async {
         _requiresReauthentication = true;
+        _sessionExpirationReason = event.reason;
         _sessionExpirationGeneration++;
         user = null;
         authToken = null;
@@ -183,6 +188,7 @@ class AuthenticationProvider extends BaseProvider {
     final useWebAuth = Env.useWebAuth;
     if (!loading) {
       setLoadingState(true);
+      PlatformManager.instance.analytics.signInStarted('google');
       try {
         UserCredential? credential;
         if (PlatformService.isMobile && !useWebAuth) {
@@ -193,6 +199,7 @@ class AuthenticationProvider extends BaseProvider {
         if (credential != null && _hasFirebaseUser) {
           await _signIn(onSignIn, credential: credential, authProvider: 'google');
         } else {
+          PlatformManager.instance.analytics.signInFailed('google', cancelled: true);
           AppSnackbar.showSnackbarError(
             globalNavigatorKey.currentContext?.l10n.authFailedToSignInWithGoogle ??
                 'Failed to sign in with Google, please try again.',
@@ -200,6 +207,7 @@ class AuthenticationProvider extends BaseProvider {
         }
       } catch (e) {
         Logger.debug('OAuth Google sign in error: $e');
+        PlatformManager.instance.analytics.signInFailed('google', error: e);
         AppSnackbar.showSnackbarError(
           globalNavigatorKey.currentContext?.l10n.authenticationFailed ?? 'Authentication failed. Please try again.',
         );
@@ -212,6 +220,7 @@ class AuthenticationProvider extends BaseProvider {
     final useWebAuth = Env.useWebAuth;
     if (!loading) {
       setLoadingState(true);
+      PlatformManager.instance.analytics.signInStarted('apple');
       try {
         UserCredential? credential;
         if (PlatformService.isMobile && !useWebAuth && !Platform.isAndroid) {
@@ -222,6 +231,7 @@ class AuthenticationProvider extends BaseProvider {
         if (credential != null && _hasFirebaseUser) {
           await _signIn(onSignIn, credential: credential, authProvider: 'apple');
         } else {
+          PlatformManager.instance.analytics.signInFailed('apple', cancelled: true);
           AppSnackbar.showSnackbarError(
             globalNavigatorKey.currentContext?.l10n.authFailedToSignInWithApple ??
                 'Failed to sign in with Apple, please try again.',
@@ -229,6 +239,7 @@ class AuthenticationProvider extends BaseProvider {
         }
       } catch (e) {
         Logger.debug('OAuth Apple sign in error: $e');
+        PlatformManager.instance.analytics.signInFailed('apple', error: e);
         AppSnackbar.showSnackbarError(
           globalNavigatorKey.currentContext?.l10n.authenticationFailed ?? 'Authentication failed. Please try again.',
         );
@@ -264,6 +275,9 @@ class AuthenticationProvider extends BaseProvider {
   Future<void> _signIn(Function() onSignIn, {required UserCredential credential, required String authProvider}) async {
     final token = await _getIdToken();
 
+    if (token == null) {
+      PlatformManager.instance.analytics.signInFailed(authProvider, error: StateError('token'));
+    }
     if (token != null) {
       User currentUser;
       try {

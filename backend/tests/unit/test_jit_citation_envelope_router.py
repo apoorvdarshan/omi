@@ -25,6 +25,10 @@ def _format_jit_card_calls(conversations_by_call: list[list[dict]]) -> tuple[lis
         transcript_search.build_transcript_match_snippets = MagicMock(return_value=[])
         harness.install_module('utils.conversations.mcp_transcript_search', transcript_search)
 
+        transcript_safety = ModuleType('utils.conversations.transcript_for_llm')
+        transcript_safety.owner_safe_transcript_segments = lambda segments, **_kwargs: (list(segments), '')
+        harness.install_module('utils.conversations.transcript_for_llm', transcript_safety)
+
         module_name = 'utils.retrieval.tools.conversation_jit'
         source = harness.BACKEND_DIR / 'utils' / 'retrieval' / 'tools' / 'conversation_jit.py'
         spec = importlib.util.spec_from_file_location(module_name, source)
@@ -37,6 +41,7 @@ def _format_jit_card_calls(conversations_by_call: list[list[dict]]) -> tuple[lis
         collected: list[dict] = []
         configurable = {
             'user_id': 'jit-user-001',
+            'user_timezone': 'UTC',
             'evidence_references': references,
             'conversations_collected': collected,
         }
@@ -95,7 +100,7 @@ def test_numbered_jit_citation_delivers_matching_stable_evidence_envelope() -> N
             )
             yield None
 
-        router_module.execute_chat_stream = cited_stream
+        sys.modules['utils.chat_turn'].execute_chat_stream = cited_stream
 
         response = client.post(
             '/v2/messages',
@@ -155,7 +160,7 @@ def test_second_jit_tool_call_index_resolves_to_second_global_conversation() -> 
             )
             yield None
 
-        router_module.execute_chat_stream = cited_stream
+        sys.modules['utils.chat_turn'].execute_chat_stream = cited_stream
 
         response = client.post(
             '/v2/messages',

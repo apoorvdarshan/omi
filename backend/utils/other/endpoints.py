@@ -32,6 +32,7 @@ from utils.byok import (
 )
 from utils.executors import ExecutorSaturatedError, critical_executor, db_executor, run_blocking
 from utils.rate_limit_config import RATE_POLICIES, RATE_LIMIT_SHADOW, get_effective_limit
+from database.fsr_read_cache import request_read_scope
 from utils.jit_qa_admission import JITQAAdmissionError, enforce_jit_qa_uid
 
 logger = logging.getLogger(__name__)
@@ -60,12 +61,12 @@ async def run_critical_ws(fn: Callable[..., Any], *args: Any) -> Any:
 
 
 def get_user_deletion_wipe_status(uid: str) -> str | None:
-    """Read the durable deletion authority without a cache or fail-open shim."""
+    """Read deletion state; Redis faults always fall back to the durable authority."""
     return cast(Callable[[str], str | None], users_db.get_user_deletion_wipe_status)(uid)
 
 
 def _account_deletion_status(uid: str) -> str | None:
-    """Read the uncached deletion authority, failing closed if it is unavailable."""
+    """Read deletion state, failing closed if the durable authority is unavailable."""
     try:
         return get_user_deletion_wipe_status(uid)
     except Exception as error:
@@ -190,22 +191,22 @@ def _enforce_cutover_http_if_request(uid: str, request: Request | None) -> None:
     )
 
 
+def _recover_locked_content_if_request(uid: str, request: Request | None) -> None:
+    if request is not None and request.method in {'GET', 'POST', 'PATCH', 'PUT'}:
+        from utils.locked_content_recovery import recover_locked_content
+
+        recover_locked_content(uid)
+
+
 def get_current_user_uid(
     authorization: str = Header(None),
     x_app_platform: str = Header(None, alias='X-App-Platform'),
     x_device_id_hash: str = Header(None, alias='X-Device-Id-Hash'),
     x_app_version: str = Header(None, alias='X-App-Version'),
     request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request; direct callers omit it
+    _read_scope: Any = Depends(request_read_scope),
 ) -> str:
-    """FastAPI dependency for HTTP endpoints with Authorization header.
-
-    Side-effect: records the signup/last-active platform for the user via
-    `record_user_platform`, which is throttled via Redis to one Firestore
-    write per (uid, platform) every 10 minutes. Failures here never fail the
-    request — it's telemetry, not auth.
-
-    Also validates BYOK headers against Firestore enrollment (if applicable).
-    """
+    """Authenticate, enforce account fences and BYOK, then optional registration/recovery."""
     if not authorization:
         raise HTTPException(status_code=401, detail="Authorization header not found")
     elif len(str(authorization).split(' ')) != 2:
@@ -231,6 +232,12 @@ def get_current_user_uid(
     enforce_account_deletion_http_access(uid)
     _enforce_cutover_http_if_request(uid, request)
 
+    # The content-free fleet sink must reject hot callers without customer-store
+    # registration/recovery writes; security fences above and BYOK still apply.
+    if getattr(getattr(request, 'url', None), 'path', None) == '/v1/telemetry/fleet':
+        validate_byok_request(uid)
+        return uid
+
     try:
         record_user_platform(uid, x_app_platform)
     except Exception as e:  # noqa: BLE001 — telemetry must never fail the request
@@ -251,11 +258,10 @@ def get_current_user_uid(
     except Exception as e:  # noqa: BLE001 — telemetry must never fail the request
         logger.debug("record_client_device swallowed error for uid=%s: %s", uid, e)
 
-    # Validate BYOK keys against Firestore enrollment for ALL authenticated
-    # HTTP endpoints.  Runs after auth so we have the uid.  Lightweight: uses
-    # a 30-second TTL cache for Firestore state, and is a no-op when no BYOK
-    # headers are present.
+    # BYOK enrollment is cached; requests without BYOK headers do no work.
     validate_byok_request(uid)
+
+    _recover_locked_content_if_request(uid, request)
 
     return uid
 
@@ -266,6 +272,7 @@ def get_current_user_uid_no_byok_validation(
     x_device_id_hash: str = Header(None, alias='X-Device-Id-Hash'),
     x_app_version: str = Header(None, alias='X-App-Version'),
     request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request; direct callers omit it
+    _read_scope: Any = Depends(request_read_scope),
 ) -> str:
     """Auth dependency that skips BYOK fingerprint validation.
 
@@ -415,6 +422,10 @@ async def get_current_user_uid_ws_listen(
     the mutation in the handler's context; the blocking Firebase and
     Firestore calls are offloaded via ``run_blocking``.
     """
+    if websocket is not None:  # pyright: ignore[reportUnnecessaryComparison]  # Direct callers may omit WebSocket.
+        from utils.product_telemetry import bind_websocket_telemetry_context
+
+        bind_websocket_telemetry_context(websocket.headers)
     uid = await run_critical_ws(_verify_ws_auth, authorization)
     try:
         enforce_jit_qa_uid(uid)
@@ -666,7 +677,9 @@ def check_api_key_rate_limit(
     _enforce_rate_limit(key, policy_name, fail_closed=True)
 
 
-def with_rate_limit(auth_dependency: Callable[..., Any], policy_name: str) -> Callable[..., Any]:
+def with_rate_limit(
+    auth_dependency: Callable[..., Any], policy_name: str, *, fail_closed: bool = False
+) -> Callable[..., Any]:
     """Wrap an auth dependency with per-UID rate limiting.
 
     After auth succeeds, checks the rate limit for that UID.
@@ -675,13 +688,14 @@ def with_rate_limit(auth_dependency: Callable[..., Any], policy_name: str) -> Ca
     Args:
         auth_dependency: FastAPI dependency that returns a UID string.
         policy_name: Key in RATE_POLICIES (utils/rate_limit_config.py).
+        fail_closed: Reject requests when Redis is unavailable (default: False).
     """
     if policy_name not in RATE_POLICIES:
         raise ValueError(f"Unknown rate limit policy: {policy_name}")
 
     async def dependency(uid: str = Depends(auth_dependency)) -> str:
         try:
-            await run_blocking(critical_executor, _enforce_rate_limit, uid, policy_name)
+            await run_blocking(critical_executor, _enforce_rate_limit, uid, policy_name, fail_closed=fail_closed)
         except ExecutorSaturatedError as error:
             raise _executor_saturated_http_exception(error) from error
         return uid

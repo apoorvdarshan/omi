@@ -122,7 +122,8 @@ class ConversationDetailPage extends StatefulWidget {
   State<ConversationDetailPage> createState() => ConversationDetailPageState();
 }
 
-class ConversationDetailPageState extends State<ConversationDetailPage> with TickerProviderStateMixin {
+class ConversationDetailPageState extends State<ConversationDetailPage>
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   final scaffoldKey = GlobalKey<ScaffoldState>();
   final focusTitleField = FocusNode();
   final focusOverviewField = FocusNode();
@@ -136,6 +137,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
   // Page-owned playback state: the bar's player reports into it, the transcript
   // highlights and follows from it.
   late final ConversationPlaybackController _playbackController;
+
+  /// Held for dispose, when the page can no longer look the provider up.
+  late final ConversationDetailProvider _detailProvider;
   bool _isSharing = false;
   bool _reviewInterrupted = false;
   bool _isTogglingStarred = false;
@@ -250,6 +254,8 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
   @override
   void initState() {
     super.initState();
+    _detailProvider = context.read<ConversationDetailProvider>();
+    WidgetsBinding.instance.addObserver(this);
     unawaited(
       SiriIntegration.instance.setCurrentScreen("/conversation/${widget.conversation.id}", widget.conversation.id),
     );
@@ -396,8 +402,20 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     _controller?.animateTo(_transcriptTabIndex);
   }
 
+  /// Backgrounding the app ends a speaker-labeling pass like Done: one summary update, landing on
+  /// this page if the reader comes back.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _detailProvider.confirmSpeakerLabelingSession(conversationId: widget.conversation.id);
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    // Leaving mid-pass auto-confirms it: one summary update for the labels already saved.
+    _detailProvider.leaveSpeakerLabelingSession(widget.conversation.id);
     unawaited(SiriIntegration.instance.setCurrentScreen("", null));
     _cancelOwnedTimers();
     _separation.dispose();
@@ -562,12 +580,21 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
         routeToPage(context, TestPromptsPage(conversation: provider.conversation));
         break;
       case 'reprocess':
-        if (provider.loadingReprocessConversation) break;
+        if (provider.loadingReprocessConversation || provider.loadingReprocessTranscription) break;
         if (!context.read<ConnectivityProvider>().isConnected) {
           ConnectivityProvider.showNoInternetDialog(context);
           break;
         }
         await provider.reprocessConversation();
+        break;
+      case 'reprocess_transcription':
+        if (!context.read<ConnectivityProvider>().isConnected) {
+          ConnectivityProvider.showNoInternetDialog(context);
+          break;
+        }
+        if (!provider.loadingReprocessConversation && !provider.loadingReprocessTranscription) {
+          await provider.reprocessTranscription();
+        }
         break;
       case 'link_event':
         _handleLinkEvent(context, provider);
@@ -912,6 +939,12 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
           iconWidget: const FaIcon(FontAwesomeIcons.share, size: 16),
           onTap: _isDownloadingAudio ? null : () => _handleMenuSelection(context, 'download_audio', provider),
         ),
+      if (provider.conversation.hasAudio())
+        PullDownMenuItem(
+          title: l10n.reprocessTranscription,
+          iconWidget: const FaIcon(FontAwesomeIcons.microphone, size: 16),
+          onTap: () => _handleMenuSelection(context, 'reprocess_transcription', provider),
+        ),
     ];
     final developerGroup = <PullDownMenuEntry>[
       if (showDeveloperTools) ...[
@@ -1077,6 +1110,10 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                 }
               },
             );
+          case 'REPROCESS_TRANSCRIPTION_FAILED':
+            OmiFeedback.error(context, context.l10n.errorReprocessingTranscription);
+          case 'REPROCESS_TRANSCRIPTION_NO_AUDIO':
+            OmiFeedback.error(context, context.l10n.errorNoStoredAudio);
           case 'SEGMENT_EDIT_FAILED':
           case 'SUMMARY_EDIT_FAILED':
             OmiFeedback.error(context, context.l10n.failedToSaveCheckConnection);

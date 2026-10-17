@@ -111,6 +111,15 @@ def test_memory_maintenance_import_smoke_supplies_its_required_nonproduction_con
     }
 
 
+def test_x_connector_sync_import_smoke_supplies_its_required_nonproduction_config(contracts_module):
+    x_connector_sync_job = _contract(contracts_module, 'x-connector-sync-job')
+
+    assert dict(x_connector_sync_job.smoke_environment) == {
+        'ENCRYPTION_SECRET': '0123456789abcdef0123456789abcdef',
+        'OPENAI_API_KEY': 'fake-x-connector-sync-image-smoke-only',
+    }
+
+
 def test_registered_import_smokes_declare_their_import_time_environment(contracts_module):
     assert contracts_module.import_smoke_environment_errors(contracts_module.load_contracts()) == []
 
@@ -267,6 +276,25 @@ def test_dependency_probe_checks_dotted_module_when_namespace_exists(contracts_m
 
     with pytest.raises(AssertionError, match='google.cloud.tasks_v2'):
         exec(contracts_module._dependency_probe_code(('google.cloud.tasks_v2',)), {})
+
+
+def test_dependency_probe_reports_the_underlying_import_exception(contracts_module, monkeypatch):
+    """Image smoke must show why an installed distribution still fails to import."""
+
+    def raise_audio_metadata(name):
+        raise AttributeError("module 'torchaudio' has no attribute 'AudioMetaData'")
+
+    monkeypatch.setattr(importlib.util, 'find_spec', raise_audio_metadata)
+    monkeypatch.setattr(importlib, 'import_module', raise_audio_metadata)
+
+    with pytest.raises(
+        AssertionError,
+        match=(
+            "missing installed dependency modules: pyannote.audio.Pipeline; "
+            "pyannote.audio.Pipeline: AttributeError: module 'torchaudio' has no attribute 'AudioMetaData'"
+        ),
+    ):
+        exec(contracts_module._dependency_probe_code(('pyannote.audio.Pipeline',)), {})
 
 
 def test_image_smoke_is_network_isolated_and_uses_registered_entrypoint(contracts_module, monkeypatch):

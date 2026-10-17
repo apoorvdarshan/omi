@@ -251,6 +251,8 @@ class _CarryHarness:
 
     async def call(self, fn, *args, **kwargs):
         name = fn.__name__
+        if name == 'authority_snapshot':
+            return fn(*args, firestore_client=self.store, **kwargs)
         if name == 'open_live_recording_session':
             _uid, _sid, proposed = args
             return dict(
@@ -653,3 +655,23 @@ async def test_rollover_never_carries_from_a_torn_previous_row(monkeypatch, flag
     controller = harness.connect(_stamped_epoch())
     await controller.create_new_in_progress_conversation(rollover=True)
     assert 'manual_speaker_assignments' not in harness.rows[harness.pointer]
+
+
+def test_range_assignment_never_promotes_to_rollover_voice():
+    receipt = {
+        'generation': 4,
+        'segments': {
+            's0': {'generation': 4, 'person_id': 'p1', 'is_user': False, 'speaker_id': 0, 'segment_only': True},
+        },
+    }
+    assert carried_receipt(_conversation(receipt), SCOPE) == {}
+
+
+def test_carried_receipt_tolerates_wrong_typed_sections():
+    """A stored receipt whose sections are lists/strings must not crash the rollover
+    carry — the regression behind #20334 was _active_entries calling .items() on a
+    truthy non-Mapping. Wrong-typed sections coerce to {} and yield no carries."""
+    receipt = {'generation': 3, 'speakers': ['x'], 'segments': ['y']}
+    assert carried_receipt(_conversation(receipt), SCOPE) == {}
+    assert carried_receipt(_conversation({'speakers': 'not-a-mapping'}), SCOPE) == {}
+    assert carried_receipt(_conversation({'segments': 42}), SCOPE) == {}
