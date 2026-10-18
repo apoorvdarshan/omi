@@ -33,6 +33,7 @@ import type {
   WhatsNewPayload,
   AutomationPlan,
   StepResult,
+  TranslationResult,
   CodingAgentCommandOverrides,
   CodingAgentEvent,
   CodingAgentId,
@@ -579,6 +580,20 @@ const omi: OmiBridgeApi = {
     const listener = (): void => cb()
     ipcRenderer.on('conversations:changed', listener)
     return () => ipcRenderer.removeListener('conversations:changed', listener)
+  },
+  onDeepgramSignUpdate: (cb: (result: TranslationResult) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, result: TranslationResult): void => cb(result)
+    ipcRenderer.on('omi-sign-update', listener)
+    return () => ipcRenderer.removeListener('omi-sign-update', listener)
+  },
+  signLanguageSetEnabled: (enabled: boolean) =>
+    ipcRenderer.invoke('integrations:signLanguage:setEnabled', enabled),
+  signLanguageGetEnabled: (): Promise<boolean> =>
+    ipcRenderer.invoke('integrations:signLanguage:getEnabled'),
+  onSignLanguageEnabledChanged: (cb: (enabled: boolean) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, enabled: boolean): void => cb(enabled)
+    ipcRenderer.on('integrations:signLanguage:changed', listener)
+    return () => ipcRenderer.removeListener('integrations:signLanguage:changed', listener)
   },
   // --- Bar chat bridge (main-window side) ---
   onBarChatSend: (cb: (payload: { text: string; fromVoice: boolean }) => void) => {

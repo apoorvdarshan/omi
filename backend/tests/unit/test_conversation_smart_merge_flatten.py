@@ -781,7 +781,8 @@ def test_sync_absorb_then_smart_merge_flattens_one_hop(world):
     assert len(ids) == len(expected)
 
 
-def test_smart_merge_then_sync_absorb_flattens_new_donor_ancestry(world):
+def test_smart_merge_then_sync_absorb_flattens_new_donor_ancestry(world, monkeypatch):
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', UID)
     _flattened_world(world)
     world.add('d', 20, 8, sync_content_revision=1)
     world.add('g3', 19, 2)
@@ -1215,6 +1216,9 @@ def test_flattened_lineage_delete_purges_every_source(world, monkeypatch):
 
     calls = {'vector': [], 'index': [], 'survivor': []}
     monkeypatch.setattr(merge_conversations, 'firestore_db', store)
+    # Merge-source tombstone writes go through their own module-level client;
+    # bind it to the same fake store or the write hits real Firestore.
+    monkeypatch.setattr(merge_conversations.conversation_tombstones, 'db', store)
     monkeypatch.setattr(merge_conversations, 'MemoryService', FakeMemoryService)
     monkeypatch.setattr(merge_conversations, 'retraction_can_be_skipped', lambda *a, **k: False)
     monkeypatch.setattr(merge_conversations, 'delete_vector', lambda uid, cid: calls['vector'].append(cid))

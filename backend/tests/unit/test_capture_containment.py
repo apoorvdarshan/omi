@@ -7,6 +7,7 @@ coverage stays at 0.8125 >= 0.8.
 
 import logging
 import time
+from collections import UserDict
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -119,6 +120,13 @@ def test_dict_and_model_rows_agree():
     by_model = cc.measure_capture_containment(pendant, model)
     by_dict = cc.measure_capture_containment(pendant, laptop)
     assert by_model == by_dict
+
+
+def test_non_dict_mapping_rows_and_segments_agree():
+    pendant, laptop = complementary_pair()
+    mapping = UserDict(laptop)
+    mapping['transcript_segments'] = [UserDict(item) for item in laptop['transcript_segments']]
+    assert cc.measure_capture_containment(pendant, mapping) == cc.measure_capture_containment(pendant, laptop)
 
 
 def test_unrelated_meetings_with_user_speech_do_not_join():
@@ -341,28 +349,26 @@ def test_mode_defaults_shadow_and_fails_closed(monkeypatch):
 def test_log_line_is_fixed_format_and_content_free(caplog):
     decision = cc.CaptureContainment(True, 'contained', 52, 64, 4, 52, 188.0, 0.8125)
     with caplog.at_level(logging.INFO, logger=cc.logger.name):
-        cc.record_capture_containment(decision, mode='shadow', phase='jev', jev_p=0.75)
-        cc.record_capture_containment(
-            cc.CaptureContainment(False, 'timing'), mode='off', phase='rule', jev_p=float('nan')
-        )
+        cc.record_capture_containment(decision, mode='shadow')
+        cc.record_capture_containment(cc.CaptureContainment(False, 'timing'), mode='off')
     lines = [r.message for r in caplog.records]
     assert lines[0] == (
-        'event=capture_group_containment mode=shadow phase=jev would_join=true '
-        'reason=contained jev_p=0.750000 basis=full dropped_segments=0'
+        'event=capture_group_containment mode=shadow phase=rule would_join=true '
+        'reason=contained basis=full dropped_segments=0'
     )
     assert lines[1] == (
         'event=capture_group_containment mode=off phase=rule would_join=false '
-        'reason=timing jev_p=unavailable basis=full dropped_segments=0'
+        'reason=timing basis=full dropped_segments=0'
     )
 
 
-def test_log_labels_and_score_are_clamped(caplog):
+def test_log_labels_are_allowlisted_and_clamped(caplog):
     decision = SimpleNamespace(would_join=False, reason='not-a-reason')
     with caplog.at_level(logging.INFO, logger=cc.logger.name):
-        cc.record_capture_containment(decision, mode='bogus', phase='bogus', jev_p=1.5)
+        cc.record_capture_containment(decision, mode='bogus')
     assert caplog.records[0].message == (
         'event=capture_group_containment mode=off phase=rule would_join=false '
-        'reason=ineligible jev_p=unavailable basis=full dropped_segments=0'
+        'reason=ineligible basis=full dropped_segments=0'
     )
 
 
@@ -384,7 +390,7 @@ def test_log_basis_is_allowlisted_and_clamped(caplog, basis):
     with caplog.at_level(logging.INFO, logger=cc.logger.name):
         cc.record_capture_containment(decision, mode='shadow')
     expected = basis if basis in ('full', 'sampled') else 'full'
-    assert caplog.records[0].message.endswith('jev_p=unavailable basis=%s dropped_segments=0' % expected)
+    assert caplog.records[0].message.endswith('basis=%s dropped_segments=0' % expected)
     assert 'PRIVATE-SENTINEL' not in caplog.records[0].message
 
 
@@ -1029,6 +1035,15 @@ def test_whole_pair_bundle_check_budget_at_exact_limit_accepts(monkeypatch):
     assert not decision.would_join and decision.reason == 'bounds_bundle_checks'
 
 
+# CPU ceiling for one decision batch. These run at 0.03-0.18 s on an idle machine,
+# but process_time still grows on a shared CI runner whose cores and caches other
+# test processes are using, and 0.30 s failed there for unchanged code. The call,
+# token and cell budgets asserted below bound the work exactly; this ceiling,
+# the fast-unit guard's fail limit, only has to catch an order-of-magnitude
+# regression.
+CPU_CEILING_SECONDS = 1.0
+
+
 @pytest.mark.parametrize('layout', ['maximum', 'exhaustion', 'adversarial'])
 def test_whole_pair_decision_cpu_stays_bounded(layout):
     if layout == 'maximum':
@@ -1041,7 +1056,7 @@ def test_whole_pair_decision_cpu_stays_bounded(layout):
     for _ in range(6):
         cc.measure_capture_containment(first, second)
     elapsed = time.process_time() - start
-    assert elapsed < 0.30, elapsed
+    assert elapsed < CPU_CEILING_SECONDS, elapsed
 
 
 def test_two_hour_meeting_pair_stays_within_original_budgets(monkeypatch):
@@ -1063,7 +1078,7 @@ def test_two_hour_meeting_pair_stays_within_original_budgets(monkeypatch):
         elapsed = time.process_time() - start
         assert decision.would_join and decision.reason == 'contained' and decision.basis == 'sampled'
         assert decision.coverage >= cc.MIN_COVERAGE and decision.support_seconds >= cc.MIN_SUPPORT_SECONDS
-        assert elapsed < 0.30, elapsed
+        assert elapsed < CPU_CEILING_SECONDS, elapsed
         assert 0 < len(matched_inputs) <= cc.MAX_MATCHER_CALLS
         assert sum(tokens for _, tokens, _ in matched_inputs) <= cc.MAX_COMPARED_TOKENS
         assert sum(cells for _, _, cells in matched_inputs) <= cc.MAX_TOKEN_COMPARISONS
@@ -1080,7 +1095,7 @@ def test_full_population_two_hour_pair_abstains_on_matcher_budget(monkeypatch):
         decision = cc.measure_capture_containment(first, second, mode='on')
         elapsed = time.process_time() - start
         assert not decision.would_join and decision.reason == 'bounds_matcher_calls' and decision.basis == 'full'
-        assert len(calls) == cc.MAX_MATCHER_CALLS == 128 and elapsed < 0.30
+        assert len(calls) == cc.MAX_MATCHER_CALLS == 128 and elapsed < CPU_CEILING_SECONDS
 
 
 def test_two_hour_unrelated_pendant_never_joins():
@@ -1228,7 +1243,7 @@ def test_every_fixed_reason_survives_the_log_allowlist(caplog, reason):
     with caplog.at_level(logging.INFO, logger=cc.logger.name):
         cc.record_capture_containment(cc.CaptureContainment(False, reason), mode='shadow')
     assert len(caplog.records) == 1
-    assert 'reason=%s jev_p=unavailable' % reason in caplog.records[0].message
+    assert 'reason=%s basis=full' % reason in caplog.records[0].message
     assert 'reason=bounds ' not in caplog.records[0].message
 
 

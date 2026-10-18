@@ -1,6 +1,10 @@
+import 'package:omi/services/onboarding_sync_runtime.dart';
 import 'package:omi/env/physical_qualification.dart';
 import 'dart:async';
 import 'package:omi/services/proactivity/proactivity_runtime.dart';
+import 'package:omi/services/telemetry/client_telemetry.dart';
+import 'package:omi/services/telemetry/client_telemetry_flags.dart';
+import 'package:omi/services/telemetry/client_telemetry_transport.dart';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
@@ -33,6 +37,7 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/coordinators/provider_capture_external_actions.dart';
 import 'package:omi/core/app_shell.dart';
+import 'package:omi/env/backend_url_override.dart';
 import 'package:omi/env/dev_env.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/env/environment_profile.dart';
@@ -69,6 +74,7 @@ import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/integration_provider.dart';
+import 'package:omi/providers/messaging_channels_provider.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/locale_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
@@ -77,6 +83,7 @@ import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/speaker_tag_prompts_provider.dart';
+import 'package:omi/providers/review_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -95,6 +102,7 @@ import 'package:omi/services/devices/connectors/limitless_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/analytics/app_session_telemetry.dart';
+import 'package:omi/utils/analytics/phone_battery_sample_telemetry.dart';
 import 'package:omi/utils/analytics/mobile_performance_telemetry.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/debug_log_manager.dart';
@@ -237,11 +245,6 @@ Future _init() async {
 
   FlutterForegroundTask.initCommunicationPort();
 
-  // Service manager
-  if (!_serviceManagerInitialized) {
-    await PhysicalQualification.startupStage('service_manager_init', () => ServiceManager.init());
-    _serviceManagerInitialized = true;
-  }
   LimitlessDeviceConnection.realtimeSuppressionPolicy = () => SharedPreferencesUtil().batchModeEnabled;
 
   // Firebase
@@ -295,10 +298,21 @@ Future _init() async {
   }
 
   await PhysicalQualification.startupStage('shared_preferences', SharedPreferencesUtil.init);
+  // Persisted override must be live before auth resolution and product traffic.
+  BackendUrlOverride.restore(SharedPreferencesUtil().customBackendUrl);
+  // ConnectivityService snapshots its health-check URLs when ServiceManager
+  // initializes, so initialize it only after restoring (or clearing) the
+  // persisted override. This also makes release builds pin their flavor URL
+  // before the first connectivity probe.
+  if (!_serviceManagerInitialized) {
+    await PhysicalQualification.startupStage('service_manager_init', () => ServiceManager.init());
+    _serviceManagerInitialized = true;
+  }
   await PhysicalQualification.startupStage(
     'autoremove_default',
     SharedPreferencesUtil().migrateAutoRemoveSyncedCopiesDefault,
   );
+  OnboardingSyncRuntime.initialize();
   SiriIntegration.instance.installEvents();
 
   // TestFlight remains a distribution/telemetry signal; production-family
@@ -326,6 +340,7 @@ Future _init() async {
     () => resolveStartupAuth(() => AuthService.instance.getIdToken()),
   );
   if (isAuth) {
+    OnboardingSyncRuntime.wake();
     final firebaseUser = FirebaseAuth.instance.currentUser;
     PlatformManager.instance.analytics.identify(
       authMethod:
@@ -519,9 +534,29 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   final AppSessionTelemetry _appSessionTelemetry = AppSessionTelemetry();
+  late final PhoneBatterySampleTelemetry _phoneBatteryTelemetry = PhoneBatterySampleTelemetry(
+    captureContext: () {
+      final context = globalNavigatorKey.currentContext;
+      if (context == null) return (source: 'unknown', mode: 'unknown');
+      final capture = context.read<CaptureProvider>();
+      if (capture.isPhoneMicBatchRecording) return (source: 'phone_mic', mode: 'batch');
+      if (capture.isPendantBatchRecording) return (source: 'pendant', mode: 'batch');
+      final source = capture.liveCaptureSource;
+      if (source == null) return (source: 'none', mode: 'none');
+      if (source == 'phone') return (source: 'phone_mic', mode: 'live');
+      if (source == 'apple_watch') return (source: 'watch', mode: 'live');
+      if (source == 'omi' || source == 'friend') return (source: 'pendant', mode: 'live');
+      return (source: 'other', mode: 'live');
+    },
+  );
   late final MobilePerformanceTelemetry _performanceTelemetry = MobilePerformanceTelemetry(
-    emit: (name, properties) => PlatformManager.instance.analytics.track(name, properties: properties),
+    emit: (name, properties) {
+      DebugLogManager.logEvent('mobile_render_diagnostic', {
+        for (final entry in properties.entries) entry.key: entry.value,
+      });
+    },
     identityEpoch: () => AnalyticsManager.identityEpoch,
+    diagnosticsEnabled: () => SharedPreferencesUtil().devLogsToFileEnabled,
   );
 
   @override
@@ -532,7 +567,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     if (!PhysicalQualification.enabled) {
       _appSessionTelemetry.recordColdStart();
       _performanceTelemetry.attach();
+      unawaited(_phoneBatteryTelemetry.start());
       PlatformManager.instance.analytics.recordTelemetryHealth();
+      if (ClientTelemetryFlags.migrationEnabled) installClientTelemetryTransport();
     }
     if (SharedPreferencesUtil().devLogsToFileEnabled) {
       DebugLogManager.setEnabled(true);
@@ -545,6 +582,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     if (!PhysicalQualification.enabled) _performanceTelemetry.dispose();
+    _phoneBatteryTelemetry.dispose();
     super.dispose();
   }
 
@@ -554,6 +592,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   void _deinit() {
+    unawaited(OnboardingSyncRuntime.dispose());
     Logger.debug("App > _deinit");
     ServiceManager.instance().deinit();
     ApiClient.dispose();
@@ -579,6 +618,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     super.didChangeAppLifecycleState(state);
 
     if (state == AppLifecycleState.resumed) {
+      OnboardingSyncRuntime.setActive(true);
       unawaited(ProactivityRuntime.outbox.flush());
       if (!PhysicalQualification.enabled) {
         _appSessionTelemetry.recordResumed();
@@ -587,6 +627,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       }
       unawaited(_refreshAccountCutoverThenWakeUploads());
     } else if (state == AppLifecycleState.paused) {
+      OnboardingSyncRuntime.setActive(false);
+      ClientTelemetry.instance.onBackground();
       if (!PhysicalQualification.enabled) {
         _appSessionTelemetry.recordBackgrounded();
         _performanceTelemetry.setForeground(false);
@@ -594,6 +636,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       SyncReconciler.instance.onBackground();
       _onAppPaused();
     } else if (state == AppLifecycleState.detached) {
+      ClientTelemetry.instance.onBackground();
       _deinit();
     }
   }
@@ -613,6 +656,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ListenableProvider(create: (context) => AppProvider()),
         ChangeNotifierProvider(create: (context) => PeopleProvider()),
         ChangeNotifierProvider(create: (context) => SpeakerTagPromptsProvider()),
+        ChangeNotifierProvider(create: (context) => ReviewProvider()),
         ChangeNotifierProvider(create: (context) => UsageProvider()),
         ChangeNotifierProxyProvider<AppProvider, MessageProvider>(
           create: (context) => MessageProvider(),
@@ -642,9 +686,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               (previous?..setConversationProvider(conversation)) ?? LocalRecordingsProvider(),
         ),
         ChangeNotifierProxyProvider2<CaptureProvider, LocalRecordingsProvider, DeviceProvider>(
-          create: (context) => DeviceProvider(),
+          create: (context) => DeviceProvider()..nativeLink.bindAppLifecycle(),
           update: (BuildContext context, captureProvider, localRecordings, DeviceProvider? previous) =>
-              (previous?..setProviders(captureProvider, localRecordings)) ?? DeviceProvider(),
+              (previous?..setProviders(captureProvider, localRecordings)) ??
+              (DeviceProvider()..nativeLink.bindAppLifecycle()),
         ),
         ChangeNotifierProxyProvider<DeviceProvider, OnboardingProvider>(
           create: (context) => OnboardingProvider(),
@@ -673,6 +718,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ChangeNotifierProvider(create: (context) => SyncProvider()),
         ChangeNotifierProvider(lazy: true, create: (context) => TaskIntegrationProvider()),
         ChangeNotifierProvider(lazy: true, create: (context) => IntegrationProvider()),
+        ChangeNotifierProvider(lazy: true, create: (context) => MessagingChannelsProvider()),
         ChangeNotifierProvider(lazy: true, create: (context) => FolderProvider()),
         ChangeNotifierProvider(lazy: true, create: (context) => McpProvider()),
         ChangeNotifierProvider(lazy: true, create: (context) => PaymentMethodProvider()),

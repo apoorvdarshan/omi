@@ -1,8 +1,9 @@
 import asyncio
 import hashlib
+import os
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, BackgroundTasks
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 from datetime import datetime, timezone
 
 import database.conversation_scan as conversation_scan_db
@@ -11,10 +12,21 @@ import database._client as db_client_module
 import database.action_items as action_items_db
 import database.redis_db as redis_db
 import database.users as users_db
+from utils.agent_capabilities.errors import TRANSCRIPT_EDIT_HTTP_ERRORS
+from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
-from database.vector_db import delete_action_item_vector, delete_vector, delete_transcript_chunk_vectors
+from database.vector_db import (
+    delete_action_item_vector,
+    delete_action_item_vectors_batch,
+    delete_vector,
+    delete_transcript_chunk_vectors,
+)
 import database.vector_db as vector_db
-from utils.other.storage import delete_conversation_audio_files
+from utils.other.storage import (
+    delete_privacy_conversation_audio,
+    delete_owner_prompt_embedding_cache,
+    get_app_thumbnail_url,
+)
 from utils.screen_frames.store import delete_conversation_screen_frames
 from models.calendar_context import CalendarMeetingContext
 from models.client_processing import PROJECTION_FAMILY_FIELDS, ClientProcessing
@@ -40,8 +52,10 @@ from models.conversation import (
     UpdateSummaryRequest,
     project_shared_conversation,
 )
+from utils.conversations.fragment_visibility import is_completed_rule_discard
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.processing_trigger import ProcessingTrigger
+from utils.conversations.reprocess_contract import reprocess_result_contract_enabled
 from utils.conversations.analytics import build_conversation_analytics
 from utils.conversations.render import redact_conversations_for_list
 from utils.conversations.onopen_translation import translate_open_page
@@ -56,6 +70,7 @@ from models.geolocation import Geolocation
 from models.app import App
 from pydantic import BaseModel, Field, ValidationError
 from models.transcript_segment import TranscriptSegment
+from models.transcription_reprocess import TranscriptionReprocessErrorResponse
 from models.other import Person
 from models.shared import StatusResponse
 
@@ -70,10 +85,15 @@ from utils.conversations.process_conversation import (
     run_first_open_derived_work,
     retrieve_in_progress_conversation,
 )
+from utils.conversations.reprocess_transcription import (
+    StoredAudioEmptyTranscriptError,
+    StoredAudioTranscriptionFailedError,
+    StoredAudioUnavailableError,
+    transcribe_stored_conversation_audio,
+)
 from utils.conversations import lifecycle as lifecycle_service
-from utils.conversations.capture_shadow_outcomes import record_capture_outcome
 from utils.conversations import share_email
-from utils.conversations.meeting_receipt import record_and_persist_finalized_meeting_receipt
+from utils.conversations.meeting_receipt import record_finalized_meeting_receipt
 from utils.integration_telemetry import emit_posthog_event
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
@@ -238,7 +258,7 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
             # here closes the gap without waking Chat for processing rows.
             if enriched is not None:
                 try:
-                    record_and_persist_finalized_meeting_receipt(uid, enriched)
+                    record_finalized_meeting_receipt(uid, enriched)
                 except Exception:
                     logger.exception('lazy enrich receipt publish failed uid=%s conv=%s', uid, conversation_id)
             logger.info(f"lazy enrich complete uid={uid} conv={conversation_id}")
@@ -744,7 +764,11 @@ def get_conversation_finalization_status(
         400: {'description': 'The selected app cannot summarize conversations'},
         403: {'description': 'The selected app is not available to this user'},
         404: {'description': 'The conversation or selected app does not exist'},
-        409: {'description': 'The selected app is disabled or not enabled by this user'},
+        409: {
+            'description': 'The selected app is disabled or not enabled by this user, or the conversation '
+            'is already being processed (detail code conversation_processing_in_progress)'
+        },
+        502: {'description': 'The selected app produced no summary (detail code app_result_failed)'},
     },
     tags=['conversations'],
 )
@@ -772,6 +796,9 @@ def reprocess_conversation(
     # on the raw doc because the Conversation model does not carry `deleted`.
     if conversations_db.is_soft_deleted(conversation):
         raise HTTPException(status_code=404, detail="Conversation not found")
+    from database import processing_attention as attention_db
+
+    input_generation = attention_db.generation(conversation)
     was_discarded = bool(conversation.get('discarded'))
     conversation = deserialize_conversation(conversation)
     if not language_code:
@@ -779,6 +806,63 @@ def reprocess_conversation(
 
     explicit_app = _validate_reprocess_app_selection(uid, app_id) if app_id else None
 
+    # Reprocess is a new user intent once the prior writer finishes. Share the
+    # active writer across app selections to avoid racing summary writes.
+    try:
+        operation, owned = attention_db.claim(
+            uid, conversation_id, expected_generation=input_generation, restart_succeeded=True
+        )
+    except attention_db.ClaimRejected as error:
+        raise HTTPException(status_code=404, detail='Conversation not found') from error
+    if not owned or not attention_db.owns_live_claim(uid, operation):
+        if reprocess_result_contract_enabled():
+            # Echoing the stale row as 200 made clients report "updated" with
+            # no new summary; another writer still owns this conversation.
+            raise HTTPException(status_code=409, detail=REPROCESS_IN_PROGRESS_ERROR_DETAIL)
+        return deserialize_conversation(_get_valid_conversation_by_id(uid, conversation_id))
+    try:
+        result = execute_reprocess(
+            uid,
+            conversation_id,
+            conversation,
+            language_code,
+            app_id,
+            explicit_app,
+            was_discarded,
+            background_tasks,
+            response,
+        )
+    except Exception:
+        attention_db.finish(uid, operation, 'failed')
+        raise
+    attention_db.finish(uid, operation, 'succeeded' if _reprocess_succeeded(result, app_id) else 'failed')
+    return result
+
+
+REPROCESS_IN_PROGRESS_ERROR_DETAIL = {
+    'code': 'conversation_processing_in_progress',
+    'message': 'Conversation is already being processed',
+}
+
+
+def _reprocess_succeeded(result: Any, app_id: Optional[str]) -> bool:
+    """Attention outcome for one user reprocess.
+
+    An explicit app selection succeeds on that app's non-empty result: it is the
+    summary the user asked for, and an empty notes overview must not mark it
+    failed. Otherwise the regenerated Omi notes overview decides.
+    """
+    if app_id:
+        return any(
+            getattr(item, 'app_id', None) == app_id and (getattr(item, 'content', None) or '').strip()
+            for item in getattr(result, 'apps_results', None) or []
+        )
+    return bool(getattr(getattr(result, 'structured', None), 'overview', None))
+
+
+def execute_reprocess(
+    uid, conversation_id, conversation, language_code, app_id, explicit_app, was_discarded, background_tasks, response
+):
     receipt_applied: list = []
 
     processed_conversation = process_conversation(
@@ -808,6 +892,63 @@ def reprocess_conversation(
         background_tasks,
         response=response,
         receipt_applied=bool(receipt_applied and receipt_applied[-1]),
+    )
+
+
+@router.post(
+    '/v1/conversations/{conversation_id}/reprocess-transcription',
+    response_model=Conversation,
+    responses={
+        400: {
+            'model': TranscriptionReprocessErrorResponse,
+            'description': 'No stored audio is available, or STT produced no speech',
+        },
+        404: {'description': 'The conversation does not exist'},
+        502: {
+            'model': TranscriptionReprocessErrorResponse,
+            'description': 'Stored audio could not be loaded or the transcription provider failed',
+        },
+    },
+    tags=['conversations'],
+)
+def reprocess_conversation_transcription(
+    conversation_id: str,
+    language_code: Optional[str] = None,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:reprocess")),
+):
+    """Re-run prerecorded STT on stored audio, then the existing enrichment pipeline.
+
+    Unlike ``POST .../reprocess``, which only regenerates the summary from the
+    current transcript, this replaces transcript segments from stored audio and
+    then calls ``process_conversation`` with the same ``USER_REPROCESS`` trigger.
+    """
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    if conversations_db.is_soft_deleted(conversation):
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    conversation = deserialize_conversation(conversation)
+    if not language_code:
+        language_code = conversation.language or 'en'
+
+    try:
+        conversation.transcript_segments = transcribe_stored_conversation_audio(uid, conversation, language_code)
+    except StoredAudioUnavailableError:
+        raise HTTPException(
+            status_code=400,
+            detail={'code': 'no_audio', 'message': 'No stored audio available to retranscribe'},
+        )
+    except StoredAudioEmptyTranscriptError:
+        raise HTTPException(
+            status_code=400, detail={'code': 'no_speech', 'message': 'Transcription produced no speech'}
+        )
+    except StoredAudioTranscriptionFailedError:
+        raise HTTPException(status_code=502, detail={'code': 'failed', 'message': 'Stored audio transcription failed'})
+
+    return process_conversation(
+        uid,
+        language_code,
+        conversation,
+        trigger=ProcessingTrigger.USER_REPROCESS,
+        app_usage_attribution=AppUsageAttribution.NON_USER_REPROCESS,
     )
 
 
@@ -920,6 +1061,7 @@ def get_conversations(
         folder_id=folder_id,
         starred=starred,
         budget=budget,
+        list_fields_only=True,
     )
 
     redact_conversations_for_list(conversations)
@@ -980,7 +1122,7 @@ def get_conversations_count(
 def get_conversation_by_id(
     conversation_id: str,
     source: Optional[str] = Query(None, description="Optional provenance constraint for a detail read"),
-    include_discarded: bool = Query(True),
+    include_discarded: Optional[bool] = Query(None),
     uid: str = Depends(auth.get_current_user_uid),
     include_translations: bool = Query(False),
     translation_cursor: Optional[str] = Query(None),
@@ -993,8 +1135,16 @@ def get_conversation_by_id(
             raise HTTPException(
                 status_code=400, detail="Only source=omi is supported for provenance-constrained detail reads"
             )
-        if conversation.get('source') != 'omi' or (not include_discarded and conversation.get('discarded', False)):
+        if conversation.get('source') != 'omi':
             raise HTTPException(status_code=404, detail="Conversation not found")
+    # Omitted keeps the historical detail default (show a stored discard).
+    # A completed rule-discard is noise, not an archive row: the web permalink
+    # omits this flag, so it stays hidden unless the caller explicitly asks.
+    show_discarded = True if include_discarded is None else include_discarded
+    if is_completed_rule_discard(conversation) and include_discarded is not True:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if not conversations_db.is_visible_conversation(conversation, include_discarded=show_discarded):
+        raise HTTPException(status_code=404, detail="Conversation not found")
     # Lazy processing: a desktop conversation stored raw (deferred) for a freemium/Neo user is
     # enriched on first open. Other conversations are returned unchanged.
     if conversation.get('deferred'):
@@ -1198,16 +1348,8 @@ async def auto_link_calendar_event(conversation_id: str, uid: str = Depends(auth
     ),
 )
 def separate_conversation_from_capture_group(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    conversation = _get_valid_conversation_by_id(uid, conversation_id)
-    group = conversation.get('capture_group') or {}
+    _get_valid_conversation_by_id(uid, conversation_id)
     changed = conversations_db.leave_capture_group(uid, conversation_id, sticky=True)
-    if changed:
-        record_capture_outcome(
-            uid,
-            'separate',
-            [m['id'] for m in group.get('members', []) if m.get('id')],
-            separated_id=conversation_id,
-        )
     return StatusResponse(status='ok' if changed else 'unchanged')
 
 
@@ -1240,12 +1382,9 @@ def patch_conversation_segment_text(
 ):
     _get_valid_conversation_by_id(uid, conversation_id)
     result = conversations_db.update_conversation_segment_text(uid, conversation_id, data.segment_id, data.text)
-    if result == 'not_found':
-        raise HTTPException(status_code=404, detail="Conversation not found")
-    if result == 'locked':
-        raise HTTPException(status_code=402, detail="Unlimited Plan Required to access this conversation.")
-    if result == 'segment_not_found':
-        raise HTTPException(status_code=404, detail="Segment not found")
+    if result != 'ok':
+        status, detail = TRANSCRIPT_EDIT_HTTP_ERRORS.get(result, (500, 'Transcript edit failed'))
+        raise HTTPException(status_code=status, detail=detail)
     return {'status': 'Ok'}
 
 
@@ -1269,7 +1408,7 @@ def get_conversation_transcripts_by_models(conversation_id: str, uid: str = Depe
     return conversations_db.get_conversation_transcripts_by_model(uid, conversation_id)
 
 
-@router.delete("/v1/conversations/{conversation_id}", response_model=StatusResponse, tags=['conversations'])
+@router.delete("/v1/conversations/{conversation_id}", status_code=204, tags=['conversations'])
 def delete_conversation(
     conversation_id: str,
     background_tasks: BackgroundTasks,
@@ -1281,6 +1420,11 @@ def delete_conversation(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     logger.info(f'delete_conversation {conversation_id} {uid} cascade={cascade}')
+
+    # Commit intent before retraction or cleanup; failures must never undo this guard.
+    conversation_tombstones.record_deletion(uid, conversation_id)
+    # Prompt vectors are derived evidence even when primary audio is retained.
+    delete_owner_prompt_embedding_cache(uid, conversation_id)
 
     if cascade:
         # Delete associated memories and action items first so partial failure cannot orphan derived data.
@@ -1294,7 +1438,7 @@ def delete_conversation(
             except ConversationReplacementConflictError as error:
                 logger.exception('cascade retraction conflicted uid=%s conversation_id=%s', uid, conversation_id)
                 # Concurrent same-account memory writes kept winning the
-                # account-global control CAS. Nothing has been deleted yet, so
+                # account-global control CAS. Primary content has not been deleted yet, so
                 # fail closed with a retryable answer instead of an opaque 500;
                 # the retraction is idempotent, a retried delete is safe (#11726).
                 raise HTTPException(
@@ -1303,7 +1447,11 @@ def delete_conversation(
                 ) from error
             except RuntimeError as error:
                 # Isolated router tests stub database/utils.other at import time.
-                if type(error).__name__ != "DestructiveOperationInProgress":
+                if type(error).__name__ not in {
+                    "DestructiveGateTakeover",
+                    "DestructiveOperationInProgress",
+                    "LegalHoldAuthorityUnavailable",
+                }:
                     raise
                 from utils.other.account_gate_http import account_gate_busy_http_exception
 
@@ -1318,7 +1466,21 @@ def delete_conversation(
                 sync_action_item_reminder(
                     user_id=uid, action_item_id=item['id'], description='', completed=True, due_at=None
                 )
-        background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
+        # The rows are gone from Firestore but their Pinecone vectors would survive as ghosts:
+        # find_similar_action_items feeds the extraction prompt so the LLM can suppress duplicate
+        # tasks, and a deleted task's vector makes a real new task look like a duplicate.
+        if armed:
+            try:
+                delete_action_item_vectors_batch(uid, [item['id'] for item in armed])
+            except Exception as e:
+                logger.error(f"Error deleting task vectors for {conversation_id}: {e}")
+        # Snapshot retained bridge donors before shared metadata cleanup removes them.
+        source_ids = (
+            (conversations_db.get_conversation(uid, conversation_id) or {}).get('sync_merged_from', [])
+            if os.getenv('BUCKET_CANONICAL_AUDIO')
+            else []
+        )
+        background_tasks.add_task(delete_privacy_conversation_audio, uid, conversation_id, source_ids=source_ids)
 
     # Screen frames (meeting-note screenshots) are primary conversation
     # content, not cascade-only derived data, so this runs unconditionally
@@ -1336,7 +1498,7 @@ def delete_conversation(
     delete_transcript_chunk_vectors(uid, conversation_id)
 
     record_product_event('conversation_deleted', request=http_request)
-    return {"status": "Ok"}
+    # 204, no body: released mobile clients gate delete success on exactly 204.
 
 
 @router.get(
@@ -1426,13 +1588,19 @@ def set_action_item_status(
             new_completed_status = data.values[i]
 
             for ai in description_to_items.get(action_item.description, []):
-                action_items_db.mark_action_item_completed(uid, ai['id'], bool(new_completed_status))
+                if not action_items_db.mark_action_item_completed(uid, ai['id'], bool(new_completed_status)):
+                    continue
+                updated_item = action_items_db.get_action_item(uid, ai['id'])
+                if not updated_item:
+                    continue
                 sync_action_item_reminder(
                     user_id=uid,
                     action_item_id=ai['id'],
-                    description=ai.get('description', ''),
-                    completed=bool(new_completed_status),
-                    due_at=ai.get('due_at'),
+                    description=updated_item.get('description', ''),
+                    completed=bool(updated_item.get('completed')),
+                    due_at=updated_item.get('due_at'),
+                    status=updated_item.get('status'),
+                    deleted=bool(updated_item.get('deleted')),
                 )
     except Exception as e:
         # Don't break conversation route if mirrored update fails
@@ -1526,6 +1694,7 @@ def _assign_manual_speaker(
     speaker_id=None,
     segment_index=None,
     use_for_speech_training=True,
+    time_range=None,
 ):
     if assign_type not in {'is_user', 'person_id'}:
         raise HTTPException(status_code=400, detail='Invalid assign type')
@@ -1544,6 +1713,7 @@ def _assign_manual_speaker(
             use_for_speech_training=use_for_speech_training,
             rejection={'kind': 'not_me', 'person_id': None} if assign_type == 'is_user' and not is_user else None,
             background_tasks=background_tasks,
+            **({"time_range": time_range} if time_range is not None else {}),
         )
     except LookupError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
@@ -1604,7 +1774,13 @@ def set_assignee_conversation_speaker(
     use_for_speech_training: bool = True,
     uid: str = Depends(auth.get_current_user_uid),
     background_tasks: BackgroundTasks = None,
+    start: Annotated[
+        Optional[float], Query(description="Range start in conversation-offset seconds (inclusive)")
+    ] = None,
+    end: Annotated[Optional[float], Query(description="Range end in conversation-offset seconds (exclusive)")] = None,
 ):
+    if (start is None) != (end is None):
+        raise HTTPException(status_code=422, detail="Supply both start and end for a speaker assignment range")
     return _assign_manual_speaker(
         conversation_id,
         assign_type,
@@ -1614,6 +1790,7 @@ def set_assignee_conversation_speaker(
         speaker_id=speaker_id,
         segment_ids=data.segment_ids if data else None,
         use_for_speech_training=use_for_speech_training,
+        time_range=(start, end) if start is not None else None,
     )
 
 
@@ -1863,7 +2040,12 @@ def get_shared_conversation_by_id(conversation_id: str):
     if not uid:
         raise HTTPException(status_code=404, detail="Conversation is private")
 
-    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    try:
+        conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail='Shared conversation unavailable') from exc
     visibility = conversation.get('visibility', ConversationVisibility.private)
     if not visibility or visibility == ConversationVisibility.private:
         raise HTTPException(status_code=404, detail="Conversation is private")
@@ -2117,34 +2299,49 @@ async def search_conversations_endpoint(
     response_model=ConversationSuggestedAppsResponse,
     tags=['conversations'],
 )
-def get_conversation_suggested_apps(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    from utils.apps import get_available_app_by_id_with_reviews, get_is_user_paid_app
-
-    conversation_data = _get_valid_conversation_by_id(uid, conversation_id)
+async def get_conversation_suggested_apps(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    conversation_data = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
     conversation = deserialize_conversation(conversation_data)
 
-    # Get suggested app models with full data (similar to /v1/apps endpoint)
-    suggested_apps = []
-    for app_id in conversation.suggested_summarization_apps:
-        app_data = get_available_app_by_id_with_reviews(app_id, uid)
-        if app_data:
-            app = App(**app_data)
-            # Add user-specific data
-            app.is_user_paid = get_is_user_paid_app(app.id, uid)
+    # Each app costs several independent Firestore/Redis round-trips (reviews,
+    # installs, enablement, paid status); hydrate the apps concurrently on the
+    # db pool instead of serially, preserving the suggestion order. The cap
+    # keeps one request from occupying a large share of the shared pool.
+    slots = asyncio.Semaphore(_SUGGESTED_APP_HYDRATION_CONCURRENCY)
 
-            # Add payment link with user reference
-            if app.payment_link:
-                app.payment_link = f'{app.payment_link}?client_reference_id=uid_{uid}'
+    async def hydrate(app_id: str) -> Optional[App]:
+        async with slots:
+            return await run_blocking(db_executor, _hydrate_suggested_app, app_id, uid)
 
-            # Generate thumbnail URLs if thumbnails exist
-            if app.thumbnails:
-                from utils.other.storage import get_app_thumbnail_url
-
-                app.thumbnail_urls = [get_app_thumbnail_url(thumbnail_id) for thumbnail_id in app.thumbnails]
-
-            suggested_apps.append(app)
+    hydrated = await asyncio.gather(*(hydrate(app_id) for app_id in conversation.suggested_summarization_apps))
+    suggested_apps = [app for app in hydrated if app is not None]
 
     return {"suggested_apps": [app.model_dump() for app in suggested_apps], "conversation_id": conversation_id}
+
+
+_SUGGESTED_APP_HYDRATION_CONCURRENCY = 3
+
+
+def _hydrate_suggested_app(app_id: str, uid: str) -> Optional[App]:
+    """One suggested app with full data (similar to /v1/apps), or None when unavailable."""
+    # Function-scope for the same isolation reason as _validate_reprocess_app_selection.
+    from utils.apps import get_available_app_by_id_with_reviews, get_is_user_paid_app
+
+    app_data = get_available_app_by_id_with_reviews(app_id, uid)
+    if not app_data:
+        return None
+    app = App(**app_data)
+    # Add user-specific data
+    app.is_user_paid = get_is_user_paid_app(app.id, uid)
+
+    # Add payment link with user reference
+    if app.payment_link:
+        app.payment_link = f'{app.payment_link}?client_reference_id=uid_{uid}'
+
+    # Generate thumbnail URLs if thumbnails exist
+    if app.thumbnails:
+        app.thumbnail_urls = [get_app_thumbnail_url(thumbnail_id) for thumbnail_id in app.thumbnails]
+    return app
 
 
 @router.get(

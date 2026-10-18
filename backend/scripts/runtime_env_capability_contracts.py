@@ -19,6 +19,7 @@ from config.free_tier_rollout import (
 )
 from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
 from scripts.runtime_env_durable_dispatch_contracts import ValidationError
+from scripts.runtime_env_compat import VOICE_STAGING_BUCKET_ENV, VOICE_STAGING_BUCKETS
 
 ConfigDict = dict[str, Any]
 
@@ -49,16 +50,11 @@ _EXPECTED_DEPLOYABLE_CAPABILITIES: dict[tuple[str, str], frozenset[str]] = {
     ('cloud_run', 'backend-sync'): _FINALIZATION_CAPABILITIES,
 }
 
-# Declared on every finalization host with the same literal, or live capture
-# (backend-listen / pusher / backend-sync) and regenerate (cloud_run/backend)
-# silently run different pipelines. An omitted flag must fail admission, not
-# fall through to the process-local False default.
+# Remaining summary context flags must agree on every finalization host; an
+# omitted declaration must fail admission rather than use the code default.
 SUMMARY_PIPELINE_FLAGS = (
-    'CONVERSATION_NOTES_V2_ENABLED',
     'CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED',
     'CONVERSATION_OCR_CONTEXT_ENABLED',
-    'MEETING_NOTES_RICH_CONTEXT_ENABLED',
-    'MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED',
     'MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED',
     # Same co-host rule: an omitted or disagreeing value on one
     # process_conversation host would silently keep that host ungated (code
@@ -129,6 +125,22 @@ def _literal_env(service_config: ConfigDict) -> dict[str, str]:
         if entry is not None and 'value' in entry:
             literal[name] = str(entry['value'])
     return literal
+
+
+def validate_voice_transcription_storage(env: str, env_config: ConfigDict) -> list[ValidationError]:
+    """Keep the voice upload route's staging bucket explicit in each environment."""
+    expected = VOICE_STAGING_BUCKETS.get(env)
+    if expected is None:
+        return []
+    config = _service_config(env_config, 'cloud_run', 'backend') or {}
+    if _literal_env(config).get(VOICE_STAGING_BUCKET_ENV) == expected:
+        return []
+    return [
+        ValidationError(
+            f'{env}/cloud_run/backend',
+            f'voice transcription requires literal BUCKET_TEMPORAL_SYNC_LOCAL={expected}',
+        )
+    ]
 
 
 def validate_conversation_finalization_capabilities(env: str, env_config: ConfigDict) -> list[ValidationError]:

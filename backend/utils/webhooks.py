@@ -23,6 +23,7 @@ from database.webhook_health import (
     _DEV_FAILURE_THRESHOLD,
 )
 from models.conversation import Conversation
+from models.transcript_segment import transcript_segment_for_client
 from models.users import WebhookType, webhook_url_from_setting
 from utils.conversations.render import populate_speaker_names, populate_folder_names
 from utils.conversations.render import conversation_to_dict, redact_conversation_for_integration
@@ -63,10 +64,11 @@ _HTTP_WEBHOOK_URL_RE = re.compile(
     r'(?:'
     r'(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,}|'
     r'localhost|'
-    r'\d{1,3}(?:\.\d{1,3}){3}'
+    r'\d{1,3}(?:\.\d{1,3}){3}|'
+    r'\[[0-9a-fA-F:.]+\]'
     r')'
     r'(?::\d{1,5})?'
-    r'(?:/[^\s]*)?$',
+    r'(?:[/?#][^\s]*)?$',
     re.IGNORECASE,
 )
 _UID_RE = re.compile(r'^[A-Za-z0-9_-]{1,128}$')
@@ -98,12 +100,15 @@ async def _get_button_event_send_lock(uid: str, device_id: str) -> asyncio.Lock:
 
 
 def _is_valid_audio_bytes_webhook_url(url: str) -> bool:
-    if not url:
+    if not url or not isinstance(url, str):
         return False
     candidate = url.strip()
     if not _HTTP_WEBHOOK_URL_RE.fullmatch(candidate):
         return False
-    parts = urlsplit(candidate)
+    try:
+        parts = urlsplit(candidate)
+    except ValueError:
+        return False
     return parts.scheme in ('http', 'https') and bool(parts.netloc)
 
 
@@ -225,7 +230,7 @@ async def _post_dev_webhook(
                 last_response = response
                 last_exception = None
                 if 200 <= response.status_code < 300:
-                    logger.info(
+                    logger.debug(
                         f'{webhook_name}: delivery succeeded status={response.status_code} '
                         f'attempt={attempt_number}/{attempts} url={log_url}'
                     )
@@ -422,7 +427,7 @@ async def day_summary_webhook(uid, summary: str, summary_json: Optional[dict] = 
 
 
 async def realtime_transcript_webhook(uid, segments: List[dict], *, client_kind: ClientKind = 'unknown'):
-    logger.info(f"realtime_transcript_webhook {uid}")
+    logger.debug(f"realtime_transcript_webhook {uid}")
     toggled = await run_blocking(db_executor, user_webhook_status_db, uid, WebhookType.realtime_transcript)
 
     if toggled:
@@ -442,7 +447,7 @@ async def realtime_transcript_webhook(uid, segments: List[dict], *, client_kind:
             response = await _post_dev_webhook(
                 'realtime_transcript_webhook',
                 webhook_url,
-                json={'segments': segments, 'session_id': uid},
+                json={'segments': [transcript_segment_for_client(s) for s in segments], 'session_id': uid},
                 headers={'Content-Type': 'application/json'},
                 dlq_uid=uid,
             )
@@ -502,7 +507,7 @@ def get_audio_bytes_webhook_seconds(uid: str):
 
 
 async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: bytearray):
-    logger.info(f"send_audio_bytes_developer_webhook {uid}")
+    logger.debug(f"send_audio_bytes_developer_webhook {uid}")
     if not data:
         return
     if not _is_valid_audio_bytes_payload_fields(uid, sample_rate):

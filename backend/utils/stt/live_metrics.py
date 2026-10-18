@@ -1,8 +1,34 @@
 """Bounded live-chain and windowed TDT metrics, collected by the listen scrape."""
 
+import logging
+import threading
+from typing import Any, NamedTuple
+
 from prometheus_client import Counter, Gauge, Histogram
 
 from config.live_stt_recovery import recovery_enabled
+from utils.observability.demand_cohort import DEMAND_COHORTS, initialize_metric
+
+DEMAND_LANE_SECONDS = Counter(
+    'omi_listen_live_lane_seconds_total',
+    'Listen wall time on the actual serving lane',
+    ['lane', 'reason', 'demand_cohort'],
+)
+DEMAND_SWITCHES = Counter(
+    'omi_listen_live_lane_switches_total',
+    'Adopted listen lane changes, including demand handovers and fallbacks',
+    ['from_lane', 'to_lane', 'reason'],
+)
+
+PAID_SPILLOVER_ADMISSIONS = Counter(
+    'omi_stt_paid_spillover_admissions_total', 'Fleet paid router spillover budget decisions', ['provider', 'outcome']
+)
+NO_TEXT_RESCUE_AUDIO = Counter(
+    'omi_stt_no_text_rescue_audio_seconds_total', 'Paid audio admitted during bounded progress rescue', ['provider']
+)
+NO_TEXT_RESCUE_OUTCOME = Counter(
+    'omi_stt_no_text_rescue_total', 'Bounded no-text rescue intervals and successor proof', ['outcome']
+)
 
 REPLAY_WALL = Histogram(
     'omi_stt_replay_wall_seconds',
@@ -26,12 +52,12 @@ REPLAY_CLOSED = Counter(
 RECOVERY_ATTEMPTS = Counter(
     'omi_stt_recovery_attempts_total',
     'Actual live recovery dials by dead provider family and attempted successor family',
-    ['source', 'successor'],
+    ['source', 'successor', 'demand_cohort'],
 )
 LIVE_SESSION_TERMINAL_AFTER_TEXT = Counter(
     'omi_live_session_terminal_after_text_total',
     'Live sessions closed with a terminal STT failure after a transcript was already delivered',
-    ['provider'],
+    ['provider', 'demand_cohort'],
 )
 
 WINDOW_ACTIVE = Gauge('omi_stt_window_sessions_active', 'Admitted windowed TDT sessions')
@@ -51,6 +77,7 @@ WINDOW_LATENCY = Histogram('omi_stt_window_post_seconds', 'Window POST latency',
 WINDOW_FIRST_TEXT = Histogram(
     'omi_stt_window_first_text_seconds',
     'Wall seconds from first VAD speech sent to first nonempty windowed transcript',
+    ['demand_cohort'],
     buckets=(2, 5, 10, 15, 20, 25, 30, 45, 60),
 )
 WINDOW_SESSION_OUTCOME = Counter(
@@ -79,16 +106,17 @@ WINDOW_STRANDED_FLUSHES = Counter(
 WINDOW_CANARY_OUTCOME = Counter(
     'omi_stt_window_canary_transcript_outcome_total',
     'Listen transcript outcome by stable window allocation arm',
-    ['arm', 'outcome'],
+    ['arm', 'outcome', 'demand_cohort'],
 )
 COST_CANARY_OUTCOME = Counter(
     'omi_stt_cost_routing_canary_outcome_total',
     'Managed listen transcript outcome by router allocation at initialization',
-    ['arm', 'outcome'],
+    ['arm', 'outcome', 'demand_cohort'],
 )
 for _arm in ('on', 'control'):
     for _outcome in ('transcribed', 'no_transcript', 'too_short'):
-        COST_CANARY_OUTCOME.labels(arm=_arm, outcome=_outcome)
+        for _cohort in DEMAND_COHORTS:
+            initialize_metric(COST_CANARY_OUTCOME, arm=_arm, outcome=_outcome, demand_cohort=_cohort)
 WINDOW_CONTEXT = Histogram(
     'omi_stt_window_context_seconds',
     'Posted TDT context duration',
@@ -117,7 +145,13 @@ CONNECT_BACKOFF = Counter(
     'Per-target connect-refusal backoff decisions at the configured live chain connect seam',
     ['provider', 'event'],
 )
-CHAIN_EXHAUSTED = Counter('omi_stt_chain_exhausted_total', 'Configured live chains that could not serve')
+CHAIN_EXHAUSTED = Counter(
+    'omi_stt_chain_exhausted_total', 'Configured live chains that could not serve', ['demand_cohort']
+)
+for _cohort in DEMAND_COHORTS:
+    initialize_metric(CHAIN_EXHAUSTED, demand_cohort=_cohort)
+    initialize_metric(WINDOW_FIRST_TEXT, demand_cohort=_cohort)
+
 LEG_ATTEMPTS = Counter('omi_stt_leg_attempts_total', 'Configured-chain connection results', ['to_mode', 'outcome'])
 RECONNECT = Counter(
     'omi_stt_reconnect_total', 'Bounded live STT reconnect decisions', ['provider', 'reason', 'outcome']
@@ -141,9 +175,63 @@ LEG_TRANSCRIPT_OUTCOME = Counter(
 ROUTING_DECISION = Counter('omi_stt_routing_decisions_total', 'Health-weighted routing decisions', ['outcome'])
 FLEET_HEALTH_WRITE_DROPPED = Counter(
     'omi_stt_fleet_health_write_dropped_total',
-    'Fleet outcome Redis writes dropped when the bounded background slots are full or unavailable',
-    ['kind'],
+    'Fleet-health Redis writes dropped before persistence by bounded path, kind, and reason',
+    ['write_path', 'kind', 'reason'],
 )
+FLEET_HEALTH_WRITE_ATTEMPTED = Counter(
+    'omi_stt_fleet_health_write_attempted_total',
+    'Fleet-health Redis write attempts by bounded path and kind',
+    ['write_path', 'kind'],
+)
+FLEET_HEALTH_WRITE_WRITTEN = Counter(
+    'omi_stt_fleet_health_write_written_total',
+    'Fleet-health writes acknowledged by Redis by bounded path and kind',
+    ['write_path', 'kind'],
+)
+
+_logger = logging.getLogger(__name__)
+
+
+def safe_counter_increment(counter: Any, *, metric_name: str, **labels: str) -> None:
+    """Record best-effort telemetry without allowing instrumentation to affect serving."""
+    try:
+        counter.labels(**labels).inc()
+    except Exception:
+        try:
+            _logger.debug('Unable to increment metric %s', metric_name, exc_info=True)
+        except Exception:
+            # A logging handler failure must not turn a metrics failure into a request failure.
+            pass
+
+
+def record_fleet_health_write_attempted(*, write_path: str, kind: str) -> None:
+    safe_counter_increment(
+        FLEET_HEALTH_WRITE_ATTEMPTED,
+        metric_name='omi_stt_fleet_health_write_attempted_total',
+        write_path=write_path,
+        kind=kind,
+    )
+
+
+def record_fleet_health_write_written(*, write_path: str, kind: str) -> None:
+    safe_counter_increment(
+        FLEET_HEALTH_WRITE_WRITTEN,
+        metric_name='omi_stt_fleet_health_write_written_total',
+        write_path=write_path,
+        kind=kind,
+    )
+
+
+def record_fleet_health_write_dropped(*, write_path: str, kind: str, reason: str) -> None:
+    safe_counter_increment(
+        FLEET_HEALTH_WRITE_DROPPED,
+        metric_name='omi_stt_fleet_health_write_dropped_total',
+        write_path=write_path,
+        kind=kind,
+        reason=reason,
+    )
+
+
 ROUTING_DECISION_LATENCY = Histogram(
     'omi_stt_routing_decision_seconds',
     'Time spent choosing the eligible live STT order without network operations',
@@ -241,8 +329,43 @@ if recovery_enabled():
             REPLAY_QUEUE_HIGH_WATER.labels(source=_source, successor=_successor)
             REPLAY_SKIPPED.labels(source=_source, successor=_successor)
             REPLAY_CLOSED.labels(source=_source, successor=_successor)
-            RECOVERY_ATTEMPTS.labels(source=_source, successor=_successor)
+            for _cohort in DEMAND_COHORTS:
+                initialize_metric(RECOVERY_ATTEMPTS, source=_source, successor=_successor, demand_cohort=_cohort)
     for _provider in PROVIDER_FAMILIES:
-        LIVE_SESSION_TERMINAL_AFTER_TEXT.labels(provider=_provider)
+        for _cohort in DEMAND_COHORTS:
+            initialize_metric(LIVE_SESSION_TERMINAL_AFTER_TEXT, provider=_provider, demand_cohort=_cohort)
         for _event in ('opened', 'probe', 'skipped', 'reset', 'escape'):
             CONNECT_BACKOFF.labels(provider=_provider, event=_event)
+
+
+class SonioxIdleMetrics(NamedTuple):
+    closes: Counter
+    reopens: Counter
+    latency: Histogram
+    failures: Counter
+    avoided: Counter
+
+
+_soniox_idle_metrics: SonioxIdleMetrics | None = None
+_soniox_idle_lock = threading.Lock()
+
+
+def soniox_idle_metrics() -> SonioxIdleMetrics:
+    """Register only when an enabled Soniox socket is constructed; no off series."""
+    global _soniox_idle_metrics
+    with _soniox_idle_lock:
+        if _soniox_idle_metrics is None:
+            _soniox_idle_metrics = SonioxIdleMetrics(
+                Counter('omi_soniox_idle_closes_total', 'Planned paid transport closes'),
+                Counter('omi_soniox_idle_reopens_total', 'Speech-triggered paid transport dials'),
+                Histogram(
+                    'omi_soniox_idle_reopen_seconds',
+                    'Onset to replacement audio admission',
+                    buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10),
+                ),
+                Counter('omi_soniox_idle_reopen_failures_total', 'Failed speech-triggered transport dials'),
+                Counter(
+                    'omi_soniox_idle_connected_seconds_avoided_total', 'Estimated wall seconds with transport closed'
+                ),
+            )
+    return _soniox_idle_metrics

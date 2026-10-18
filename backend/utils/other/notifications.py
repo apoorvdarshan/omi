@@ -23,6 +23,7 @@ from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
 from utils.memory.learned_today import memories_learned_payload, memory_review_card_block
 from utils.notifications import send_bulk_notification, send_notification_result
+from utils.other import daily_summary_metrics
 from utils.other import daily_summary_budget as summary_budget
 from utils.webhooks import day_summary_webhook
 import database.daily_summaries as daily_summaries_db
@@ -339,6 +340,14 @@ class DailySummaryJobStats:
     retry_recipients: Dict[str, bool] = field(default_factory=dict)
     retry_hour: Optional[int] = None
     retry_uid: Optional[str] = None
+    # Recipients already carrying a failure from the previous pass. A second
+    # failure is final, so one dead recipient cannot hold the cohort open.
+    prior_retry_uids: frozenset = frozenset()
+    retry_pending: int = 0
+    retries_exhausted: int = 0
+    # Set when the pass did not reach every recipient (budget, read failure).
+    # Only then does the next pass need to re-walk the cohort.
+    walk_incomplete: bool = False
 
     def as_log(self) -> str:
         return (
@@ -346,7 +355,7 @@ class DailySummaryJobStats:
             f'attempted={self.attempted} succeeded={self.succeeded} failed={self.failed} '
             f'timed_out={self.timed_out} skipped_for_budget={self.skipped_for_budget} '
             f'recipient_docs_selected={self.recipient_docs_selected} recipient_queries={self.recipient_queries} '
-            f'retry_recipients={len(self.retry_recipients)}'
+            f'retry_recipients={len(self.retry_recipients)} retries_exhausted={self.retries_exhausted}'
         )
 
 
@@ -417,23 +426,46 @@ async def send_daily_summary_notification() -> DailySummaryCronOutcome:
     now = datetime.now(pytz.utc)
     cursor = await run_blocking(db_executor, summary_budget.read_job_cursor, summary_budget.job_cursor_key())
     resumed_at = summary_budget.cursor_cohort_utc(cursor)
+    cursor_age_seconds = (now - resumed_at).total_seconds() if resumed_at is not None else 0.0
+    daily_summary_metrics.RESUMED_COHORT_AGE.set(cursor_age_seconds)
+    cursor_key = summary_budget.job_cursor_key()
+    # The Redis TTL is supposed to be the staleness bound (daily_summary_budget.py),
+    # but every tick that resumes this cohort rewrites the checkpoint and renews
+    # that TTL, so a recipient who can never succeed (e.g. a permanently invalid
+    # FCM token) keeps the checkpoint alive forever. That pins every execution on
+    # the same stale cohort and the *current* cohort below is never reached, so
+    # every other recipient's recap silently stops too. Age the cohort out by
+    # the same bound independent of the TTL renewal.
+    if resumed_at is not None and now - resumed_at > timedelta(seconds=summary_budget.JOB_CURSOR_TTL_SECONDS):
+        logger.error(
+            'daily_summary_cursor_abandoned_stale cohort_utc=%s age_seconds=%s hour=%s uid=%s',
+            resumed_at.isoformat(),
+            (now - resumed_at).total_seconds(),
+            summary_budget.cursor_hour(cursor),
+            summary_budget.cursor_uid(cursor),
+        )
+        await run_blocking(db_executor, summary_budget.clear_job_cursor, cursor_key)
+        resumed_at = None
+        cursor = None
     # A local hour can roll over at :15/:30/:45 within the same UTC hour.
     if resumed_at is not None and resumed_at.replace(
         minute=(resumed_at.minute // 15) * 15, second=0, microsecond=0
     ) != now.replace(minute=(now.minute // 15) * 15, second=0, microsecond=0):
-        resumed = await _send_daily_summary_cohort(resumed_at, cursor)
+        resumed = await _send_daily_summary_cohort(resumed_at, cursor, cursor_age_seconds=cursor_age_seconds)
         if not resumed.complete:
             return resumed
-        current = await _send_daily_summary_cohort(now, None)
+        current = await _send_daily_summary_cohort(now, None, cursor_age_seconds=cursor_age_seconds)
         return DailySummaryCronOutcome(
             ok=resumed.ok and current.ok,
             error_text=resumed.error_text or current.error_text,
             complete=current.complete,
         )
-    return await _send_daily_summary_cohort(now, cursor)
+    return await _send_daily_summary_cohort(now, cursor, cursor_age_seconds=cursor_age_seconds)
 
 
-async def _send_daily_summary_cohort(cohort_utc: datetime, cursor: Optional[dict]) -> DailySummaryCronOutcome:
+async def _send_daily_summary_cohort(
+    cohort_utc: datetime, cursor: Optional[dict], *, cursor_age_seconds: float = 0.0
+) -> DailySummaryCronOutcome:
     """
     Send daily summary notifications to users based on their local hour preference.
 
@@ -454,13 +486,20 @@ async def _send_daily_summary_cohort(cohort_utc: datetime, cursor: Optional[dict
       job-end line with attempted/succeeded/failed/skipped counts.
     """
     deadline = monotonic() + DAILY_SUMMARY_JOB_BUDGET_SECONDS
-    stats = DailySummaryJobStats(retry_recipients=dict((cursor or {}).get('retry_recipients', {})))
+    saved_retries = dict((cursor or {}).get('retry_recipients', {}))
+    stats = DailySummaryJobStats(retry_recipients=saved_retries, prior_retry_uids=frozenset(saved_retries))
+    # A pass that walked the whole cohort and left only failures behind is resumed
+    # by retrying those recipients alone. Re-walking every served recipient made
+    # each resume as slow as the original pass, so it ended near the deadline,
+    # produced a fresh timeout, and pinned the cohort again until the 2h cutoff.
+    retry_only = summary_budget.cursor_retry_only(cursor) and bool(saved_retries)
     cursor_key = summary_budget.job_cursor_key()
 
     try:
         timezones_by_hour = _get_timezones_grouped_by_hour(cohort_utc)
     except Exception as e:
         logger.error(f"Error grouping daily summary timezones: {e}")
+        daily_summary_metrics.COHORT_COMPLETE.labels(outcome='incomplete').inc()
         return DailySummaryCronOutcome(ok=False, error_text=str(e), complete=False)
 
     resume_hour = summary_budget.cursor_hour(cursor)
@@ -479,6 +518,7 @@ async def _send_daily_summary_cohort(cohort_utc: datetime, cursor: Optional[dict
         target_hour, timezones = group
         if stop_processing or monotonic() >= deadline:
             completed_all = False
+            stats.walk_incomplete = True
             stop_processing = True
             await _checkpoint(cursor_key, target_hour, None, cohort_utc, stats.retry_recipients)
             _record_daily_summary_fallback(
@@ -495,6 +535,7 @@ async def _send_daily_summary_cohort(cohort_utc: datetime, cursor: Optional[dict
             # One hour group's read failing must not cost the other 23 groups.
             stats.groups_failed += 1
             completed_all = False
+            stats.walk_incomplete = True
             await _checkpoint(cursor_key, target_hour, None, cohort_utc, stats.retry_recipients)
             logger.error('daily_summary_group_failed hour=%s reason=user_query error=%s', target_hour, e)
             return ProcessOutcome.reject(str(e), reason='user_query')
@@ -502,6 +543,7 @@ async def _send_daily_summary_cohort(cohort_utc: datetime, cursor: Optional[dict
         if query_error and not users:
             stats.groups_failed += 1
             completed_all = False
+            stats.walk_incomplete = True
             await _checkpoint(cursor_key, target_hour, None, cohort_utc, stats.retry_recipients)
             logger.error('daily_summary_group_failed hour=%s reason=user_query error=%s', target_hour, query_error)
             return ProcessOutcome.reject(str(query_error), reason='user_query')
@@ -513,12 +555,17 @@ async def _send_daily_summary_cohort(cohort_utc: datetime, cursor: Optional[dict
             # job never even listed. Keep the run resumable and point the next
             # execution at this hour.
             completed_all = False
+            stats.walk_incomplete = True
             await _checkpoint(cursor_key, target_hour, None, cohort_utc, stats.retry_recipients)
             _record_daily_summary_fallback(
                 from_mode='full_run', to_mode='resumable_tail', reason='other', outcome='degraded'
             )
 
+        if retry_only:
+            users = [user for user in users if str(user[0]) in stats.prior_retry_uids]
+
         stats.recipient_docs_selected += len(users)
+        daily_summary_metrics.RECIPIENTS.labels(outcome='selected').inc(len(users))
         if not users:
             return ProcessOutcome.ack()
 
@@ -529,8 +576,7 @@ async def _send_daily_summary_cohort(cohort_utc: datetime, cursor: Optional[dict
         resume_uid = None
 
         logger.info(f"Sending daily summary to {len(ordered_users)} users at local hour {target_hour}")
-        failed_before = stats.failed
-        timed_out_before = stats.timed_out
+        pending_before = stats.retry_pending
         finished_group = await _send_bulk_summary_notification(
             [
                 (
@@ -549,9 +595,12 @@ async def _send_daily_summary_cohort(cohort_utc: datetime, cursor: Optional[dict
         )
         if not finished_group:
             completed_all = False
+            stats.walk_incomplete = True
             stop_processing = True
             return ProcessOutcome.retry('daily summary group budget exhausted', reason='timeout')
-        hour_send_failures = (stats.failed - failed_before) + (stats.timed_out - timed_out_before)
+        # Exhausted retries are logged and final; only failures still owed a
+        # retry keep the cohort open.
+        hour_send_failures = stats.retry_pending - pending_before
         if hour_send_failures:
             completed_all = False
             return ProcessOutcome.reject(
@@ -579,15 +628,25 @@ async def _send_daily_summary_cohort(cohort_utc: datetime, cursor: Optional[dict
         # failed recipient and the original cohort after the entire pass, so a
         # final-tick failure survives both those writes and the local-hour boundary.
         completed_all = False
-        await _checkpoint(cursor_key, stats.retry_hour, stats.retry_uid, cohort_utc, stats.retry_recipients)
+        await _checkpoint(
+            cursor_key,
+            stats.retry_hour,
+            stats.retry_uid,
+            cohort_utc,
+            stats.retry_recipients,
+            retry_only=not stats.walk_incomplete,
+        )
     if completed_all:
         await run_blocking(db_executor, summary_budget.clear_job_cursor, cursor_key)
 
+    daily_summary_metrics.COHORT_COMPLETE.labels(outcome='complete' if completed_all else 'incomplete').inc()
     logger.info(
-        'daily_summary_job_summary complete=%s %s cohort_utc=%s',
+        'daily_summary_job_summary complete=%s %s cohort_utc=%s cursor_age_seconds=%s resumed=%s',
         completed_all,
         stats.as_log(),
         cohort_utc.isoformat(),
+        cursor_age_seconds,
+        summary_budget.cursor_cohort_utc(cursor) is not None,
     )
     if failures:
         return DailySummaryCronOutcome(
@@ -614,10 +673,14 @@ async def _checkpoint(
     uid: Optional[str],
     cohort_utc: Optional[datetime] = None,
     retry_recipients: Optional[Dict[str, bool]] = None,
+    *,
+    retry_only: bool = False,
 ) -> None:
     cursor = summary_budget.make_cursor(target_hour, uid, cohort_utc)
     if retry_recipients:
         cursor['retry_recipients'] = dict(retry_recipients)
+        if retry_only:
+            cursor['retry_only'] = True
     await run_blocking(
         db_executor,
         summary_budget.write_job_cursor,
@@ -816,11 +879,27 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
     summary_data, created, declined = _generate_and_store_daily_summary(
         uid, date_str, start_date_utc, end_date_utc, prepare_delivery=prepare_delivery
     )
+    # Count current-day generation only, never the backfill walk. A generated
+    # recap can also fail delivery; these are distinct recipient outcomes.
+    if created:
+        daily_summary_metrics.RECIPIENTS.labels(outcome='generated_retry' if retry_attempt else 'generated').inc()
+        # Durable outcome token for the daily_summary_recap_generated log metric. The
+        # job's in-process counters depend on a scrape sidecar; this line does not.
+        logger.info('daily_summary_generated uid=%s retry=%s', uid, retry_attempt)
+    elif summary_data:
+        daily_summary_metrics.RECIPIENTS.labels(outcome='suppressed_existing').inc()
     pending_webhook: Optional[dict] = None
     if retry_attempt and declined == _DECLINE_LOCKED:
         # A timed-out worker may still own the day. Keep its recipient pending
         # until that worker finishes, rather than treating contention as delivery.
-        raise RuntimeError('daily summary retry still locked')
+        # A worker that finished *after* its timeout keeps the lock for the full
+        # TTL by design, so the durable record is the only proof it is done; without
+        # this read the recipient stayed "locked" for 2h and pinned the whole saved
+        # cohort, starving every current cohort behind it (2026-10-12).
+        summary_data = daily_summaries_db.get_daily_summary_by_date(uid, date_str)
+        if not summary_data:
+            raise RuntimeError('daily summary retry still locked')
+        declined = None
     if summary_data and summary_data.get('notification_delivery_completed'):
         # An abandoned worker may have delivered after wait_for timed out and
         # after its coordinator saved an uncertain outcome. The receipt wins.
@@ -895,6 +974,7 @@ async def _send_bulk_summary_notification(
     for i in range(0, len(users), _BATCH_SIZE):
         if deadline is not None and monotonic() >= deadline:
             counters.skipped_for_budget += len(users) - i
+            daily_summary_metrics.RECIPIENTS.labels(outcome='skipped_budget').inc(len(users) - i)
             if cursor_key:
                 await _checkpoint(cursor_key, target_hour, str(users[i][0]), cohort_utc, counters.retry_recipients)
             _record_daily_summary_fallback(
@@ -930,17 +1010,28 @@ async def _send_bulk_summary_notification(
         results = await asyncio.gather(*tasks, return_exceptions=True)
         for j, result in enumerate(results):
             uid = str(batch[j][0])
-            if isinstance(result, BaseException):
+            if isinstance(result, BaseException) and uid in counters.prior_retry_uids:
+                counters.retry_recipients.pop(uid, None)
+                counters.retries_exhausted += 1
+                logger.warning(
+                    'daily_summary_retry_exhausted uid=%s hour=%s error_type=%s',
+                    uid,
+                    target_hour,
+                    type(result).__name__,
+                )
+            elif isinstance(result, BaseException):
                 counters.retry_recipients[uid] = not delivery_completed[j].is_set() and (
                     counters.retry_recipients.get(uid, False)
                     or isinstance(result, (DailySummaryDeliveryError, asyncio.TimeoutError, TimeoutError))
                 )
+                counters.retry_pending += 1
                 if counters.retry_uid is None:
                     counters.retry_hour, counters.retry_uid = target_hour, uid
             else:
                 counters.retry_recipients.pop(uid, None)
             if isinstance(result, (asyncio.TimeoutError, TimeoutError)):
                 counters.timed_out += 1
+                daily_summary_metrics.RECIPIENTS.labels(outcome='timed_out').inc()
                 logger.error(
                     'daily_summary_user_failed uid=%s hour=%s reason=user_budget_exceeded budget_seconds=%s',
                     uid,
@@ -952,6 +1043,7 @@ async def _send_bulk_summary_notification(
                 )
             elif isinstance(result, BaseException):
                 counters.failed += 1
+                daily_summary_metrics.RECIPIENTS.labels(outcome='failed').inc()
                 logger.error(
                     'daily_summary_user_failed uid=%s hour=%s reason=generation_error error_type=%s error=%s',
                     uid,
@@ -973,6 +1065,7 @@ async def _send_bulk_summary_notification(
             # next execution can, so stop and let the checkpoint carry the tail.
             remaining = max(0, len(users) - (i + _BATCH_SIZE))
             counters.skipped_for_budget += remaining
+            daily_summary_metrics.RECIPIENTS.labels(outcome='skipped_budget').inc(remaining)
             logger.error(
                 'daily_summary_group_abandoned_users hour=%s timed_out=%d deferred=%d',
                 target_hour,

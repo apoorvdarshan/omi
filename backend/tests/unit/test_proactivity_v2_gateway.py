@@ -1,10 +1,11 @@
 from dataclasses import replace
+import json
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 
-from config.proactivity_v2 import ProactivityDenied
+from config.proactivity_v2 import ProactivityDenied, producer_for
 from database import proactivity_budget as money
 from llm_gateway.gateway import proactivity_budget as gate
 from llm_gateway.gateway.accounting import (
@@ -16,6 +17,7 @@ from llm_gateway.gateway.accounting import (
 )
 from llm_gateway.gateway.auth import ServiceCaller
 from llm_gateway.gateway.config_loader import load_gateway_config
+from llm_gateway.gateway.cache_policy import INTERNAL_POLICY
 from llm_gateway.gateway.credentials import build_omi_managed_credential_context
 from llm_gateway.gateway.errors import GatewayInvalidRequestError
 from llm_gateway.gateway.executor import ProviderRegistry, execute_chat_completion, execute_systemone
@@ -23,6 +25,29 @@ from llm_gateway.gateway.providers import ProviderResponse
 from llm_gateway.gateway.resolver import resolve_chat_completion_route, resolve_systemone_route
 from tests.unit.test_proactivity_v2_budget import NOW, Redis, claim, store
 from utils import proactivity
+
+
+@pytest.mark.asyncio
+async def test_admission_flag_unavailable_logs_sdk_type_and_status(monkeypatch, caplog):
+    from collections import OrderedDict
+    from unittest.mock import Mock
+
+    from posthog.request import APIError
+
+    flags = proactivity.proactivity_flags
+    monkeypatch.setattr(flags, '_flag_cache', OrderedDict())
+    monkeypatch.setattr(flags, '_next_warning_at', 0.0)
+    client = Mock()
+    client.get_feature_variants.side_effect = APIError(503, 'PRIVATE_RESPONSE_AND_KEY')
+    monkeypatch.setattr(flags, 'flag_client', lambda: client)
+    with caplog.at_level('INFO'):
+        for _ in range(2):
+            with pytest.raises(ProactivityDenied, match='flag_unavailable'):
+                await proactivity.ensure_admitted('PRIVATE_UID', 'conversation_mentor_v2')
+    client.get_feature_variants.assert_called_once_with('PRIVATE_UID')
+    assert 'error_type=APIError http_status=503' in caplog.text
+    assert 'result=denied reason=flag_unavailable' in caplog.text
+    assert 'PRIVATE' not in caplog.text
 
 
 def context(item, step='phrase'):
@@ -100,6 +125,114 @@ async def test_real_executor_reserves_settles_and_tags_same_event(store, gated, 
     assert row['estimated_cost_micro_usd'] == events[0]['estimated_cost_micro_usd']
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize('prefix', ['short synthetic system', 'synthetic prefix ' * 320])
+async def test_real_executor_cache_policy_preserves_text_budget_and_reserves_cache_writes(store, gated, prefix):
+    class Capture(Provider):
+        async def create_chat_completion(self, request, **kwargs):
+            self.request = request
+            return await super().create_chat_completion(request, **kwargs)
+
+    item = claim(store)
+    ctx = context(item)
+    route = resolve_chat_completion_route(
+        load_gateway_config(),
+        {
+            'model': 'omi:auto:proactive-notification',
+            'messages': [{'role': 'system', 'content': prefix}, {'role': 'user', 'content': 'synthetic'}],
+            'max_completion_tokens': 512,
+        },
+    )
+    provider = Capture()
+    with gate.attempt_scope(ctx):
+        await execute_chat_completion(
+            route,
+            build_omi_managed_credential_context(ServiceCaller(name='backend', user_uid='u')),
+            ProviderRegistry({'openai': provider}),
+            attempt_trace=AttemptTrace(),
+        )
+    assert provider.calls == 1
+    request = provider.request
+    assert request['prompt_cache_options'] == {'mode': 'explicit', 'ttl': '30m'}
+    if len(prefix) > 4096:
+        part = request['messages'][0]['content'][0]
+        assert part['text'] == prefix and part['prompt_cache_breakpoint'] == {'mode': 'explicit'}
+        assert request['prompt_cache_key'].startswith('gateway-')
+    envelope = gate.envelope_for(ctx, 'openai', 'gpt-6-luna', request)
+    payload = {key: value for key, value in request.items() if key != INTERNAL_POLICY}
+    input_bound = len(json.dumps(payload, separators=(',', ':'), ensure_ascii=False).encode()) + 4096
+    rates = gate.rate_card_for('openai', 'gpt-6-luna').effective_rates(input_bound)
+    assert rates.cache_write_micro_usd_per_million > rates.input_micro_usd_per_million
+    write_bound = input_bound * rates.cache_write_micro_usd_per_million
+    output_bound = request['max_completion_tokens'] * rates.output_micro_usd_per_million
+    assert envelope.worst_case_micro_usd >= (write_bound + output_bound + 999999) // 1000000
+    # Attribution is not provider input and cannot alter the bounded request hash.
+    request[INTERNAL_POLICY] = {'lane': 'synthetic-other-attribution'}
+    assert gate.envelope_for(ctx, 'openai', 'gpt-6-luna', request) == envelope
+
+
+@pytest.mark.parametrize(
+    'part',
+    [
+        {'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,synthetic'}},
+        {'type': 'text', 'text': 'synthetic', 'fileData': {'fileUri': 'synthetic'}},
+        {'type': 'text', 'text': 'synthetic', 'prompt_cache_breakpoint': {'mode': 'unknown'}},
+    ],
+)
+def test_cache_text_parts_cannot_admit_media_or_unknown_fields(store, part):
+    ctx = context(claim(store))
+    with pytest.raises(ProactivityDenied, match='invalid_request'):
+        gate.envelope_for(
+            ctx,
+            'openai',
+            'gpt-6-luna',
+            {'messages': [{'role': 'user', 'content': [part]}], 'max_completion_tokens': 512},
+        )
+
+
+@pytest.mark.parametrize(
+    'cache_fields',
+    [
+        {'prompt_cache_options': {'mode': 'explicit', 'ttl': '1h'}},
+        {'prompt_cache_key': {'unexpected': 'object'}},
+    ],
+)
+def test_proactivity_refuses_unsupported_cache_contracts(store, cache_fields):
+    ctx = context(claim(store))
+    with pytest.raises(ProactivityDenied, match='invalid_request'):
+        gate.envelope_for(
+            ctx,
+            'openai',
+            'gpt-6-luna',
+            {'messages': [{'role': 'user', 'content': 'synthetic'}], 'max_completion_tokens': 512, **cache_fields},
+        )
+
+
+def test_cache_marked_text_still_obeys_the_producer_byte_bound(store):
+    ctx = context(claim(store))
+    with pytest.raises(ProactivityDenied, match='input_bound'):
+        gate.envelope_for(
+            ctx,
+            'openai',
+            'gpt-6-luna',
+            {
+                'messages': [
+                    {
+                        'role': 'system',
+                        'content': [
+                            {
+                                'type': 'text',
+                                'text': 'x' * producer_for(ctx.producer).max_request_bytes,
+                                'prompt_cache_breakpoint': {'mode': 'explicit'},
+                            }
+                        ],
+                    }
+                ],
+                'max_completion_tokens': 512,
+            },
+        )
+
+
 def test_usefulness_authenticated_attribution_and_lane_fence(store):
     ctx = context(claim(store, producer='conversation_mentor_v2'), 'usefulness')
     request = SimpleNamespace(
@@ -140,10 +273,11 @@ async def test_failure_has_one_attempt_no_fallback_and_retains_money(store, gate
     )
     provider = Provider(fail=True)
     credentials = build_omi_managed_credential_context(ServiceCaller(name='backend', user_uid='u'))
-    with gate.attempt_scope(context(item)), pytest.raises(GatewayInvalidRequestError):
+    with gate.attempt_scope(context(item)), pytest.raises(GatewayInvalidRequestError) as error:
         await execute_chat_completion(
             route, credentials, ProviderRegistry({'openai': provider}), attempt_trace=AttemptTrace()
         )
+    assert error.value.rejection_reason == 'proactivity_provider_failed'
     assert provider.calls == 1
     row = store.rows[('users', 'u', 'proactivity_items', item['item_id'])]
     assert row['charged_micro_usd'] > 0 and row['cost_status'] == 'indeterminate'
@@ -183,7 +317,12 @@ def test_envelope_prices_jev_bytes_with_framing_and_rejects_unbounded_content(st
     envelope = gate.envelope_for(ctx, 'openrouter', 'typesafe/jev-1.13', {'state': 'synthetic', 'questions': {}})
     assert envelope.worst_case_micro_usd >= 173
     with pytest.raises(ProactivityDenied, match='input_bound'):
-        gate.envelope_for(ctx, 'openrouter', 'typesafe/jev-1.13', {'state': 'x' * 40000, 'questions': {}})
+        gate.envelope_for(
+            ctx,
+            'openrouter',
+            'typesafe/jev-1.13',
+            {'state': 'x' * (producer_for(ctx.producer).max_request_bytes + 1), 'questions': {}},
+        )
     ctx = replace(ctx, step='generate')
     with pytest.raises(ProactivityDenied, match='invalid_request'):
         gate.envelope_for(
@@ -219,7 +358,7 @@ async def test_executor_denials_never_reach_provider(store, gated, monkeypatch, 
     else:
         monkeypatch.delenv('LLM_GATEWAY_ACCOUNTING_ENABLED')
     provider = Provider()
-    with gate.attempt_scope(context(item)), pytest.raises(GatewayInvalidRequestError):
+    with gate.attempt_scope(context(item)), pytest.raises(GatewayInvalidRequestError) as error:
         await execute_chat_completion(
             route,
             build_omi_managed_credential_context(ServiceCaller(name='backend', user_uid='u')),
@@ -227,6 +366,10 @@ async def test_executor_denials_never_reach_provider(store, gated, monkeypatch, 
             attempt_trace=AttemptTrace(),
         )
     assert provider.calls == 0
+    reason = {'store': 'unavailable', 'flag': 'disabled', 'unpriced': 'unpriced', 'accounting': 'accounting_disabled'}[
+        fault
+    ]
+    assert error.value.rejection_reason == f'proactivity_admission.{reason}'
 
 
 def test_legacy_output_limit_cannot_bypass_reasoning_bound(store):
@@ -254,7 +397,7 @@ async def test_missing_provider_usage_retains_reservation_and_denies_publication
         },
     )
     provider = MissingUsage()
-    with gate.attempt_scope(context(item)), pytest.raises(GatewayInvalidRequestError):
+    with gate.attempt_scope(context(item)), pytest.raises(GatewayInvalidRequestError) as error:
         await execute_chat_completion(
             route,
             build_omi_managed_credential_context(ServiceCaller(name='backend', user_uid='u')),
@@ -263,6 +406,7 @@ async def test_missing_provider_usage_retains_reservation_and_denies_publication
         )
     row = store.rows[('users', 'u', 'proactivity_items', item['item_id'])]
     assert provider.calls == 1 and row['cost_status'] == 'indeterminate'
+    assert error.value.rejection_reason == 'proactivity_settlement_rejected'
     assert row['charged_micro_usd'] == row['reserved_micro_usd'] > 0
 
 
@@ -409,3 +553,67 @@ def test_total_only_usage_keeps_legacy_accounting_behavior():
     )
     assert event.usage_status.value == 'confirmed' and event.estimated_cost_micro_usd == 0
     assert not metadata.billable_usage_complete
+
+
+def test_followup_step_rejection_has_stable_code(store):
+    ctx = context(claim(store), 'gate')
+    request = SimpleNamespace(
+        headers={
+            'x-omi-proactivity-item': ctx.item_id,
+            'x-omi-proactivity-producer': ctx.producer,
+            'x-omi-proactivity-call': ctx.call_id,
+            'x-omi-proactivity-step': ctx.step,
+        }
+    )
+    caller = SimpleNamespace(name='backend', user_uid='u', usage_feature=ctx.accounting.feature)
+    with pytest.raises(GatewayInvalidRequestError) as error:
+        gate.context_from_request(request, caller, ctx.accounting)
+    assert error.value.rejection_reason == 'proactivity_step'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'fault,code',
+    [
+        ('authority', 'proactivity_authority_missing'),
+        ('deadline', 'proactivity_deadline'),
+        ('settlement', 'proactivity_settlement_unavailable'),
+        ('denial', 'proactivity_admission.unknown'),
+    ],
+)
+async def test_budget_boundary_errors_have_stable_payload_free_codes(store, gated, monkeypatch, fault, code, caplog):
+    item = claim(store)
+    provider = Provider()
+    if fault == 'settlement':
+
+        def unavailable(**kwargs):
+            raise RuntimeError('PRIVATE_STORE_SECRET')
+
+        monkeypatch.setattr(gated, 'settle', unavailable)
+    elif fault == 'denial':
+
+        async def denied(*args):
+            raise ProactivityDenied('PRIVATE_USER_CONTENT\nforged=true')
+
+        monkeypatch.setattr(proactivity, 'ensure_admitted', denied)
+    with caplog.at_level('INFO'), gate.attempt_scope(None if fault == 'authority' else context(item)):
+        with pytest.raises(GatewayInvalidRequestError) as error:
+            await gate.execute_budgeted_provider(
+                request={'messages': [{'role': 'user', 'content': 'synthetic'}], 'max_completion_tokens': 512},
+                provider_ref=SimpleNamespace(provider='openai', model='gpt-6-luna'),
+                route=SimpleNamespace(route_artifact_id='route.proactive_notification.model_config.001'),
+                credentials=None,
+                provider_call=provider.create_chat_completion,
+                timeout_ms=0 if fault == 'deadline' else 1000,
+                attempt_trace=AttemptTrace(),
+            )
+    assert error.value.rejection_reason == code
+    assert 'PRIVATE' not in caplog.text and 'forged' not in caplog.text
+    assert provider.calls == int(fault == 'settlement')
+    row = store.rows[('users', 'u', 'proactivity_items', item['item_id'])]
+    if fault in {'authority', 'denial'}:
+        assert row['attempts'] == {} and row['reserved_micro_usd'] == 0
+    elif fault == 'deadline':
+        assert row['reserved_micro_usd'] == row['charged_micro_usd'] == 0
+    else:
+        assert row['reserved_micro_usd'] > 0  # Ambiguous settlement retains the hold.

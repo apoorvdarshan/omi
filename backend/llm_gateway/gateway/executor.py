@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import hashlib
 import json
 import logging
@@ -17,6 +18,8 @@ from llm_gateway.gateway.accounting import (
     ProviderResponseMetadata,
     UsageStatus,
 )
+from llm_gateway.gateway.cache_policy import apply_lane_cache_policy
+from llm_gateway.gateway.dream_lanes import DREAM_LANES, DREAM_MODEL
 from llm_gateway.gateway.credentials import CredentialContext, CredentialSource, is_byok_failure_class
 from llm_gateway.gateway.errors import (
     GatewayCapabilityMismatchError,
@@ -27,6 +30,7 @@ from llm_gateway.gateway.errors import (
     GatewayProviderFailureError,
     GatewayProviderRequestRejectedError,
 )
+from llm_gateway.gateway.metrics import LUNA_UNSUPPORTED_PARAMS_DROPPED_TOTAL
 from llm_gateway.gateway.providers import (
     ChatCompletionProvider,
     EXPOSE_PROVIDER_ERROR_DETAILS_ENV_VAR,
@@ -39,7 +43,6 @@ from llm_gateway.gateway.resolver import (
     ResolvedEmbeddingRoute,
     ResolvedRoute,
     ResolvedSystemOneRoute,
-    is_lkg_eligible,
     select_lkg_route_for_failure,
 )
 from llm_gateway.gateway.schemas import (
@@ -50,6 +53,8 @@ from llm_gateway.gateway.schemas import (
     RouteArtifact,
     RouteServingClass,
 )
+from llm_gateway.gateway.vertex_diagnostics import vertex_attempt_scope
+from llm_gateway.gateway.reserved_fallback import can_try_next_provider, record_reserved_rejection_fallback
 from llm_gateway.gateway.validator import ValidatedChatCompletionRequest
 from utils.llm.model_config import uses_explicit_cache_and_chat_sanitizer
 from utils.log_sanitizer import sanitize
@@ -120,6 +125,20 @@ async def execute_chat_completion(
     if current_attempt() is not None:
         max_provider_attempts = 1
     serving_route = _select_serving_route(resolved_route)
+    if serving_route.lane_id in DREAM_LANES:
+        mode = serving_route.provider_options.get('_dream_capacity_mode')
+        if (
+            serving_route.primary.provider != 'gemini'
+            or serving_route.primary.model != DREAM_MODEL
+            or mode not in {'reserved', 'on_demand'}
+            or serving_route.provider_options.get('reserved_capacity_only') is not (mode == 'reserved')
+        ):
+            raise GatewayProviderFailureError(
+                'Dream capacity route unavailable', failure_class=FailureClass.RESERVED_CAPACITY_UNAVAILABLE
+            )
+        # Both stages, including legacy dream_reserved_only requests, may only
+        # use the resolver-authorized capacity mode and exactly one provider call.
+        max_provider_attempts = 1
     serving_is_lkg = selected_route_is_lkg(resolved_route)
     _validate_credential_mode(serving_route, credential_context)
     deadline_monotonic = monotonic() + serving_route.timeouts.request_ms / 1000.0
@@ -282,7 +301,9 @@ async def execute_systemone(
     request: dict[str, Any] = {'state': validated.state, 'questions': dict(validated.questions)}
     if current_attempt() is not None:
         if attempt_trace is None or attempt_trace.attempts:
-            raise GatewayInvalidRequestError('proactivity attempt already consumed')
+            raise GatewayInvalidRequestError(
+                'proactivity attempt already consumed', rejection_reason='proactivity_attempt_consumed'
+            )
         response = await execute_budgeted_provider(
             request=request,
             provider_ref=provider_ref,
@@ -360,6 +381,12 @@ def _select_serving_route(resolved_route: ResolvedRoute) -> RouteArtifact:
     configured percentage of traffic via deterministic per-request
     sampling; the remainder is served by the last-known-good route.
     """
+    if resolved_route.lane.lane_id in DREAM_LANES:
+        if not _is_route_eligible_to_serve(resolved_route.active_route, resolved_route.validated_request):
+            raise GatewayProviderFailureError(
+                'Dream route is not active', failure_class=FailureClass.RESERVED_CAPACITY_UNAVAILABLE
+            )
+        return resolved_route.active_route
     if _is_route_eligible_to_serve(resolved_route.active_route, resolved_route.validated_request):
         return resolved_route.active_route
     return resolved_route.last_known_good_route
@@ -507,7 +534,7 @@ async def _execute_route(
     max_provider_attempts: int | None,
     deadline_monotonic: float,
 ) -> ExecutorResult:
-    refs = [route.primary, *route.fallbacks]
+    refs = [route.primary] if route.lane_id in DREAM_LANES else [route.primary, *route.fallbacks]
     last_error: GatewayError | None = None
     current_fallback_reason = fallback_reason
     failed_provider_refs: list[ProviderRef] = []
@@ -525,17 +552,18 @@ async def _execute_route(
                 param='credentials',
             )
         else:
-            response, error = await _attempt_provider(
-                resolved_route,
-                route,
-                provider,
-                provider_ref,
-                credential_context,
-                attempt_trace=attempt_trace,
-                max_provider_attempts=max_provider_attempts,
-                fallback_reason=current_fallback_reason,
-                deadline_monotonic=deadline_monotonic,
-            )
+            with vertex_attempt_scope(route, provider_ref):
+                response, error = await _attempt_provider(
+                    resolved_route,
+                    route,
+                    provider,
+                    provider_ref,
+                    credential_context,
+                    attempt_trace=attempt_trace,
+                    max_provider_attempts=max_provider_attempts,
+                    fallback_reason=current_fallback_reason,
+                    deadline_monotonic=deadline_monotonic,
+                )
             if error is None:
                 if response is None:
                     raise GatewayProviderFailureError(
@@ -556,6 +584,8 @@ async def _execute_route(
                 actual_fallback = current_fallback_reason is not None and (
                     fallback_reason is not None or distinct_within_route
                 )
+                if actual_fallback:
+                    record_reserved_rejection_fallback(route, current_fallback_reason, outcome='recovered')
                 return _executor_result(
                     response,
                     resolved_route=resolved_route,
@@ -576,8 +606,10 @@ async def _execute_route(
         if (
             index == len(refs) - 1
             or max_provider_attempts is not None
-            or not _can_try_next_provider(route, error.failure_class)
+            or not can_try_next_provider(route, provider_ref, error.failure_class)
         ):
+            if index > 0:
+                record_reserved_rejection_fallback(route, current_fallback_reason, outcome='exhausted')
             raise error
         current_fallback_reason = error.failure_class
 
@@ -605,7 +637,9 @@ async def _attempt_provider(
     """
     if current_attempt() is not None:
         if attempt_trace is None or attempt_trace.attempts:
-            return None, GatewayInvalidRequestError('proactivity attempt already consumed')
+            return None, GatewayInvalidRequestError(
+                'proactivity attempt already consumed', rejection_reason='proactivity_attempt_consumed'
+            )
         request = _provider_request(resolved_route, provider_ref, route=route)
         try:
             response = await execute_budgeted_provider(
@@ -620,7 +654,7 @@ async def _attempt_provider(
             return response, None
         except GatewayError as exc:
             return None, exc
-    max_attempts = max(route.retry.max_attempts, 1)
+    max_attempts = 1 if route.lane_id in DREAM_LANES else max(route.retry.max_attempts, 1)
     error: GatewayError | None = None
     for retry_ordinal in range(1, max_attempts + 1):
         if (
@@ -645,6 +679,8 @@ async def _attempt_provider(
             )
             if attempt_trace is not None:
                 attempt_trace.record(
+                    lane_id=route.lane_id,
+                    cache_policy=provider_request.get('_gateway_cache_policy'),
                     provider=provider_ref.provider,
                     configured_model=provider_ref.model,
                     route_artifact_id=route.route_artifact_id,
@@ -659,6 +695,8 @@ async def _attempt_provider(
             error = _map_provider_failure(exc, credential_context, provider_ref)
             if attempt_trace is not None:
                 attempt_trace.record(
+                    lane_id=route.lane_id,
+                    cache_policy=provider_request.get('_gateway_cache_policy'),
                     provider=provider_ref.provider,
                     configured_model=provider_ref.model,
                     route_artifact_id=route.route_artifact_id,
@@ -666,6 +704,7 @@ async def _attempt_provider(
                     retry_ordinal=retry_ordinal,
                     outcome='error',
                     error_class=exc.failure_class.value,
+                    metadata=exc.accounting,
                     usage_status=UsageStatus.INDETERMINATE,
                 )
             if error.failure_class not in RETRYABLE_PROVIDER_FAILURE_CLASSES:
@@ -679,6 +718,8 @@ async def _attempt_provider(
         except asyncio.CancelledError:
             if attempt_trace is not None:
                 attempt_trace.record(
+                    lane_id=route.lane_id,
+                    cache_policy=provider_request.get('_gateway_cache_policy'),
                     provider=provider_ref.provider,
                     configured_model=provider_ref.model,
                     route_artifact_id=route.route_artifact_id,
@@ -692,6 +733,8 @@ async def _attempt_provider(
         except Exception:
             if attempt_trace is not None:
                 attempt_trace.record(
+                    lane_id=route.lane_id,
+                    cache_policy=provider_request.get('_gateway_cache_policy'),
                     provider=provider_ref.provider,
                     configured_model=provider_ref.model,
                     route_artifact_id=route.route_artifact_id,
@@ -715,7 +758,7 @@ def _provider_request(
     route = route or selected_serving_route(resolved_route)
     provider_request: dict[str, Any] = {
         'model': provider_ref.model,
-        'messages': list(resolved_route.validated_request.messages),
+        'messages': copy.deepcopy(list(resolved_route.validated_request.messages)),
         'stream': False,
     }
     if route.lane_id == 'omi:auto:chat-agent':
@@ -724,11 +767,60 @@ def _provider_request(
     if resolved_route.validated_request.response_format is not None:
         provider_request['response_format'] = dict(resolved_route.validated_request.response_format)
     provider_request.update(dict(resolved_route.validated_request.forwarded_params))
-    if not uses_explicit_cache_and_chat_sanitizer(provider_ref.model):
+    if route.lane_id in DREAM_LANES:
+        provider_request['_dream_capacity_mode'] = route.provider_options.get('_dream_capacity_mode')
+    # Internal marker, derived only for Dream's opt-in high-thinking request.
+    # It is never an accepted public request field or a Vertex payload field.
+    if (
+        route.lane_id == 'omi:auto:dream-reasoning'
+        and provider_ref.provider == 'gemini'
+        and provider_request.get('reasoning_effort') == 'high'
+    ):
+        google = provider_request.get('google')
+        thinking = google.get('thinking_config') if isinstance(google, Mapping) else None
+        budget = thinking.get('thinking_budget') if isinstance(thinking, Mapping) else None
+        if isinstance(budget, int) and not isinstance(budget, bool) and budget > 0:
+            provider_request['_dream_thinking_budget'] = budget
+    mapped_gemini_effort: str | None = None
+    if (
+        route.lane_id.startswith('omi:auto:desktop-vertex-')
+        and provider_ref.provider == 'openai'
+        and provider_ref.model == 'gpt-6-luna'
+    ):
+        thinking = provider_request.get('google')
+        thinking = thinking.get('thinking_config') if isinstance(thinking, Mapping) else None
+        if isinstance(thinking, Mapping):
+            mapped_gemini_effort = _gemini_thinking_effort_for_luna(thinking)
+    apply_lane_cache_policy(
+        provider_request, lane=route.lane_id, provider=provider_ref.provider, model=provider_ref.model
+    )
+    if provider_ref.provider != 'gemini' and not uses_explicit_cache_and_chat_sanitizer(provider_ref.model):
         _remove_gpt56_cache_fields(provider_request)
+    if provider_ref.provider == 'gemini':
+        provider_request.pop('prompt_cache_options', None)
+        provider_request.pop('prompt_cache_key', None)
     if apply_budget:
         provider_request, _ = apply_output_budget(provider_request, route.output_budget)
+    provider_request.pop('reserved_capacity_only', None)
+    if provider_ref.provider == 'openai':
+        for key in ('google', 'pt_overflow_origin'):
+            provider_request.pop(key, None)
+        provider_request['messages'] = [
+            (
+                {
+                    **message,
+                    'tool_calls': [
+                        {k: v for k, v in call.items() if k != 'extra_content'} for call in message['tool_calls']
+                    ],
+                }
+                if isinstance(message, Mapping) and isinstance(message.get('tool_calls'), list)
+                else message
+            )
+            for message in provider_request['messages']
+        ]
     _sanitize_openai_chat_completions_request(provider_request, provider_ref)
+    if mapped_gemini_effort is not None:
+        provider_request['reasoning_effort'] = mapped_gemini_effort
     return provider_request
 
 
@@ -740,14 +832,20 @@ def _sanitize_openai_chat_completions_request(
 
     Live OpenAI 400 (2026-08): function tools with reasoning_effort other than
     ``none`` are unsupported for ``gpt-5.6-luna`` on ``/v1/chat/completions``.
-    Temperature must also stay at the model default (1). gpt-x-luna keeps this
-    sanitizer; whether that model still rejects the same params is unverified.
+    Desktop Gemini fallbacks reapply their mapped effort after this sanitizer;
+    other gpt-6-luna routes retain their route-specific effort and tool policy.
+    Temperature must stay at the model default (1).
     """
     if provider_ref.provider != 'openai':
         return
     model = provider_ref.model
     if not uses_explicit_cache_and_chat_sanitizer(model):
         return
+    if provider_request.get('model') == 'gpt-6-luna':
+        for param in ('top_p', 'stop'):
+            if param in provider_request:
+                provider_request.pop(param, None)
+                LUNA_UNSUPPORTED_PARAMS_DROPPED_TOTAL.labels(param=param).inc()
 
     tools = provider_request.get('tools')
     if tools:
@@ -763,6 +861,28 @@ def _sanitize_openai_chat_completions_request(
         isinstance(temperature, bool) or not isinstance(temperature, (int, float)) or temperature != 1
     ):
         provider_request.pop('temperature', None)
+
+
+def _gemini_thinking_effort_for_luna(thinking: Mapping[str, Any]) -> str:
+    """Map Gemini thinking controls to Luna effort levels.
+
+    Budget mapping is stable and intentionally coarse: absent or zero is
+    ``none``, 1 through 1024 is ``low``, and larger budgets are ``medium``.
+    Gemini levels map minimal/low/medium/high to none/low/medium/medium.
+    Unknown or malformed controls use ``none``.
+    """
+    level = thinking.get('thinking_level', thinking.get('thinkingLevel'))
+    if level in {'minimal', 'none'}:
+        return 'none'
+    if level == 'low':
+        return 'low'
+    if level in {'medium', 'high'}:
+        return 'medium'
+
+    budget = thinking.get('thinking_budget', thinking.get('thinkingBudget'))
+    if isinstance(budget, bool) or not isinstance(budget, int) or budget <= 0:
+        return 'none'
+    return 'low' if budget <= 1024 else 'medium'
 
 
 def _with_chat_agent_personality(messages: list[Any]) -> list[Any]:
@@ -952,6 +1072,7 @@ def _map_provider_failure(
         provider=provider_ref.provider,
         model=provider_ref.model,
         provider_rejection=exc.provider_rejection,
+        upstream_http_status=exc.upstream_http_status,
     )
 
 
@@ -963,9 +1084,3 @@ def _safe_failure_message(failure_class: FailureClass, provider_message: str | N
 
 def _expose_provider_error_details() -> bool:
     return os.getenv(EXPOSE_PROVIDER_ERROR_DETAILS_ENV_VAR, '').strip().lower() == 'true'
-
-
-def _can_try_next_provider(route: RouteArtifact, failure_class: FailureClass | None) -> bool:
-    if failure_class is None:
-        return False
-    return is_lkg_eligible(route, failure_class)

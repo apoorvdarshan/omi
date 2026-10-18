@@ -29,6 +29,7 @@ from scripts.runtime_env_validation.common import (
     _literal_env_entries_by_name,
     _manifest_env_value,
     _network_flags,
+    _remove_env_extra,
     _substitute_values,
     _validate_cloud_run_secret_entries,
     _validate_env_entries,
@@ -340,8 +341,11 @@ def _rendered_runtime_env_outputs(
             if service_config is None:
                 continue
             output_prefix = service.replace('-', '_')
+            outputs[f'{output_prefix}_forbidden_env_names'] = ','.join(sorted(service_config.get('forbidden_env', [])))
+            outputs[f'{output_prefix}_remove_env_extra'] = _remove_env_extra(service, service_config)
             outputs[f'{output_prefix}_env_vars'] = _render_cloud_run_env_vars(service_config.get('env', {}))
             outputs[f'{output_prefix}_secrets'] = _render_cloud_run_secrets(service_config.get('secrets', {}))
+            outputs[f'{output_prefix}_flags'] = _render_cloud_run_flags(service_config.get('flags', {}))
             service_account = _declared_service_account(service_config)
             outputs[f'{output_prefix}_identity_flags'] = (
                 f'--service-account={service_account} --remove-secrets={",".join(KEY_CREDENTIAL_ENV_NAMES)}'
@@ -495,7 +499,7 @@ def _validate_cloud_run_workflows(
         errors.extend(
             _validate_workflow_flags(
                 scope=f'cloud_run_workflow/{service}',
-                expected=_network_flags(env_config),
+                expected={**_network_flags(env_config), **service_config.get('flags', {})},
                 actual=_substitute_values(service_state.get('flags', {}), variables=workflow_vars),
                 strict_provisional=strict_provisional,
             )

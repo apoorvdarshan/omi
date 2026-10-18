@@ -13,10 +13,11 @@ import pytest
 from google.api_core import exceptions as google_api_exceptions
 
 from database import jev_shadow as store
+from database.firestore_retry import FIRESTORE_NO_RETRY
 from utils import executors, metrics
 from utils.conversations import jev_shadow as shadow
 from utils.conversations.processing_trigger import ProcessingTrigger
-from utils.conversations.relevance import RelevanceDecision
+from utils.conversations.relevance import JEV_DISCARD_THRESHOLD, RelevanceDecision
 from utils.llm.jev_client import JevAnswers
 
 SENTINEL = 'PRIVATE_SENTINEL_NEVER_PERSIST_5831'
@@ -211,8 +212,9 @@ def test_no_text_in_records_logs_or_metric_labels(harness, monkeypatch, caplog):
 
 
 @pytest.mark.parametrize('nano', ['keep', 'discard', None])
-@pytest.mark.parametrize('p_discard', [0.94, 0.95, 0.97])
+@pytest.mark.parametrize('p_discard', [0.79, 0.80, 0.81, 0.90, 0.97])
 def test_agreement_uses_raw_nano_and_strict_threshold(harness, monkeypatch, nano, p_discard):
+    assert JEV_DISCARD_THRESHOLD == 0.80
     agreement = MagicMock()
     monkeypatch.setattr(shadow, 'RELEVANCE_JEV_SHADOW_AGREEMENT', agreement)
     monkeypatch.setattr(shadow, 'ask_jev', lambda *a, **k: JevAnswers(None, {'worth_keeping': {'noul': 1 - p_discard}}))
@@ -226,7 +228,7 @@ def test_agreement_uses_raw_nano_and_strict_threshold(harness, monkeypatch, nano
             nano_reason='neighbor_fragment' if nano == 'discard' else None,
         )
     )
-    agreement.labels.assert_called_once_with(nano or 'none', 'true' if p_discard > 0.95 else 'false')
+    agreement.labels.assert_called_once_with(nano or 'none', 'true' if p_discard > 0.80 else 'false')
     assert harness[2][0][2]['nano_reason'] == ('neighbor_fragment' if nano == 'discard' else None)
 
 
@@ -333,8 +335,8 @@ def test_store_adds_60_day_expiry_without_plaintext_or_client_reads(monkeypatch)
     assert record['expire_at'] - record['created_at'] == timedelta(days=60)
     client.collection.assert_any_call('users')
     client.collection.assert_any_call('account_deletions')
-    marker.get.assert_called_once_with(transaction=transaction, retry=None, timeout=pytest.approx(0.4))
-    ref.get.assert_called_once_with(transaction=transaction, retry=None, timeout=pytest.approx(0.4))
+    marker.get.assert_called_once_with(transaction=transaction, retry=FIRESTORE_NO_RETRY, timeout=pytest.approx(0.4))
+    ref.get.assert_called_once_with(transaction=transaction, retry=FIRESTORE_NO_RETRY, timeout=pytest.approx(0.4))
     assert transaction.set.call_args.args[0] is ref
 
 
@@ -396,7 +398,7 @@ def test_store_write_is_fenced_by_account_deletion(monkeypatch):
     monkeypatch.setattr(store.time, 'monotonic', lambda: 12.0)
     assert store.write_jev_shadow('user', 'hash-id', {'lane': 'owner'}, deadline=12.4, firestore_client=client) is False
     transaction = client.transaction.return_value
-    marker.get.assert_called_once_with(transaction=transaction, retry=None, timeout=pytest.approx(0.4))
+    marker.get.assert_called_once_with(transaction=transaction, retry=FIRESTORE_NO_RETRY, timeout=pytest.approx(0.4))
     transaction.set.assert_not_called()
 
 
@@ -825,7 +827,7 @@ def test_aborted_without_a_winning_record_is_a_failure_not_deduped(monkeypatch):
     with pytest.raises(google_api_exceptions.Aborted):
         store.write_jev_shadow('user', 'id', {}, deadline=time.monotonic() + 1, firestore_client=client)
     ref.get.assert_called_once()
-    assert ref.get.call_args.kwargs['retry'] is None
+    assert ref.get.call_args.kwargs['retry'] is FIRESTORE_NO_RETRY
     assert 0 < ref.get.call_args.kwargs['timeout'] <= 1
 
 

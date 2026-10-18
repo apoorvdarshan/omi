@@ -19,6 +19,7 @@ class HomeProvider extends ChangeNotifier {
   static const int tabCount = 2;
 
   int _sessionGeneration = 0;
+  bool _languageDialogOffered = false;
   int selectedIndex = homeTab;
   Function(int idx)? onSelectedIndexChanged;
   final FocusNode chatFieldFocusNode = FocusNode();
@@ -161,6 +162,7 @@ class HomeProvider extends ChangeNotifier {
 
   void clearUserData() {
     _sessionGeneration++;
+    _languageDialogOffered = false;
     selectedIndex = homeTab;
     isAppsSearchFieldFocused = false;
     isChatFieldFocused = false;
@@ -256,23 +258,27 @@ class HomeProvider extends ChangeNotifier {
     await setupUserPrimaryLanguage();
   }
 
-  Future<void> setupUserPrimaryLanguage() async {
+  Future<void> setupUserPrimaryLanguage({Future<String?> Function()? fetchPrimaryLanguage}) async {
     if (SharedPreferencesUtil().hasSetPrimaryLanguage && SharedPreferencesUtil().userPrimaryLanguage.isNotEmpty) {
       return;
     }
 
     final generation = _sessionGeneration;
     try {
-      final language = await getUserPrimaryLanguage();
+      final language = await (fetchPrimaryLanguage ?? getUserPrimaryLanguage)();
       if (generation != _sessionGeneration) return;
       if (language == null) {
         // User hasn't set a primary language yet
         userPrimaryLanguage = '';
         hasSetPrimaryLanguage = false;
 
-        // Show language dialog after a short delay to ensure UI is ready
+        // Show language dialog after a short delay to ensure UI is ready. Not during onboarding:
+        // it has its own language step, and the required sheet would cover whichever step a
+        // relaunch resumed on, consent included (#20788).
         Future.delayed(const Duration(milliseconds: 500), () {
-          if (generation == _sessionGeneration && globalNavigatorKey.currentContext != null) {
+          if (generation == _sessionGeneration &&
+              SharedPreferencesUtil().onboardingCompleted &&
+              globalNavigatorKey.currentContext != null) {
             showLanguageDialogIfNeeded(globalNavigatorKey.currentContext!);
           }
         });
@@ -294,10 +300,13 @@ class HomeProvider extends ChangeNotifier {
     return;
   }
 
+  /// Opens the language picker once per session when no language is saved.
+  /// The sheet is closable; closing it keeps the default language and this
+  /// does not reopen it on the next Home rebuild.
   void showLanguageDialogIfNeeded(BuildContext context) {
-    if (!hasSetPrimaryLanguage) {
-      LanguageSelectionDialog.show(context, isRequired: true);
-    }
+    if (hasSetPrimaryLanguage || _languageDialogOffered) return;
+    _languageDialogOffered = true;
+    LanguageSelectionDialog.show(context);
   }
 
   Future<bool> updateUserPrimaryLanguage(String languageCode, {UserProvider? userProvider}) async {

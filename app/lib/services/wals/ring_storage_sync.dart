@@ -55,6 +55,7 @@ class RingStorageSyncImpl implements RingStorageSync {
 
   bool _isCancelled = false;
   bool _isSyncing = false;
+  String _syncPhase = 'connection';
   @override
   bool get isSyncing => _isSyncing;
 
@@ -66,7 +67,10 @@ class RingStorageSyncImpl implements RingStorageSync {
   @override
   double get currentSpeedKBps => _currentSpeedKBps;
 
-  RingStorageSyncImpl(this.listener);
+  final Timer Function(Duration, void Function()) _transferTimer;
+
+  RingStorageSyncImpl(this.listener, {Timer Function(Duration, void Function())? transferTimer})
+      : _transferTimer = transferTimer ?? Timer.new;
 
   @visibleForTesting
   set testWals(List<Wal> wals) => _wals = wals;
@@ -333,6 +337,7 @@ class RingStorageSyncImpl implements RingStorageSync {
       for (final wal in wals) {
         if (_isCancelled) break;
         final complete = await _syncRing(wal, progress: progress);
+        _syncPhase = 'finalize';
         if (!complete) {
           // Leave wal.status as miss so the next sync session retries it.
           // This preserves the "resume from same read_seq" guarantee — pairing
@@ -344,13 +349,21 @@ class RingStorageSyncImpl implements RingStorageSync {
           break;
         }
         wal.status = WalStatus.synced;
+        wal.deviceDownloadFraction = null;
         listener.onWalUpdated();
       }
-    } catch (e) {
+    } catch (e, st) {
       Logger.debug('RingStorageSync.syncAll: error: $e');
-      DebugLogManager.logError(e, null, 'RingStorageSync failed', {'device': _device?.id});
+      DebugLogManager.logError(e, st, 'RingStorageSync failed', {
+        'device': _device?.id,
+        'error': e.toString(),
+        'phase': _syncPhase,
+      });
     } finally {
       _isSyncing = false;
+      for (final w in _wals) {
+        w.deviceDownloadFraction = null;
+      }
     }
 
     progress?.onWalSyncedProgress(1.0, speedKBps: _currentSpeedKBps);
@@ -373,6 +386,9 @@ class RingStorageSyncImpl implements RingStorageSync {
       Logger.debug('RingStorageSync.syncWal: error: $e');
     } finally {
       _isSyncing = false;
+      for (final w in _wals) {
+        w.deviceDownloadFraction = null;
+      }
     }
     return SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
   }
@@ -382,6 +398,7 @@ class RingStorageSyncImpl implements RingStorageSync {
   /// Returns true if the transfer ran to completion (DONE received and acted on).
   Future<bool> _syncRing(Wal wal, {IWalSyncProgressListener? progress}) async {
     if (_device == null) return false;
+    _syncPhase = 'connection';
     final admittedGeneration = _localSync?.sessionGeneration ?? -1;
     final connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(_device!.id);
     if (connection == null) throw Exception('Device not connected');
@@ -393,6 +410,7 @@ class RingStorageSyncImpl implements RingStorageSync {
     final epoch = connection.ringCustodyEpoch;
     bool stillEpoch() => connection.ringCustodyEpoch == epoch && !_isCancelled;
 
+    _syncPhase = 'list-read';
     await connection.ringCustodyReady;
     if (!stillEpoch()) return false;
 
@@ -459,9 +477,25 @@ class RingStorageSyncImpl implements RingStorageSync {
     bool flushError = false;
     Future<void>? inFlightFlush;
     Timer? firstDataTimer;
+    Timer? idleTimer;
+    bool idleExpired = false;
+    bool acceptingNotifications = true;
     bool firstDataReceived = false;
     DateTime lastProgressUpdate = DateTime.now();
     const progressInterval = Duration(milliseconds: 200);
+
+    void receivedTransferData() {
+      firstDataReceived = true;
+      firstDataTimer?.cancel();
+      idleTimer?.cancel();
+      idleTimer = _transferTimer(const Duration(seconds: 15), () {
+        if (!completer.isCompleted) {
+          Logger.debug('RingStorageSync: no transfer data within 15s; stopping incomplete read');
+          idleExpired = true;
+          completer.complete(false);
+        }
+      });
+    }
 
     List<(int, int)> contiguousRanges(List<int> seqs) {
       final ranges = <(int, int)>[];
@@ -589,7 +623,9 @@ class RingStorageSyncImpl implements RingStorageSync {
     bool beginAborted = false;
 
     Future<void> handleNotification(List<int> value) async {
-      if (completer.isCompleted) return;
+      // An idle timeout stops new admission, not the queue of bytes already
+      // received from BLE. Those bytes may be waiting behind a durable flush.
+      if (completer.isCompleted && !idleExpired) return;
       if (_isCancelled) {
         if (!completer.isCompleted) completer.complete(false);
         return;
@@ -611,10 +647,6 @@ class RingStorageSyncImpl implements RingStorageSync {
           Logger.debug('RingStorageSync: NOTIFY_READ_BEGIN start=${begin.transferStartSeq} count=${begin.packetCount}');
           beginStartSeq = begin.transferStartSeq;
           beginPacketCount = begin.packetCount;
-          if (!firstDataReceived) {
-            firstDataReceived = true;
-            firstDataTimer?.cancel();
-          }
           if (beginStartSeq != readStart) {
             Logger.debug('RingStorageSync: READ_BEGIN start $beginStartSeq != requested $readStart — aborting');
             beginAborted = true;
@@ -647,10 +679,7 @@ class RingStorageSyncImpl implements RingStorageSync {
       // NOTIFY_DATA: append payload (skip the leading opcode byte) to the
       // reassembler. The firmware does NOT align chunks to record boundaries.
       final payload = value.sublist(1);
-      if (!firstDataReceived) {
-        firstDataReceived = true;
-        firstDataTimer?.cancel();
-      }
+      if (payload.isEmpty) return;
       reassembler.append(payload);
       _updateSpeed(payload.length);
 
@@ -692,6 +721,7 @@ class RingStorageSyncImpl implements RingStorageSync {
         if (wal.storageTotalBytes > 0) {
           final consumedBytes = recordsConsumed * RingProtocol.recordSize;
           final pct = (consumedBytes / wal.storageTotalBytes).clamp(0.0, 1.0);
+          wal.deviceDownloadFraction = pct;
           progress?.onWalSyncedProgress(pct, speedKBps: _currentSpeedKBps, phase: SyncPhase.downloadingFromDevice);
         }
       }
@@ -720,9 +750,24 @@ class RingStorageSyncImpl implements RingStorageSync {
     }
 
     if (!stillEpoch()) return false;
+    _syncPhase = 'transfer';
     _notifyStream = await connection.getBleStorageBytesListener(
       onStorageBytesReceived: (List<int> value) {
+        if (!acceptingNotifications || completer.isCompleted) return;
         final snapshot = List<int>.of(value);
+        final opcode = snapshot.isEmpty ? null : snapshot.first;
+        final begin = opcode == RingProtocol.notifyReadBegin ? RingProtocol.parseReadBeginNotification(snapshot) : null;
+        // Observe radio progress before queueing disk/custody work: a slow
+        // flush must not masquerade as a silent peripheral. Control chatter
+        // and empty DATA cannot extend the transfer's lifetime.
+        if ((opcode == RingProtocol.notifyData && snapshot.length > 1) ||
+            (!firstDataReceived && begin?.transferStartSeq == readStart)) {
+          receivedTransferData();
+        } else if (opcode == RingProtocol.notifyDone && RingProtocol.parseDoneNotification(snapshot) != null) {
+          // Radio delivery has ended; validating DONE may still be queued
+          // behind custody I/O. The overall deadline bounds that work.
+          idleTimer?.cancel();
+        }
         notifyQueue = notifyQueue.then((_) => handleNotification(snapshot)).catchError((e) {
           Logger.debug('RingStorageSync: notification handler error: $e');
           if (!completer.isCompleted) completer.complete(false);
@@ -749,33 +794,33 @@ class RingStorageSyncImpl implements RingStorageSync {
 
     // Kick off the read. No packet_count = stream everything from read_seq.
     if (!stillEpoch()) {
+      acceptingNotifications = false;
       firstDataTimer.cancel();
+      idleTimer?.cancel();
       await _notifyStream?.cancel();
       _notifyStream = null;
       return false;
     }
-    final readOk = await connection.readRingFromSeq(ringInfo.readSeq);
-    if (!readOk) {
-      firstDataTimer.cancel();
-      await _notifyStream?.cancel();
-      _notifyStream = null;
-      throw Exception('Failed to send CMD_RING_READ');
-    }
-
-    Logger.debug(
-      'RingStorageSync: reading from seq=${ringInfo.readSeq} (write=${ringInfo.writeSeq}, unread=${ringInfo.unreadPackets})',
-    );
-
     bool reachedDone = false;
     bool stopSent = false;
     try {
+      final readOk = await connection.readRingFromSeq(ringInfo.readSeq);
+      if (!readOk) throw StateError('Failed to send CMD_RING_READ');
+      Logger.debug(
+        'RingStorageSync: reading from seq=${ringInfo.readSeq} (write=${ringInfo.writeSeq}, unread=${ringInfo.unreadPackets})',
+      );
       reachedDone = await completer.future.timeout(const Duration(minutes: 30));
-    } on TimeoutException {
-      Logger.debug('RingStorageSync: overall transfer timeout (30m)');
-    } catch (e) {
+    } catch (e, st) {
       Logger.debug('RingStorageSync: transfer error: $e');
+      DebugLogManager.logError(e, st, 'RingStorageSync failed', {
+        'device': custodyDeviceId,
+        'error': e.toString(),
+        'phase': _syncPhase,
+      });
     } finally {
+      acceptingNotifications = false;
       firstDataTimer.cancel();
+      idleTimer?.cancel();
       if (_isCancelled || !(reachedDone && doneOk)) {
         await _stopRingTransfer(connection, epoch);
         stopSent = true;
@@ -791,6 +836,7 @@ class RingStorageSyncImpl implements RingStorageSync {
     // Wait for any flush still in flight from the streaming phase before
     // draining the tail — otherwise the final flush could race the in-flight
     // one on bytesData and recordTimestamps.
+    _syncPhase = 'finalize';
     final pendingFlush = inFlightFlush;
     if (pendingFlush != null) {
       try {

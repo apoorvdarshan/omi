@@ -110,7 +110,6 @@ COUNTER_FN_ON_GAUGE_DEBT = {
     "dfpgfzd3t1m9sf",  # critical, pages
     "efpossz9hmsqod",  # critical, pages
     "efpgg049laqyof",
-    "efpgg1kfjglj4d",
     "bevzeigrns5xca",
     "cevzen5b94z5sb",  # critical, pages
     "tz_backend_listen_lb_zero",  # critical, pages
@@ -147,6 +146,65 @@ def test_alert_uids_are_short_enough_for_grafana_to_accept():
         assert not over, f"{export_name}: Grafana will reject these UIDs at create time: {over}"
 
 
+# The prod Grafana Loki datasource UID, carried by the held raw-line rules.
+# Referenced here so a rule that names the datasource only by UID cannot slip
+# past the type check below.
+LOG_DATASOURCE_UIDS = {"aet29e27cgmwwc"}
+LOG_DATASOURCE_TYPES = {"loki", "cloudlogging"}
+
+
+def test_live_alert_rules_never_query_log_datasources():
+    """No unpaused rule may query a log datasource (Loki, Cloud Logging).
+
+    A raw-line alert query re-scans log lines on every 60s tick, blows the 30s
+    datasource timeout, drops evaluation ticks, and has twice loaded the
+    alerting plane into Grafana 502s: 2026-10-13 via Cloud Logging (#21390)
+    and 2026-10-14 via Loki on {namespace="prod-omi-backend"} (196 failures in
+    3h from one rule alone). Held rules stay paused through
+    ``metric-inventory.prod.json`` ``admission_holds``; re-admission requires a
+    bounded counter metric, never a log datasource.
+    """
+    offenders: dict[str, set[str]] = {}
+    for export_name, rules in _all_rule_exports().items():
+        for uid, rule in rules.items():
+            if rule.get("isPaused"):
+                continue
+            for node in rule.get("data", []):
+                model = node.get("model") or {}
+                ds_type = (model.get("datasource") or {}).get("type", "")
+                ds_uid = node.get("datasourceUid") or ""
+                if ds_type in LOG_DATASOURCE_TYPES or ds_uid in LOG_DATASOURCE_UIDS:
+                    offenders.setdefault(uid, set()).add(export_name)
+    assert not offenders, (
+        "live alert rules query a log datasource for raw lines "
+        f"(2026-10-13/#21390 failure class): {sorted(offenders)}; "
+        "pause the rule and record an admission hold, or move it to a bounded counter metric"
+    )
+
+
+CORRUPTED_STREAM_LOG_RULE = "df2a40h2fbjswe"
+CORRUPTED_STREAM_METRIC_RULE = "omi-listen-audio-decode-failures"
+CORRUPTED_STREAM_METRIC_EXPR = (
+    'sum(increase(omi_listen_audio_decode_failures_total{job="backend-listen-metrics"}[15m])) or vector(0)'
+)
+
+
+def test_retired_corrupted_stream_log_rule_keeps_the_decode_failures_counter():
+    """The retired raw-log rule must retain bounded decode-failure coverage.
+
+    The old definition is archived in retired-loki-alerts.json for a reviewed,
+    manual cleanup. Canonical exports must keep the Prometheus replacement.
+    """
+    for export_name, rules in _all_rule_exports().items():
+        assert CORRUPTED_STREAM_LOG_RULE not in rules, export_name
+        replacement = rules[CORRUPTED_STREAM_METRIC_RULE]
+        assert replacement["isPaused"] is False, export_name
+        assert replacement["data"][0]["model"]["expr"] == CORRUPTED_STREAM_METRIC_EXPR, export_name
+        assert replacement["data"][0]["datasourceUid"] == "prometheus", export_name
+        assert replacement["noDataState"] == "OK", export_name
+        assert replacement["for"] == "5m", export_name
+
+
 def test_managed_gke_disables_unavailable_control_plane_scrapes_and_alerts():
     """Managed GKE must not page on control-plane targets it cannot expose.
 
@@ -174,7 +232,7 @@ def test_combined_alert_export_matches_every_split_source_rule():
         assert combined[uid] == split[uid], uid
 
 
-def test_durable_queue_oldest_ready_alert_pages_on_age_or_absent_gauge():
+def test_durable_queue_oldest_ready_alert_pages_on_age_absence_or_sustained_unknown():
     for rules in _all_rule_exports().values():
         rule = rules['omi-queue-oldest-ready']
         assert len(rule['uid']) < 40
@@ -182,6 +240,8 @@ def test_durable_queue_oldest_ready_alert_pages_on_age_or_absent_gauge():
         assert 'omi_queue_oldest_ready_age_seconds' in expr
         assert 'absent(omi_queue_oldest_ready_age_seconds)' in expr
         assert '21600' in expr
+        assert 'max(omi_queue_oldest_ready_sample_unknown) > 0' in expr
+        assert rule['for'] == '5m'
         assert rule['noDataState'] == 'Alerting'
         assert rule['labels']['alert_identity'] == 'omi-queue-oldest-ready'
 
@@ -319,13 +379,101 @@ def test_llm_gateway_alerts_cover_client_black_holes_and_ready_endpoints():
     assert expected <= split.keys()
     assert expected <= combined.keys()
     reachability_expr = split["omi-llm-gateway-client-reachability"]["data"][0]["model"]["expr"]
-    assert "llm_gateway_chat_extraction_requests_total" in reachability_expr
-    assert "llm_gateway_circuit_open" in reachability_expr
-    assert 'outcome="success"' in reachability_expr
-    assert "llm_gateway_client_first_byte_seconds_bucket" in reachability_expr
+    # Only the initialized circuit gauge is a live client signal; the extraction and
+    # first-byte families had zero prod series for 10 days (2026-10-13 backtest).
+    # Gateway pods export a permanent 0 for this client gauge; scope to client jobs so it cannot mask them.
+    assert reachability_expr == 'max(llm_gateway_circuit_open{job=~"backend-listen-metrics|pusher-metrics"}) > bool 0'
+    assert "llm_gateway_chat_extraction_requests_total" not in reachability_expr
+    assert "llm_gateway_client_first_byte_seconds_bucket" not in reachability_expr
     endpoint_rule = split["omi-llm-gateway-no-ready-endpoints"]
     assert endpoint_rule["noDataState"] == "Alerting"
-    assert "kube_endpoint_address_available" in endpoint_rule["data"][0]["model"]["expr"]
+    assert 'kube_endpoint_address{' in endpoint_rule["data"][0]["model"]["expr"]
+    assert 'ready="true"' in endpoint_rule["data"][0]["model"]["expr"]
+    assert 'or vector(0)' in endpoint_rule["data"][0]["model"]["expr"]
+
+
+def test_backend_listen_neg_zone_coverage_and_socket_skew_alerts():
+    split = _rules(ALERT_SOURCES / "transcription-services.json")
+    combined = _rules(MONITORING / "alert-rules.json")
+    expected = {"omi-listen-neg-zone-no-traffic", "omi-listen-websocket-zone-skew"}
+
+    assert expected <= split.keys()
+    assert expected <= combined.keys()
+    for uid in expected:
+        assert split[uid] == combined[uid]
+        assert split[uid]["for"] == "10m"
+        assert split[uid]["data"][0]["datasourceUid"] == "prometheus"
+
+    missing_zone = split["omi-listen-neg-zone-no-traffic"]
+    missing_expr = missing_zone["data"][0]["model"]["expr"]
+    assert "kube_pod_status_ready" in missing_expr
+    assert 'condition="true"' in missing_expr
+    assert "kube_pod_info" in missing_expr
+    assert 'kube_node_info{job="kube-state-metrics"}' in missing_expr
+    assert '"provider_id"' in missing_expr
+    assert 'backend_scope' in missing_expr
+    assert 'backend_name="prod-backend-listen-neg"' in missing_expr
+    assert 'avg_over_time(avg without (instance)' in missing_expr
+    assert 'rate(stackdriver_' not in missing_expr
+    assert "unless on (zone)" in missing_expr
+    assert missing_zone["noDataState"] == "Alerting"
+    assert missing_zone["labels"]["severity"] == "critical"
+
+    skew = split["omi-listen-websocket-zone-skew"]
+    skew_expr = skew["data"][0]["model"]["expr"]
+    assert "backend_listen_active_ws_connections" in skew_expr
+    assert "< bool on () group_left()" in skew_expr
+    assert "0.5" in skew_expr
+    assert "> 100" in skew_expr
+    assert skew["noDataState"] == "OK"
+    assert skew["labels"]["severity"] == "warning"
+
+
+def test_backend_listen_neg_endpoint_coverage_exporter_alerts():
+    split = _rules(ALERT_SOURCES / "transcription-services.json")
+    combined = _rules(MONITORING / "alert-rules.json")
+    expected = {
+        "omi-listen-neg-endpoint-coverage",
+        "omi-listen-neg-endpoints-unattached",
+        "omi-listen-neg-exporter-stale",
+    }
+
+    assert expected <= split.keys()
+    assert expected <= combined.keys()
+    for uid in expected:
+        rule = split[uid]
+        assert rule == combined[uid]
+        assert rule["data"][0]["datasourceUid"] == "prometheus"
+        assert rule["labels"]["alert_identity"] == uid
+
+    coverage = split["omi-listen-neg-endpoint-coverage"]
+    coverage_expr = coverage["data"][0]["model"]["expr"]
+    assert coverage["for"] == "10m"
+    assert coverage["labels"]["severity"] == "warning"
+    assert "omi_listen_lb_attached_ready_endpoints" in coverage_expr
+    assert "omi_listen_lb_ready_pods" in coverage_expr
+    assert "< bool 0.8" in coverage_expr
+    assert ">= bool 5" in coverage_expr
+    assert coverage["noDataState"] == "OK"
+
+    unattached = split["omi-listen-neg-endpoints-unattached"]
+    unattached_expr = unattached["data"][0]["model"]["expr"]
+    assert unattached["for"] == "5m"
+    assert unattached["labels"]["severity"] == "critical"
+    assert "omi_listen_lb_neg_attached" in unattached_expr
+    assert "omi_listen_lb_neg_endpoints" in unattached_expr
+    assert "== bool 0" in unattached_expr
+    assert "> bool 0" in unattached_expr
+    assert unattached["noDataState"] == "OK"
+
+    stale = split["omi-listen-neg-exporter-stale"]
+    stale_expr = stale["data"][0]["model"]["expr"]
+    assert stale["for"] == "10m"
+    assert stale["labels"]["severity"] == "warning"
+    assert "omi_listen_lb_exporter_last_success_timestamp_seconds" in stale_expr
+    assert "> bool 300" in stale_expr
+    assert "absent(" in stale_expr
+    assert stale["noDataState"] == "Alerting"
 
 
 def test_llm_gateway_fallback_ticket_counts_only_successful_actual_failover():
@@ -520,6 +668,71 @@ def test_finalization_queue_rules_read_the_replicated_series_correctly():
         assert dead_expr == "sum(increase(listen_finalization_dead_letter_total[1h]))", export_name
 
 
+def test_finalization_summary_freshness_separates_stale_from_never_published():
+    stale_expr = "time() - max(max_over_time(listen_finalization_summary_last_success_timestamp_seconds[30m])) > 900"
+    absent_expr = "absent_over_time(listen_finalization_summary_last_success_timestamp_seconds[30m])"
+    for export_name, rules in _all_rule_exports().items():
+        stale = rules["omi-capture-summary-stale"]
+        assert stale["data"][0]["model"]["expr"] == stale_expr, export_name
+        assert stale["data"][0]["relativeTimeRange"]["from"] == 1800, export_name
+        assert stale["data"][2]["model"]["conditions"][0]["evaluator"]["params"] == [0]
+        assert stale["for"] == "5m", export_name
+        assert stale["labels"]["severity"] == "critical", export_name
+        assert stale["noDataState"] == "OK", export_name
+
+        never_published = rules["omi-capture-summary-never-published"]
+        assert never_published["data"][0]["model"]["expr"] == absent_expr, export_name
+        assert never_published["data"][0]["relativeTimeRange"]["from"] == 1800, export_name
+        assert never_published["for"] == "30m", export_name
+        assert never_published["labels"]["severity"] == "warning", export_name
+        assert never_published["noDataState"] == "OK", export_name
+        assert "not a page" in never_published["annotations"]["threshold"], export_name
+
+
+def test_live_stt_evidence_loss_rules_are_volume_gated_settlement_proxies():
+    for export_name, rules in _all_rule_exports().items():
+        warning = rules["omi-stt-evidence-loss"]
+        critical = rules["omi-stt-evidence-loss-critical"]
+        for rule, duration, threshold, severity in (
+            (warning, "15m", "0.01", "warning"),
+            (critical, "10m", "0.03", "critical"),
+        ):
+            assert rule["for"] == duration, f"{export_name}:{rule['uid']}"
+            assert rule["data"][0]["relativeTimeRange"]["from"] == 900
+            assert rule["data"][1]["relativeTimeRange"]["from"] == 900
+            assert "increase(omi_stt_cost_routing_settlements_total" in rule["data"][0]["model"]["expr"]
+            assert "$A >= 100 && $B > " + threshold == rule["data"][2]["model"]["expression"]
+            assert "omi_stt_fleet_health_write_dropped_total" in rule["data"][1]["model"]["expr"]
+            assert "omi_stt_cost_routing_evidence_errors_total" in rule["data"][1]["model"]["expr"]
+            assert "omi_stt_cost_routing_emission_ack_errors_total" in rule["data"][1]["model"]["expr"]
+            assert "Settlement-normalized proxy" in rule["annotations"]["threshold"]
+            assert "day of data" in rule["annotations"]["threshold"]
+            assert rule["labels"]["severity"] == severity
+        assert warning["uid"] != critical["uid"]
+
+
+def test_live_stt_gate_sentinel_is_excluded_from_provider_health_and_alerted_separately():
+    for export_name, rules in _all_rule_exports().items():
+        provider = rules["omi-stt-fallback-leg-dead"]
+        gate = rules["omi-stt-gate-unavailable"]
+        assert 'to_mode!="vendor"' in provider["data"][0]["model"]["expr"], export_name
+        assert 'to_mode!="vendor"' in provider["data"][1]["model"]["expr"], export_name
+        assert 'to_mode="vendor"' in gate["data"][0]["model"]["expr"], export_name
+        assert 'reason="gate_unavailable"' in gate["data"][0]["model"]["expr"], export_name
+        assert gate["folderUID"] == provider["folderUID"], export_name
+        assert gate["notification_settings"]["receiver"] == provider["notification_settings"]["receiver"]
+
+
+def test_backend_sync_alert_sums_revisions_and_states_before_its_service_threshold():
+    rules = _all_rule_exports()
+    for export_name, rule_set in rules.items():
+        rule = rule_set["cew97x299of7kb"]
+        query = rule["data"][0]["model"]["timeSeriesList"]
+        assert query["crossSeriesReducer"] == "REDUCE_SUM", export_name
+        assert query["groupBys"] == [], export_name
+        assert rule["data"][2]["model"]["conditions"][0]["evaluator"]["params"] == [72]
+
+
 RESILIENCE_DASHBOARD = MONITORING / "dashboards/omi-services/resilience-fallbacks.json"
 SILENT_FAILURE_PANELS = {
     PRE_ROUTE_REJECTION_RULE: "12",
@@ -587,6 +800,9 @@ def test_every_alerted_journey_is_covered_by_the_liveness_rule():
     """
     for export_name, rules in _all_rule_exports().items():
         liveness = rules[SIGNAL_DEAD_RULE]["data"][0]["model"]["expr"]
+        # Client live delivery has a distinct, traffic-gated counter-silence
+        # warning. Do not weaken coverage or mutate the existing generic rule.
+        liveness += " " + rules["omi-slo-live-signal-dead"]["data"][0]["model"]["expr"]
         covered = set(JOURNEY_SELECTOR.findall(liveness))
         covered |= (
             set(re.findall(r'journey=~"([a-z_|]+)"', liveness)[0].split("|"))
@@ -680,12 +896,18 @@ STT_CHAIN_EXHAUSTED_RATIO_EXPR = (
 STT_CHAIN_EXHAUSTED_TRAFFIC_EXPR = 'sum(increase(omi_listen_accepted_total{job="backend-listen-metrics"}[5m]))'
 STT_FALLBACK_LEG_ATTEMPTS_EXPR = (
     'sum by (to_mode) (increase(omi_fallback_total{job="backend-listen-metrics",'
-    'component=~"stt_selection|stt_live_session"}[6h]))'
+    'component=~"stt_selection|stt_live_session",to_mode!="unavailable",to_mode!="vendor"}[6h]))'
+    ' unless on(to_mode) label_replace(max by (provider) (omi_stt_provider_retired{job="backend-listen-metrics"} == 1),'
+    ' "to_mode", "$1", "provider", "(.*)")'
 )
+# Retired providers (e.g. Deepgram) are intentionally unfunded and must not page.
+# to_mode="unavailable" is the no-provider-left sentinel: it can never recover, so
+# including it made the rule fire on every evaluation (2026-10-13 replay).
 STT_FALLBACK_LEG_RECOVERED_EXPR = (
     'sum by (to_mode) (increase(omi_fallback_total{job="backend-listen-metrics",'
-    'component=~"stt_selection|stt_live_session",outcome="recovered"}[6h])) or sum by (to_mode) '
-    '(increase(omi_fallback_total{job="backend-listen-metrics",component=~"stt_selection|stt_live_session"}[6h])) * 0'
+    'component=~"stt_selection|stt_live_session",to_mode!="unavailable",to_mode!="vendor",outcome="recovered"}[6h])) or sum by (to_mode) '
+    '(increase(omi_fallback_total{job="backend-listen-metrics",component=~"stt_selection|stt_live_session",'
+    'to_mode!="unavailable",to_mode!="vendor"}[6h])) * 0'
 )
 STT_PROVIDER_BUDGET_EXPR = (
     '(sum by (provider) (increase(omi_stt_stream_close_total{job="backend-listen-metrics",'
@@ -853,6 +1075,11 @@ def test_soniox_budget_exhaustion_alert_pages_from_a_close_in_five_minutes():
         assert exprs == [expected_expr], export_name
         math_nodes = [node["model"]["expression"] for node in rule["data"] if node["model"].get("type") == "math"]
         assert math_nodes == ["$A > 0"], export_name
+        nodes = {node["refId"]: node["model"] for node in rule["data"]}
+        assert rule["condition"] == "D", export_name
+        assert nodes["D"]["type"] == "reduce", export_name
+        assert nodes["D"]["expression"] == "C", export_name
+        assert nodes["C"]["expression"] == "$A > 0", export_name
 
 
 def test_soniox_runway_and_modulate_fallback_alerts_name_the_operator_lever():
@@ -961,10 +1188,12 @@ EXTERNAL_ALERT_METRICS = {
     # kube-state-metrics
     "kube_deployment_status_replicas": "kube-state-metrics",
     "kube_deployment_status_replicas_ready": "kube-state-metrics",
-    "kube_endpoint_address_available": "kube-state-metrics",
+    "kube_endpoint_address": "kube-state-metrics",
     "kube_horizontalpodautoscaler_status_target_metric": "kube-state-metrics",
+    "kube_node_info": "kube-state-metrics",
     "kube_pod_container_resource_limits": "kube-state-metrics",
     "kube_pod_container_status_restarts_total": "kube-state-metrics",
+    "kube_pod_info": "kube-state-metrics",
     "kube_pod_status_ready": "kube-state-metrics",
     "namespace_workload_pod:kube_pod_owner:relabel": "kube-state-metrics relabeling rule",
     # cAdvisor
@@ -1249,7 +1478,13 @@ def test_window_canary_batch_protection_pages_telegram_before_sync_degrades():
             rule = rules[uid]
             assert metric in ' '.join(d['model'].get('expr', '') for d in rule['data'])
             assert rule['notification_settings']['receiver'] == 'Omi - Services Alerting (Telegram)'
-            assert rule['noDataState'] == 'Alerting'
+            # Sparse prerecorded traffic is healthy without data; its volume
+            # guard still requires ten requests before evaluating errors.
+            if uid == 'omi-stt-sync-prerecorded-errors':
+                assert rule['noDataState'] == 'OK'
+                assert rule['data'][2]['model']['expression'] == '$A >= 10 && $B >= 0.02'
+            else:
+                assert rule['noDataState'] == 'Alerting'
             assert rule['isPaused'] is False
             assert 'Parakeet canary: set PARAKEET_WINDOW_ALLOCATION_PERCENT=0' in rule['annotations']['summary']
             assert rule['for'] == '2m'
@@ -1469,3 +1704,61 @@ def test_inherited_datasource_targets_join_the_promql_gate():
     }
     assert _prometheus_exprs_from_node(loki_panel, "synthetic.json") == []
     assert _prometheus_exprs_from_node(mixed_panel, "synthetic.json") == []
+
+
+REDIS_CACHE_CONN_WARN = "omi-redis-cache-conn-warn"
+REDIS_CACHE_CONN_PAGE = "omi-redis-cache-conn-page"
+REDIS_CACHE_CONN_WARN_EXPR = (
+    'sum(increase(omi_fallback_total{job=~"backend-listen-metrics|pusher-metrics",component="other",'
+    'from_mode="cache_write",reason=~"auth_error|connection_error|timeout",outcome="degraded"}[10m])) or vector(0)'
+)
+REDIS_CACHE_CONN_TRAFFIC_EXPR = 'sum(increase(omi_listen_accepted_total{job="backend-listen-metrics"}[5m]))'
+REDIS_CACHE_CONN_RATIO_EXPR = (
+    'sum(increase(omi_fallback_total{job=~"backend-listen-metrics|pusher-metrics",component="other",'
+    'from_mode="cache_write",reason=~"auth_error|connection_error|timeout",outcome="degraded"}[5m])) '
+    '/ clamp_min(sum(increase(omi_listen_accepted_total{job="backend-listen-metrics"}[5m])), 1)'
+)
+
+
+def test_redis_cache_connection_alerts_watch_listen_and_pusher_fail_open():
+    """Auth and connection fail-opens are omi_fallback_total, the same signal sibling rules use.
+
+    capacity_full stays on its own reason so a maxmemory event does not page this rule.
+    The series did not exist during the 2026-10-08 AuthenticationError incident, so the
+    thresholds are structural: any sustained errors warn, and a ratio above half of
+    listen accepts pages.
+    """
+    for export_name, rules in _all_rule_exports().items():
+        warn = rules[REDIS_CACHE_CONN_WARN]
+        page = rules[REDIS_CACHE_CONN_PAGE]
+        assert warn["ruleGroup"] == "Resilience", export_name
+        assert warn["for"] == "10m", export_name
+        assert warn["noDataState"] == "OK", export_name
+        assert warn["labels"]["severity"] == "warning", export_name
+        assert warn["labels"]["impact"] == "infrastructure", export_name
+        assert warn["labels"]["component"] == "live-transcription", export_name
+        assert warn["data"][0]["model"]["expr"] == REDIS_CACHE_CONN_WARN_EXPR, export_name
+        assert warn["data"][0]["relativeTimeRange"]["from"] == 600, export_name
+        assert warn["data"][2]["model"]["conditions"][0]["evaluator"] == {"params": [0], "type": "gt"}, export_name
+        assert "capacity_full" not in warn["data"][0]["model"]["expr"], export_name
+
+        assert page["ruleGroup"] == "Resilience", export_name
+        assert page["for"] == "5m", export_name
+        assert page["noDataState"] == "OK", export_name
+        assert page["labels"]["severity"] == "critical", export_name
+        assert page["labels"]["impact"] == "user-experience", export_name
+        assert page["data"][0]["model"]["expr"] == REDIS_CACHE_CONN_TRAFFIC_EXPR, export_name
+        assert page["data"][1]["model"]["expr"] == REDIS_CACHE_CONN_RATIO_EXPR, export_name
+        assert page["data"][2]["model"]["expression"] == "$A >= 50 && $B > 0.5", export_name
+        assert page["notification_settings"]["receiver"] == "Omi - Services Alerting (Telegram)", export_name
+        assert "capacity_full" not in page["data"][1]["model"]["expr"], export_name
+
+
+def test_retired_loki_alerts_cannot_reenter_canonical_sources():
+    retired = json.loads((MONITORING / "retired-loki-alerts.json").read_text())
+    retired_uids = {rule["uid"] for rule in retired["rules"]}
+    assert retired_uids == {"afd0krbk1bugwf", "fewwk2goqfklcf", "devzd05c0bocgc", "df2a40h2fbjswe"}
+    holds = json.loads((MONITORING / "metric-inventory.prod.json").read_text())["admission_holds"]
+    assert retired_uids.isdisjoint(holds)
+    for export_name, rules in _all_rule_exports().items():
+        assert retired_uids.isdisjoint(rules), export_name

@@ -12,6 +12,21 @@ enum OmiBleEnergyPolicy {
         return entry
     }
 
+    /// Backfill the newest battery point's charging flag, but only when that
+    /// point is recent: stamping the state observed now onto a hours-old
+    /// sample would mislabel historical battery data.
+    static let batteryBackfillMaxAgeMs: Int64 = 15 * 60 * 1_000
+
+    static func backfillLatestBatteryCharging(
+        _ history: [[String: Any]], charging: Bool, nowMs: Int64
+    ) -> [[String: Any]]? {
+        guard let latest = history.last, latest["charging"] == nil else { return nil }
+        guard let ts = latest["ts"] as? Int64, nowMs - ts <= batteryBackfillMaxAgeMs else { return nil }
+        var updated = history
+        updated[updated.count - 1]["charging"] = charging
+        return updated
+    }
+
     static func shouldPersistBatteryReading(
         previousLevel: Int?,
         previousTimestampMs: Int64?,
@@ -56,6 +71,13 @@ enum OmiBleFirmwareDiagnostics {
             let value = u32(offset)
             if value != UInt32.max { result[key] = NSNumber(value: value) }
         }
+        if data.count >= 30 {
+            for (key, offset) in [("last_off_charger_mv", 25), ("charge_pin_edges", 27)] {
+                let value = Int(data[offset]) | (Int(data[offset + 1]) << 8)
+                if value != 0xffff { result[key] = NSNumber(value: value) }
+            }
+            if data[29] == 0 || data[29] == 1 { result["soc_frozen"] = NSNumber(value: data[29] == 1) }
+        }
         return result
     }
 }
@@ -97,6 +119,16 @@ struct OmiBleReconnectDiagnostics {
         pendingTimestampMs = nil
         guard hadConnection else { return nil }
         return (timestamp, max(0, atMs - timestamp))
+    }
+
+    /// Age of one disconnect-history row. A resolved lost-audio row stays until
+    /// the later of its start and `lostAudioResolvedAt` leaves the window, so
+    /// Dart can import a recovery whose outage began earlier. Unresolved rows
+    /// keep the start timestamp, which is also the reconnect-matching key.
+    static func retentionTimestamp(_ entry: [String: Any]) -> Int64 {
+        let start = entry["timestamp"] as? Int64 ?? 0
+        guard let resolvedAt = entry["lostAudioResolvedAt"] as? Int64 else { return start }
+        return max(start, resolvedAt)
     }
 
     func retainedHistory<T>(

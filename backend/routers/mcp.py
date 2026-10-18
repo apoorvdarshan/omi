@@ -1,19 +1,19 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence, Union
 
+from utils.external_list_reads import ExternalListCacheRoute, cached_external_list, lever_enabled
+from utils.other.list_budget import finish_list_budget, list_read_budget_for_request
 from utils.executors import postprocess_executor
 from utils.mcp_data import end_of_day_utc, parse_date_only_utc
 
 from fastapi import APIRouter, HTTPException, Depends, Request, Response
-from fastapi.routing import APIRoute
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 import database.users as users_db
 from database._client import db
 import database.phone_calls as phone_calls_db
 from firebase_admin import auth as firebase_auth
 
-# from database.redis_db import get_filter_category_items
 # from database.vector_db import query_vectors_by_metadata
 from models.memories import Memory, MemoryCategory
 from models.conversation_enums import CategoryEnum
@@ -30,6 +30,7 @@ from dependencies import (
     get_mcp_memory_default_memory_read_context,
     get_mcp_memory_default_memory_write_context,
 )
+from database.person_aliases import normalized_person_alias
 from utils.other.endpoints import with_rate_limit, with_rate_limit_context
 from utils.log_sanitizer import sanitize_pii
 from utils.memory.product_authorization import (
@@ -67,7 +68,7 @@ logger = logging.getLogger(__name__)
 _REST_RETRY_AFTER = "60"
 
 
-class _McpRoute(APIRoute):
+class _McpRoute(ExternalListCacheRoute):
     """Ensure every 429 leaving this router carries a Retry-After hint.
 
     The Redis-backed limiter sets its own windowed value; the in-process
@@ -102,6 +103,8 @@ get_uid_with_mcp_action_items_write = require_mcp_scope(TOOL_REQUIRED_SCOPE["cre
 get_uid_with_mcp_goals_read = require_mcp_scope(TOOL_REQUIRED_SCOPE["get_goals"])
 get_uid_with_mcp_chat_read = require_mcp_scope(TOOL_REQUIRED_SCOPE["get_chat_messages"])
 get_uid_with_mcp_people_read = require_mcp_scope(TOOL_REQUIRED_SCOPE["get_people"])
+get_uid_with_mcp_people_rename = require_mcp_scope(TOOL_REQUIRED_SCOPE["rename_person"])
+get_uid_with_mcp_people_cleanup = require_mcp_scope(TOOL_REQUIRED_SCOPE["dismiss_person"])
 get_uid_with_mcp_screen_activity_read = require_mcp_scope(TOOL_REQUIRED_SCOPE["get_screen_activity"])
 
 # Owner-management operations use Firebase identity rather than resource scopes.
@@ -397,6 +400,7 @@ def search_memories(
 @router.get("/v1/mcp/memories", tags=["mcp"], response_model=List[CleanerMemory])
 def get_memories(
     response: Response,
+    request: Request = None,
     auth_context: ProductAuthorizationContext = Depends(get_mcp_memory_default_memory_read_context),
     limit: int = 25,
     offset: int = 0,
@@ -448,6 +452,15 @@ def get_memories(
             detail=app_key_grant.observability,
         )
 
+    budget = (
+        list_read_budget_for_request(request, route='mcp-memories', owner_uid=uid, context=auth_context)
+        if sort in {'created_desc', 'updated_desc', 'manual_first'}
+        and lever_enabled('OMI_MCP_MEMORY_LIST_BUDGET_ENABLED')
+        else None
+    )
+    cached = cached_external_list(request, response, auth_context, locals())
+    if cached is not None:
+        return cached
     try:
         result = mcp_memory_handlers.memories_page_core(
             uid,
@@ -466,9 +479,12 @@ def get_memories(
             # smaller MCP tool cap.
             max_scan=5000,
             cursor_kind="rest_get_memories",
+            **({'budget': budget} if budget is not None else {}),
         )
     except ToolExecutionError as e:
         raise _http_error_from_tool_error(e)
+    if budget is not None:
+        finish_list_budget(response, budget)
     _next_cursor_header(response, result.get("next_cursor"))
     if result.get("scan_truncated"):
         response.headers["X-Scan-Truncated"] = "true"
@@ -484,6 +500,7 @@ class SimpleStructured(BaseModel):
 class SimpleTranscriptSegment(BaseModel):
     id: Optional[str] = None
     text: str
+    original_text: Optional[str] = None
     speaker_id: Optional[int] = None
     speaker_name: Optional[str] = None
     start: float
@@ -510,22 +527,15 @@ class SimpleConversation(BaseModel):
     language: Optional[str] = None
     apps_results: List[AppResult] = []
     match_snippets: List[TranscriptMatchSnippet] = []
+    participants_included: bool = False
+    participants: List[dict] = Field(default_factory=list)
+    person_ids: List[str] = Field(default_factory=list)
 
 
 class FullConversation(SimpleConversation):
     transcript_segments: List[SimpleTranscriptSegment] = []
     # Additive: true only when the bounded shared reader clipped the transcript.
     truncated: bool = False
-
-
-# Step 2 do retrieval
-# @router.get("/v1/mcp/conversations/available-filters", tags=["mcp"])
-# def get_conversations_available_filters(uid: str = Header(None)):
-#     return {
-#         "people": get_filter_category_items(uid, "people"),
-#         "topics": get_filter_category_items(uid, "topics"),
-#         "entities": get_filter_category_items(uid, "entities"),
-#     }
 
 
 @router.get("/v1/mcp/conversations", response_model=List[SimpleConversation], tags=["mcp"])
@@ -966,6 +976,17 @@ class SimplePerson(BaseModel):
         return getattr(self, item)
 
 
+class McpPersonRenameRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+
+
+class McpPersonMutationResponse(BaseModel):
+    success: bool
+    person_id: str
+    name: Optional[str] = None
+    dismissed: Optional[bool] = None
+
+
 @router.get("/v1/mcp/people", response_model=List[SimplePerson], tags=["mcp"])
 def get_people(uid: str = Depends(get_uid_with_mcp_people_read)):
     logger.info(f"get_people {uid}")
@@ -990,6 +1011,42 @@ def get_people(uid: str = Depends(get_uid_with_mcp_people_read)):
             logger.warning(f"Skipping malformed person {person_id} for uid {uid}: {e}")
             continue
     return valid_people
+
+
+@router.patch(
+    "/v1/mcp/people/{person_id}/name",
+    response_model=McpPersonMutationResponse,
+    tags=["mcp"],
+)
+def rename_person(
+    person_id: str,
+    request: McpPersonRenameRequest,
+    uid: str = Depends(get_uid_with_mcp_people_rename),
+):
+    person_id = person_id.strip()
+    if not person_id:
+        raise HTTPException(status_code=422, detail="person_id is required")
+    normalized_name = normalized_person_alias(request.name)
+    if normalized_name is None:
+        raise HTTPException(status_code=422, detail="name must contain 1 to 128 characters")
+    if not users_db.update_person(uid, person_id, normalized_name):
+        raise HTTPException(status_code=404, detail="Person not found")
+    return {"success": True, "person_id": person_id, "name": normalized_name}
+
+
+@router.post(
+    "/v1/mcp/people/{person_id}/dismiss",
+    response_model=McpPersonMutationResponse,
+    responses={404: {"description": "Person not found"}},
+    tags=["mcp"],
+)
+def dismiss_person(person_id: str, uid: str = Depends(get_uid_with_mcp_people_cleanup)):
+    person_id = person_id.strip()
+    if not person_id:
+        raise HTTPException(status_code=422, detail="person_id is required")
+    if not users_db.dismiss_person(uid, person_id):
+        raise HTTPException(status_code=404, detail="Person not found")
+    return {"success": True, "person_id": person_id, "dismissed": True}
 
 
 # ---------------------------------------------------------------------------

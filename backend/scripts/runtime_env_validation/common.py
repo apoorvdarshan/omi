@@ -8,6 +8,7 @@ import yaml
 
 from scripts.runtime_env_durable_dispatch_contracts import ValidationError
 from scripts.runtime_env_memory_contract import validate_retired_memory_env
+from scripts.runtime_env_compat import normalize_runtime_manifest
 
 ROOT = Path(__file__).resolve().parents[3]
 BACKEND_ROOT = ROOT / 'backend'
@@ -161,7 +162,7 @@ def _load_yaml(path: Path) -> ConfigDict:
         loaded = yaml.safe_load(handle)
     if not isinstance(loaded, dict):
         raise ValueError(f'{path} must contain a YAML mapping')
-    return cast(ConfigDict, loaded)
+    return normalize_runtime_manifest(cast(ConfigDict, loaded))
 
 
 def _manifest_env_value(expected_services: ConfigDict, name: str) -> str:
@@ -175,6 +176,32 @@ def _manifest_env_value(expected_services: ConfigDict, name: str) -> str:
 
 
 KEY_CREDENTIAL_ENV_NAMES = ('SERVICE_ACCOUNT_JSON', 'GOOGLE_APPLICATION_CREDENTIALS')
+
+# The literal --remove-env-vars list every Cloud Run service deploy action already carries. The
+# manifest's forbidden_env may only append keys missing from it: gcloud rejects a key named twice.
+RETIRED_ENV_NAMES = (
+    'MEMORY_ENABLED_USERS',
+    'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED',
+    'MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS',
+    'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED',
+    'BASIC_TIER_MINUTES_LIMIT_PER_MONTH',
+    'BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH',
+    'BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH',
+    'BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH',
+    'CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST',
+    'DEEPGRAM_SELF_HOSTED_ENABLED',
+    'DEEPGRAM_SELF_HOSTED_URL',
+)
+# Only the API service talks to the pusher; every other service drops its URL.
+PUSHER_CLIENT_SERVICES = frozenset({'backend'})
+
+
+def _remove_env_extra(service: str, service_config: ConfigDict) -> str:
+    """Manifest forbidden keys the action's literal list lacks, each with a leading comma."""
+    listed: set[str] = set(RETIRED_ENV_NAMES)
+    if service not in PUSHER_CLIENT_SERVICES:
+        listed.add('HOSTED_PUSHER_API_URL')
+    return ''.join(f',{name}' for name in sorted(set(service_config.get('forbidden_env', [])) - listed))
 
 
 def _declared_service_account(service_config: ConfigDict) -> str:
@@ -260,6 +287,7 @@ def _validate_env_entries(
     config_maps: set[str] | None = None,
 ) -> list[ValidationError]:
     errors: list[ValidationError] = validate_mentor_pipeline(scope=scope, config=actual)
+    errors.extend(validate_proactivity_v2_posthog_token(scope=scope, env_entries=actual))
     for name, expected_entry in expected.items():
         if 'config_map' in expected_entry:
             config_map = _as_config_dict(expected_entry['config_map']) or {}
@@ -313,6 +341,24 @@ def _validate_forbidden_env_entries(
     ]
 
 
+def validate_proactivity_v2_posthog_token(
+    *, scope: str, env_entries: ConfigDict, required: bool = False
+) -> list[ValidationError]:
+    """V2 uses a literal public client token, never a shared/secret binding."""
+    name = 'PROACTIVITY_V2_POSTHOG_TOKEN'
+    entry = _as_config_dict(env_entries.get(name))
+    if entry is None and not required and name not in env_entries:
+        return []
+    value = entry.get('value') if entry is not None else None
+    if (
+        not isinstance(value, str)
+        or not value.strip().startswith('phc_')
+        or any(key in (entry or {}) for key in ('secret', 'valueFrom', 'valueSource', 'env_var', 'config_map'))
+    ):
+        return [ValidationError(scope, f'{name} must be a plain public phc_ client token')]
+    return []
+
+
 def validate_mentor_pipeline(
     *, scope: str, config: object, _seen: frozenset[int] = frozenset()
 ) -> list[ValidationError]:
@@ -326,9 +372,11 @@ def validate_mentor_pipeline(
         if config.get('name') == 'MENTOR_PIPELINE':
             entry = config
         if entry is not None:
-            value = entry.get('value', entry.get('default', 'legacy')) if isinstance(entry, dict) else entry
-            if not isinstance(value, str) or value not in {'legacy', 'v2', 'cohort'}:
-                errors.append(ValidationError(scope, 'MENTOR_PIPELINE must be legacy, v2 or cohort (default legacy)'))
+            value = entry.get('value', entry.get('default')) if isinstance(entry, dict) else entry
+            if not isinstance(value, str) or value != 'cohort':
+                errors.append(
+                    ValidationError(scope, 'MENTOR_PIPELINE must be cohort (the legacy/v2 modes were removed)')
+                )
         for name, value in config.items():
             errors.extend(validate_mentor_pipeline(scope=f'{scope}/{name}', config=value, _seen=seen))
     elif isinstance(config, list):

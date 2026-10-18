@@ -142,6 +142,42 @@ def serving_revision(service_document: Mapping[str, Any]) -> str:
     return best_name
 
 
+def stale_candidate_tags(
+    service_document: Mapping[str, Any], *, target: str, keep_latest: int, keep_tags: Sequence[str] = ()
+) -> list[str]:
+    """Return this target's candidate tags that no longer serve a purpose.
+
+    Every promotion adds a `public-<target>-<run>-<attempt>` tag and nothing
+    removed them, so services accumulated ~80 tagged traffic entries. Keep the
+    newest `keep_latest` candidate tags (rollback targets with stable URLs), any
+    tag on a revision that holds traffic, and `keep_tags`; return the rest of
+    the tags owned by this target (`public-<target>-...` or `<target>-...`).
+    Tags owned by anything else are never returned.
+    """
+
+    spec = service_document.get("spec")
+    traffic = spec.get("traffic") if isinstance(spec, Mapping) else None
+    if not traffic:
+        status = service_document.get("status")
+        traffic = status.get("traffic") if isinstance(status, Mapping) else None
+    entries = [e for e in traffic or () if isinstance(e, Mapping) and isinstance(e.get("tag"), str) and e["tag"]]
+    serving = {
+        e.get("revisionName")
+        for e in traffic or ()
+        if isinstance(e, Mapping) and isinstance(e.get("percent"), int) and e["percent"] > 0
+    }
+    candidate = re.compile(rf"public-{re.escape(target)}-(\d+)-(\d+)")
+    owned = [e for e in entries if e["tag"].startswith((f"public-{target}-", f"{target}-"))]
+    numbered = sorted(
+        (e for e in owned if candidate.fullmatch(e["tag"])),
+        key=lambda e: tuple(int(g) for g in candidate.fullmatch(e["tag"]).groups()),
+    )
+    keep = set(keep_tags) | {e["tag"] for e in owned if e.get("revisionName") in serving}
+    if keep_latest > 0:
+        keep |= {e["tag"] for e in numbered[-keep_latest:]}
+    return [e["tag"] for e in owned if e["tag"] not in keep]
+
+
 @dataclass(frozen=True)
 class Deployment:
     region: str
@@ -593,11 +629,9 @@ def validate_target(
     names = all_names(target)
     unclassified = sorted(names - classified_public)
     errors.extend(f"{target.name}: input {name} is not classified public_build" for name in unclassified)
-    runtime_config_names = set(target.deployment.runtime_env_vars)
-    runtime_config_classification = classified_runtime_config or set()
     errors.extend(
         f"{target.name}: runtime env {name} is not classified config"
-        for name in sorted(runtime_config_names - runtime_config_classification)
+        for name in sorted(set(target.deployment.runtime_env_vars) - (classified_runtime_config or set()))
     )
     for item in target.inputs:
         if item.source != "repository_config":
@@ -629,8 +663,7 @@ def validate_target(
     if guard_names and 'test -n "$value"' not in dockerfile:
         errors.append(f"{target.dockerfile}: public-build guard must reject empty values")
     if "{sha}" in target.candidate_acceptance.command:
-        dockerfile_args = set(ARG.findall(dockerfile))
-        if "NEXT_PUBLIC_OMI_BUILD_SHA" not in dockerfile_args:
+        if "NEXT_PUBLIC_OMI_BUILD_SHA" not in set(ARG.findall(dockerfile)):
             errors.append(f"{target.dockerfile}: missing revision-identity ARG NEXT_PUBLIC_OMI_BUILD_SHA")
 
     workflow_path = root / target.workflow
@@ -641,7 +674,9 @@ def validate_target(
     if DEPLOY_ACTION not in workflow:
         errors.append(f"{target.workflow}: missing centralized public-build deployment {DEPLOY_ACTION!r}")
     if target.gateway_required:
-        if "runtime_env_vars: OMI_LLM_GATEWAY_URL=${{ vars.OMI_LLM_GATEWAY_URL }}" not in workflow:
+        gateway = re.escape("OMI_LLM_GATEWAY_URL=${{ vars.OMI_LLM_GATEWAY_URL }}")
+        pattern = r"(?m)^([ \t]*)runtime_env_vars: (?:{0}$|\|[-+]?\n(?:\1[ \t]+[^\n]*\n)*?\1[ \t]+{0}$)"
+        if not re.search(pattern.format(gateway), workflow):
             errors.append(
                 f"{target.workflow}: gateway-required target must source OMI_LLM_GATEWAY_URL from GitHub environment vars"
             )

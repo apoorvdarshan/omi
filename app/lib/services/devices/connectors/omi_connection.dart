@@ -414,29 +414,36 @@ class OmiDeviceConnection extends DeviceConnection {
 
   @override
   Future<BleAudioCodec> performGetAudioCodec() async {
-    try {
-      final codecValue = await transport.readCharacteristic(omiServiceUuid, audioCodecCharacteristicUuid);
+    for (var attempt = 1; attempt <= 3; attempt++) {
+      try {
+        final codecValue = await transport.readCharacteristic(omiServiceUuid, audioCodecCharacteristicUuid);
 
-      var codecId = 1;
-      if (codecValue.isNotEmpty) {
-        codecId = codecValue[0];
+        if (codecValue.isNotEmpty) {
+          final codecId = codecValue[0];
+          switch (codecId) {
+            case 1:
+              return BleAudioCodec.pcm8;
+            case 20:
+              return BleAudioCodec.opus;
+            case 21:
+              return BleAudioCodec.opusFS320;
+            default:
+              Logger.debug('OmiDeviceConnection: Unknown codec id: $codecId, defaulting to pcm8');
+              return BleAudioCodec.pcm8;
+          }
+        } else {
+          Logger.debug('OmiDeviceConnection: Attempt $attempt returned empty codec data');
+        }
+      } catch (e) {
+        Logger.debug('OmiDeviceConnection: Attempt $attempt reading audio codec failed: $e');
       }
 
-      switch (codecId) {
-        case 1:
-          return BleAudioCodec.pcm8;
-        case 20:
-          return BleAudioCodec.opus;
-        case 21:
-          return BleAudioCodec.opusFS320;
-        default:
-          Logger.debug('OmiDeviceConnection: Unknown codec id: $codecId');
-          return BleAudioCodec.pcm8;
+      if (attempt < 3) {
+        await Future<void>.delayed(Duration(milliseconds: 100 * attempt));
       }
-    } catch (e) {
-      Logger.debug('OmiDeviceConnection: Error reading audio codec: $e');
-      return BleAudioCodec.pcm8;
     }
+
+    throw StateError('OmiDeviceConnection: Failed to read valid audio codec from peripheral after retries');
   }
 
   @override
@@ -898,9 +905,9 @@ class OmiDeviceConnection extends DeviceConnection {
     }
   }
 
-  // level
-  //   1 - play 20ms
-  //   2 - play 50ms
+  // CV1 haptic mapping (omi/firmware/omi/src/haptic.c)
+  //   1 - play 100ms
+  //   2 - play 300ms
   //   3 - play 500ms
   @override
   Future<bool> performPlayToSpeakerHaptic(int level) async {
@@ -1243,13 +1250,14 @@ class OmiDeviceConnection extends DeviceConnection {
     }
   }
 
-  Future<bool> readChargingStatus() async {
+  /// Null means the charging state is unknown; it must not create a charge edge.
+  Future<bool?> readChargingStatus() async {
     try {
       final value = await transport.readCharacteristic(settingsServiceUuid, settingsChargingStatusCharacteristicUuid);
-      return value.isNotEmpty && value[0] == 1;
+      return value.isEmpty ? null : value[0] == 1;
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error reading charging status: $e');
-      return false;
+      return null;
     }
   }
 
