@@ -78,3 +78,12 @@ Pacing: ~4-5 agents (session limit = fixed budget per 5-hour window).
 Leftover batch wf_5d8ebf62-8cd done: #22414 (SD-card, fixes #22412), #22415 (merge webhook, #22413), #22417 (Limitless id, #22416), #22419 (Dream dups, #22418), #22423 (dev API next offset, #22421).
 Wave 7 batch (run wf_77a2d5d9-0a2, task woeq54irh, limit 2): people create race, vocab Omi-first cut, web home task fail, web memories error, Go whisper stop, mac settings toggles, mac GET-after-PATCH, device delete notify, memories filter persistence, sdcard timeout timer, relist start time (ring+sdcard), people-stats dream dups, Windows recap memories. Leads pool: leads-all.json (172).
 #22415 ratchet fixed: baseline count 4->5 for process_conversation._emit_derived_effects submit_with_context (db4e348384).
+
+## Loop ended (user cleared the goal, then: "complete pending", "no new pr") — 2026-10-19 evening
+Final: loop 71 PRs (64 merged, 7 open); all since Oct 15: 82 PRs (73 merged, 9 open). 0 closed/rejected.
+Pending work finished: #22439 review fix (transaction.set instead of create; fc7b500f79) + reply; watcher cleans its
+worktree when green. Unshipped Go SDK Whisper-stop fix saved to fork branch fix/go-sdk-whisper-stop (no PR, per user).
+Not started (no PRs, per user): wave-7 leads (mac settings toggles, mac GET-after-PATCH, device delete notify, memories
+filter persistence, sdcard timeout timer, relist start time, people-stats dream, Windows recap memories) and wave-6
+candidates whose verifiers died (offline-sync created webhook regression, Tasks Select All hidden rows, etc.).
+Open PRs awaiting maintainers: #22439 #22423 #22395 #22347 #22340 #22317 #22257 #21706 #21619.
