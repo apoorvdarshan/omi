@@ -4,7 +4,7 @@
 #   git -C ~/omi/repository fetch fork omi-loop-records && git -C ~/omi/repository archive FETCH_HEAD | tar -x -C ~/omi/repair-evidence/omi-loop
 REC=/Users/apoorvdarshan/omi/repair-evidence/omi-loop
 REPO=/Users/apoorvdarshan/omi/repository
-GD=$(git -C $REPO rev-parse --git-common-dir)
+GD=$(git -C $REPO rev-parse --path-format=absolute --git-common-dir)
 IDX=$(mktemp)
 rm -f "$IDX"
 GIT_INDEX_FILE=$IDX git --git-dir=$GD --work-tree=$REC add -A -- . ':!*.tmp' ':!*.next' ':!*.run' >/dev/null 2>&1

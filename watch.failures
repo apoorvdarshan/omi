@@ -1,3 +1,4 @@
 2026-10-19T06:58:09Z #22303 - fix/cli-search-screen-hybrid-results 9cd465c894 FAILED: Windows_ACL_/_Python_3.12
 2026-10-19T06:58:24Z #22415 - fix/merge-created-webhook-after-rollback-point 6e9f38f03e FAILED: Backend_unit_shard_2/6,Backend_unit_suite
 2026-10-19T07:55:24Z #22439 w7-people-create-race fix/people-create-race df9e9e3c1d FAILED: Backend_Hermetic_Merge_Gate,Hermetic_Backend_E2E
+2026-10-19T17:33:29Z #22439 - fix/people-create-race fc7b500f79 MAIN-BLOCKED (pyright errors in main's desktop_previews.py/pipeline.py; PR tests pass)
