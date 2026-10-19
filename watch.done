@@ -1,3 +1,8 @@
 2026-10-19T06:53:04Z #22419 w5-dream-dup-field fix/mcp-cards-hide-dream-duplicates e1926efdf4 green cleaned
 2026-10-19T06:58:25Z #22417 w5-flash-wal-id fix/limitless-stable-recording-id b8d091ea27 green no-worktree
 2026-10-19T06:58:26Z #22419 w5-dream-dup-field fix/mcp-cards-hide-dream-duplicates e1926efdf4 green no-worktree
+2026-10-19T07:02:46Z #22414 - fix/sdcard-transfer-after-reconnect 0a3c35869a green no-worktree
+2026-10-19T07:10:52Z #22320 - fix/merge-overlap-correction-transfer 89ebe1478d green no-worktree
+2026-10-19T07:10:54Z #22415 - fix/merge-created-webhook-after-rollback-point db4e348384 green no-worktree
+2026-10-19T07:10:55Z #22415 w6-merge-webhook fix/merge-created-webhook-after-rollback-point-2 db4e348384 green cleaned
+2026-10-19T07:14:58Z #22423 w5-dev-next-offset fix/dev-api-next-offset-hidden-rows 608228226b green cleaned

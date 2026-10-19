@@ -77,3 +77,4 @@ Pacing: ~4-5 agents (session limit = fixed budget per 5-hour window).
 ## Earlier batch (Oct 15-16): 11 PRs, 9 merged (#21586 #21590 #21605 #21712 #21713 #21714 #21718 #21719 #21720), #21619 + #21706 open.
 Leftover batch wf_5d8ebf62-8cd done: #22414 (SD-card, fixes #22412), #22415 (merge webhook, #22413), #22417 (Limitless id, #22416), #22419 (Dream dups, #22418), #22423 (dev API next offset, #22421).
 Wave 7 batch (run wf_77a2d5d9-0a2, task woeq54irh, limit 2): people create race, vocab Omi-first cut, web home task fail, web memories error, Go whisper stop, mac settings toggles, mac GET-after-PATCH, device delete notify, memories filter persistence, sdcard timeout timer, relist start time (ring+sdcard), people-stats dream dups, Windows recap memories. Leads pool: leads-all.json (172).
+#22415 ratchet fixed: baseline count 4->5 for process_conversation._emit_derived_effects submit_with_context (db4e348384).
