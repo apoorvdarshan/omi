@@ -1,0 +1,862 @@
+[
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "loop-web-1",
+  "lead": "web/app/src/components/tasks/TaskHub.tsx:303-336 (hub branch) + taskGroupProps L110-126: in Hub view (default >=1024px) ArrowDown/Space move and select by filteredItems API order, but TaskGroup/TaskCard render no focus and, outside select mode, no selection. ArrowDown, Space, d deletes a task with nothing highlighted or shown as selected."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "loop-web-1",
+  "lead": "web/app/src/components/tasks/TaskHub.tsx:165 (handleSelectAll) and the BulkActionBar allSelected prop (~L481): they compare only selectedIds.size to the visible pending count. With a task selected that the search hides and one visible match, Cmd/Ctrl+A clears the selection instead of selecting the visible task."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "loop-web-1",
+  "lead": "web/app/src/components/tasks/TaskHub.tsx:234-240: Enter is listed as 'Toggle complete' (useTaskKeyboardShortcuts KEYBOARD_SHORTCUTS) but always calls bulkComplete, so a selected completed task (list view, Show completed, Space, Enter) cannot be un-completed from the keyboard."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "wf2-appsync-0",
+  "lead": "app/lib/main.dart:185 + app/lib/services/notifications/chat_answer_notification_handler.dart:20-25 (not verified, depends on FlutterFire): on Android with the app in the background, an external app's chat message (NotificationIntent.app_integration, backend/utils/notification_dispatch.py:57-75, sent by send_notification_result with an FCM notification payload, notification_type=plugin, navigate_to=/chat/<app_id>) matches isChatAnswerData through plugin + /chat/. If FlutterFire also calls onBackgroundMessage for notification messages, the background handler adds a local BigText notification next to the system one, so one app message would show twice."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "wf2-appsync-0",
+  "lead": "app/lib/services/notifications/notification_service_fcm.dart:298-310 (low priority, telemetry only): _notificationObjectId looks for conversation_id/summary_id/message_id, but chat-answer FCM data carries the message id as 'id', so notification-open telemetry for iOS chat-answer taps never records an objectId."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "loop-app-2a",
+  "lead": "app/lib/providers/developer_mode_provider.dart:86-124 (origin/main): the four webhook switches call enableWebhook/disableWebhook without awaiting or checking the result. Flipping a switch while the request fails shows the new state, saves nothing locally and shows no error; the server is unchanged, and the switch flips back on the next visit."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "loop-app-2a",
+  "lead": "app/lib/providers/developer_mode_provider.dart:158-189 with app/lib/backend/http/api/users.dart:203 and :242 (origin/main): a 200 response with a non-JSON body (captive portal or proxy) makes jsonDecode throw inside initialize()'s Future.wait, so setIsLoading(false) never runs. For that visit the Save button spins forever and saveSettings() returns false immediately."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "loop-misc-2a",
+  "lead": "desktop/windows/src/main/agentKernel/productToolExecutors.ts:944 \u2014 get_daily_recap builds `from = startToday - daysAgo * DAY_MS`; on the day after a DST change the 'Yesterday' recap starts at 23:00 two days ago (spring forward) or 01:00 yesterday (fall back), so it includes or drops an hour of activity (same for multi-day windows spanning a change). Fix with startOfDayOffset; new FC-local-day-stepped-by-fixed-24h already lists this file in scope_hints."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "loop-misc-2a",
+  "lead": "desktop/windows/src/renderer/src/lib/chatSessionsView.ts:63 \u2014 `weekAgo = now - 7 * DAY_MS` vs the macOS original `calendar.date(byAdding: .day, value: -7, to: now)`; within a week containing a DST change the This Week/Older edge is off by one hour (minor)."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "loop-misc-2a",
+  "lead": "desktop/windows/src/renderer/src/hooks/useChatSessions.ts:240 \u2014 `useMemo(() => groupSessionsByDate(filteredSessions), [filteredSessions])` freezes `now` at the last list change; if HubChatHeader stays mounted across midnight, the chat history popover keeps yesterday's chats under Today until the list changes (unverified: depends on the header's mount lifetime)."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "wf2-listen-0",
+  "lead": "backend/utils/speaker_identification.py:774 - detect_speaker_introduction returns name.capitalize(), so 'my name is McDonald' becomes 'Mcdonald' and 'DeShawn' becomes 'Deshawn'. find_person_by_name (backend/database/person_aliases.py:278) is an exact Firestore name == match, so live and sync text naming can't resolve existing people whose names have inner capitals (confirmed by regex replay)."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "wf2-listen-0",
+  "lead": "backend/utils/speaker_identification.py:147-250 - the Latin-script introduction patterns use ASCII-only ([A-Z][a-zA-Z]*)\\b, so names with non-ASCII letters never match. 'Me llamo Jos\u00e9', 'Ich hei\u00dfe J\u00fcrgen', \"Je m'appelle H\u00e9l\u00e8ne\" and 'My name is Zo\u00eb' all return None (confirmed by regex replay), so speaker naming never fires for those users."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "wf2-chat-1",
+  "lead": "backend/utils/retrieval/tools/screen_activity_tools.py:308-326 (_append_screen_evidence_reference): checks for a duplicate id and then appends to the shared evidence_references list without a lock, from sync tools that run in parallel. If two search_screen_activity_tool calls in one model step return the same screenshot, both can add it. ChatEvidenceEnvelope (backend/models/chat.py:504-508) rejects duplicate reference ids, so chat_turn.py:418-428 drops the whole evidence envelope for that answer. The race window is narrow."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "wf2-account-0",
+  "lead": "backend/routers/fair_use_admin.py:236 (origin/main) - get_public_case_status reads the raw fair-use stage without normalize_expired_restriction_state, so the public case-tracking page keeps showing the 'restrict' message after restrict_until has passed until some other path normalizes the stored stage (e.g. a user who stops using the app once the restriction expires)."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "wf2-account-0",
+  "lead": "backend/tests/unit/test_fair_use_engine.py:770 (origin/main) - TestNormalizeExpiredRestrictionState.setup_method assigns fair_use_mod.record_fallback directly instead of through monkeypatch, so the MagicMock leaks into every later test in that file. The autouse fixture comment at :37 wrongly says it is restored."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "wf2-listen-1",
+  "lead": "backend/routers/listen/conversations.py:814 (recover_stale_in_progress, cutoff STALE_IN_PROGRESS_RECOVERY_AGE_SECONDS=3600 at L50) + backend/database/conversations.py:2471 (select_stale_in_progress assumes every live conversation splits within its timeout): with the 4-hour silence setting (or a calendar window over 1 h), a live conversation silent for more than 1 h could be finalized when another /v4/listen session for the same uid runs process_pending, for example the desktop opening while the phone conversation is idle. Unverified: check first whether a live recording-session lease or finalization admission protects such rows."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "wf2-listen-1",
+  "lead": "backend/docs/listen_pusher_pipeline.mdx:257-258 (doc drift, low priority): the calendar window is described as start_time + duration_minutes + 120 s, but calendar_continuity_window (backend/utils/conversation_continuity.py:31) prefers the stored end_time since 976fb39847."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "wf2-native-0",
+  "lead": "sdks/device/dart/lib/stt/stt.dart:124 (+ appendPcm L148-149, stop L154): if the Parakeet server closes the stream before ready (1013 capacity_full or service_not_ready), the error handler ignores the error and only marks the stream drained, appendPcm keeps dropping PCM because the ready flag stays false, and stop() completes normally, so the session's audio is lost silently. Same defect as the Go SDK, but appendPcm returns void, so a fix needs an API decision (for example stop() throwing, or an error callback)."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "loop-misc-2b",
+  "lead": "sdks/python-cli/omi_cli/commands/local.py:382 - _normalize_screen_search only treats 'No matching screen-history results'/'No screen history is available' as empty; Desktop's other empty answers ('Omi has N screenshot(s), but they are not ready to search yet' at desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift:2007 and 'No screenshots found matching ... Local status could not be read' at :2016) make `omi --json local search-screen` return only `text` with no `results: []`/`reason`/`suggestions`. Trigger: search-screen on a Mac whose screenshots are not indexed yet."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "loop-misc-2b",
+  "lead": "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift:1985 + desktop/macos/Desktop/Sources/LocalAgentAPIServer.swift:582 - a failed semantic_search returns 'Failed to search: ...' (no 'Error:' prefix), so the local API answers 200 ok:true and `omi local search-screen` exits 0 with the failure under `text` (and JSON mode then runs the exact SQL fallback). Trigger: search while the Rewind owner snapshot is revoked or the local embedding store throws."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "loop-web-2b",
+  "lead": "web/app/src/hooks/useConversations.ts:110 (`if (fetchingRef.current) return;`): a filter change (folder tab, Starred, date) while a list fetch is in flight is silently dropped; the old filter's response then renders under the new tab and the prev-refs are already updated, so nothing refetches until a poll/invalidation. Trigger: click a folder tab before the first page (or a background stale refresh) returns."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "loop-web-2b",
+  "lead": "web/app/src/components/conversations/ConversationTile.tsx:37,51-55 + ConversationSplitView.tsx handleStarToggle (~L376): the star is toggled optimistically in tile-local state; if PATCH /v1/conversations/{id}/starred fails, handleStarToggle only console.errors (no revert, no toast), so the tile keeps showing a star state the server does not have; isStarred also never re-syncs from props after a refetch."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "loop-app-2b",
+  "lead": "desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Transcription.swift:383-411 (with SettingsContentView+BillingHelpers.swift:853,871): same vocabulary wipe on macOS. vocabularyList starts from local AssistantSettings.transcriptionVocabulary and stays there if any one of the 7 parallel settings loads throws (they share one tuple 'try await', so a failed daily-summary or language GET also skips the vocabulary). addVocabularyWord then PATCHes the whole local list (empty on a new Mac) and the server list is replaced."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "loop-app-2b",
+  "lead": "app/lib/pages/settings/custom_vocabulary_page.dart:198: _addWord clears the text field before calling addVocabularyWords, so when the save fails (offline, server error, list unreadable) the typed words disappear and no error is shown."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "loop-app-2b",
+  "lead": "app/lib/providers/user_provider.dart:182 (startup _loadTranscriptionPreferences): a slow startup read that returns after a vocabulary save overwrites the in-memory list without the new word (no revision check like macOS's shouldApplyTranscriptionVocabularyHydration), so the next add or remove saves without it. Trigger: slow GET at launch, then add a word before it returns."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "loop-app-2b",
+  "lead": "desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Transcription.swift:410 with SettingsContentView+SettingsUpdates.swift:113-115: saveVocabulary joins terms with ', ' and updateTranscriptionPreferences splits on ',', so a term containing a comma (e.g. 'Smith, John') shows as one term locally but is saved as two words on the server."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "wf2-appsync-1",
+  "lead": "app/lib/services/wals/storage_sync.dart:349-376 + :251/:269 (main) - syncAll keeps a synced, already-deleted recording in _wals under its old fileNum; AutoSyncPage 'Clear synced' (auto_sync_page.dart:956 -> deleteAllSyncedWals -> _deleteWalsOnDevice) then deletes the never-transferred file the firmware shifted into that index. Trigger: a 3.0.17-3.0.19 drain transfers file 0, then stops (cancel, BLE drop or incomplete next file); the user taps Clear synced before the next discovery."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "wf2-appsync-1",
+  "lead": "app/lib/services/wals/storage_sync.dart:71-81 + :615 (main) - cancelSync cancels _storageStream before the data callback can observe _isCancelled, so _syncSingleFile's completer only resolves through the 10-minute timeout and isStorageSyncing stays true, blocking discovery and drains. Trigger: tap Cancel during a multi-file transfer after data started flowing."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "wf2-appsync-1",
+  "lead": "app/lib/services/wals/ring_storage_sync.dart:374-393 (main) - RingStorageSyncImpl.syncWal swallows errors and returns an empty success when _syncRing returns false, so Transfer to Phone on fw 3.0.20+ shows 'Transfer complete' after a failed or incomplete ring transfer. Trigger: BLE drop or no connection during a ring Transfer to Phone."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "wf2-appsync-1",
+  "lead": "app/lib/services/wals/flash_page_wal_sync.dart:312-337 (main) - FlashPageWalSyncImpl.syncWal returns null both when the recording is not listed (:316) and when _syncWal fails (:337), so a failed Limitless Transfer to Phone shows 'Transfer complete'. Trigger: Limitless pendant, start Transfer to Phone, lose the connection."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "wf2-appsync-1",
+  "lead": "app/lib/pages/conversations/wal_item_detail/wal_item_detail_page.dart:458 (main) - _handleTransferToPhone passes widget.wal, captured when the page opened. If a discovery re-lists device recordings meanwhile (refreshWalsFromDevice replaces the _wals instances), the WAL is no longer owned, routing falls to SDCardWalSyncImpl.syncWal (null) and the page still says 'Transfer complete'. Trigger: open a device recording's detail page, background and foreground the app, tap Transfer to Phone."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "loop-app-3a",
+  "lead": "app/lib/pages/home/home_deep_links.dart:366-367 and app/lib/pages/apps/app_detail/app_detail.dart:935-936: a /chat/<app> deep link (e.g. tapping a Mentor push) or an app page's Chat button calls setSelectedChatAppId without checking canSwitchChat. If a turn is in flight (e.g. a pendant answer streaming), refreshMessages returns early on chatMutationInProgress. The sheet then opens on the old thread's transcript with the new app selected, and a typed send goes to that app while showing in the old thread; it disappears on the next reload."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "loop-app-3a",
+  "lead": "app/lib/providers/message_provider.dart:665 (voice) and :841 (typed): with no app selected, selectedChatAppId is '' rather than null, so `currentAppId ?? 'omi'` sends chat_target_id '' instead of 'omi' in the 'Chat Voice Input Used' and 'Chat Message Sent' analytics for every main-chat turn."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "loop-app-3b",
+  "lead": "app/lib/pages/search/global_search.dart:806 -- searching a multi-word phrase in Global Search (e.g. 'coffee gym') and tapping a memory hit opens Memories filtered by the literal phrase (MemoriesProvider.filteredMemories substring match, memories_provider.dart:258). The backend matcher returns memories containing ANY word longer than 2 chars (backend/utils/memory/memory_read_api.py:30-39), so the tapped memory is not listed and the page shows 'No Memories Found'. Still to check: that GET /v1/memory/search is the route that uses memory_read_api."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "loop-app-3b",
+  "lead": "app/lib/pages/review/recent_changes_page.dart:161 -- pushes a second ActionItemsPage whose page-local _searchController (action_items_page.dart:66) starts empty, while the shared ActionItemsProvider._searchQuery (set from the kept-alive Tasks tab, action_items_page.dart:213) still filters items (action_items_provider.dart:190). Trigger: search in the Tasks tab, then open Recent changes and go to Tasks: the list is filtered but the search box is empty with no clear button. Same failure shape as #22313; still to check: that the Tasks page list reads the filtered getter."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "loop-app-3c",
+  "lead": "app/lib/pages/search/global_search.dart:537-538 (tiles built from _overview.folders at :641): _editFolder reloads the search overview as soon as showFolderOptions' menu route pops, but _handleDelete/_handleEdit pop that menu before the delete sheet or editor opens. After renaming or deleting a folder from a Search tile, the old name or the deleted folder's tile stays until Search is reopened. The 'New folder' tile (:702) waits for its sheet before reloading."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "loop-merge-1",
+  "lead": "backend/database/review_overlay_merge.py:39-43 (main) + backend/utils/conversations/transcript_hash.py:149: transfer compares raw source text with the merged target's stored text, but the target write strips segment text (canonicalize_transcript_segments_for_storage, since #12661 on 2026-09-03). Trigger: merging a conversation stored before #12661 whose segment text has leading/trailing whitespace likely fails 'Captured speech changed during merge' and rolls back even without overlap; verify how common untrimmed legacy text is."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "loop-merge-1",
+  "lead": "backend/utils/conversations/merge_conversations.py:902-937 (_cleanup_merged_target_after_failure): rollback after process_conversation (reprocess=True default) retracts memories and deletes photos/audio/vector/doc, but not the action items processing extracted for the merged conversation; database/conversations.py:2215 delete_conversation doesn't touch action_items. Trigger: any merge failing after processing (e.g. a transfer ReviewConflict) likely leaves duplicate tasks pointing at a deleted conversation. Open PR #21845 covers source cleanup, not this rollback; verify."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "loop-merge-1",
+  "lead": "backend/utils/conversations/merge_conversations.py:940-983 (_handle_merge_failure): every background merge failure is silent; it only logs and resets sources, with no 'merge failed' counterpart to send_merge_completed_message, while POST /v1/conversations/merge already returned 'Merge started' (routers/conversations.py:2361). Trigger: any perform_merge_async exception (GCS copy error, transfer conflict); the user sees the sources reappear with no explanation."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "loop-integrations-2",
+  "lead": "backend/utils/mcp_server/handlers/conversations.py:95-110 with backend/database/mcp_conversation_pages.py:88 \u2014 MCP get_conversations with offset>0 fetches limit+1 rows, then drops soft-deleted or dream_duplicate_of rows in Python. A page containing one of those hidden rows returns has_more=false with no next_cursor, even though older conversations exist."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "loop-integrations-2",
+  "lead": "backend/utils/mcp_action_items.py:160 \u2014 an MCP create whose title matches an OPEN task returns that task and silently drops the new due date (open 'Pay rent' due Oct 1, then create 'Pay rent' due Nov 1). This is the problem #12921 fixed for the app route. The MCP tool documents this behaviour, so it needs a maintainer decision."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "loop-integrations-2",
+  "lead": "backend/database/action_items.py:293 \u2014 the idempotency lookup uses .limit(5) and then skips deleted rows (and finished rows for MCP) in Python. If 5 or more such rows share a key, a retry can miss the live task and create a duplicate."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "loop-integrations-2",
+  "lead": "backend/utils/mcp_server/helpers.py:109 \u2014 bounded_transcript_segments truncates original_text to remaining_chars but never counts it toward max_chars. get_conversation_by_id on translated conversations can return about twice the requested max_chars."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "loop-syncstart-1",
+  "lead": "backend/utils/sync/pipeline.py:1640 (main 8ed3ad1b1b): legacy speaker ID gets times measured from the first word but cuts audio from the start of the voice-detection file, so it fingerprints audio speech_offset seconds before each line. Trigger: voice profiles set up, final pass off, and the file opens on a cough or noise, giving wrong or missing speaker names. Still true after PR #22326, because the shift happens after speaker ID."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "loop-syncstart-1",
+  "lead": "backend/utils/sync/pipeline.py:1617 (main): on the empty-recovery path, run_sync_final_pass gets the first provider's empty word list while the segments come from the recovered Modulate words, so its offset is 0 and it has no words to assign. Trigger: SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED=true, a user in the final-pass sync group, and Parakeet returning empty twice. Low impact: it falls back to legacy speaker matching."
+ },
+ {
+  "run": "wf_04c5a5a0-cd6",
+  "from": "loop-syncstart-1",
+  "lead": "backend/utils/conversations/final_pass_sync.py:121: the comment 'Persist the legacy sync clock' is inaccurate after PR #22326 (intake now adds the first-word offset back before saving). Comment-only fix, left out of the PR because INV-MEM-6 (proposed) covers backend/utils/conversations/**."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-web-enter",
+  "lead": "web/app/src/components/tasks/TaskHub.tsx:175 - the BulkActionBar 'Complete' button (handleBulkComplete) passes every selected id to bulkComplete. Select a completed task in Select mode and click Complete: it is completed again, its completed_at is reset to now, and the sharer is notified again."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-web-enter",
+  "lead": "backend/routers/action_items.py:857 + backend/database/action_items.py:1155 - repeating PATCH /v1/action-items/{id}/completed?completed=true on an already-completed item rewrites completed_at to now and sends the shared-task 'Task completed' notification again. Nothing checks existing_item['completed'] first, so any client retry or double-tap triggers it."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-web-enter",
+  "lead": "web/app/src/hooks/useActionItems.ts:454 - when toggleComplete fails it restores the task with completed_at: null instead of the previous value. A failed reopen leaves the task completed with no date (the date disappears and it sorts last in Completed) until the next refetch."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-web-enter",
+  "lead": "web/app/src/components/tasks/TaskHub.tsx:343-345 - in list view the keyboard hook's totalItems counts only pending tasks. With zero pending tasks and Completed shown, the up/down arrows do nothing (useTaskKeyboardShortcuts.ts:129/137 require totalItems > 0), so completed rows can't be reached from the keyboard. #22284 keeps the pending-only count."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-win-recap-dst",
+  "lead": "desktop/windows/src/main/agentKernel/productToolExecutors.ts:965 (origin/main) -- get_daily_recap reads d.insights(30), which is the newest 30 rows (insightStore.ts:74 'ORDER BY ts DESC, id DESC LIMIT ?'), and only then filters to the window. With 30 or more insights since today's midnight, a Yesterday or Past-N-days recap shows an empty or cut-off Screen Context section."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-win-recap-dst",
+  "lead": "desktop/windows/src/renderer/src/lib/chatSessionsView.ts:62 (origin/main) -- yesterdayStart = todayStart - DAY_MS; already fixed by our open PR #22290 (issue #22288). Listed only so the loop does not pick it up again."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-speaker-capitalize",
+  "lead": "backend/utils/speaker_identification.py:171-250 (Latin patterns `([A-Z][a-zA-Z]*)\\b` in en/es/fr/de/tr/pl/vi/etc.): names with diacritics are never detected. Trigger: \"Me llamo Jos\u00e9\", \"Je m'appelle H\u00e9l\u00e8ne\", \"Ich hei\u00dfe J\u00fcrgen\", \"Benim ad\u0131m \u00d6mer\", \"Mam na imi\u0119 \u0141ukasz\", \"My name is Zo\u00eb\" all return None on main (checked with the standalone replay)."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-speaker-capitalize",
+  "lead": "backend/utils/speaker_identification.py:232 (ru pattern `([\u0410-\u042f][\u0430-\u044f]*)\\b`): \u0401/\u0451 (U+0401/U+0451) are outside the \u0410-\u044f ranges, so Russian names containing \u0451 are never detected. Trigger: \"\u041c\u0435\u043d\u044f \u0437\u043e\u0432\u0443\u0442 \u0410\u043b\u0451\u043d\u0430\" or \"\u041c\u0435\u043d\u044f \u0437\u043e\u0432\u0443\u0442 \u041f\u0451\u0442\u0440\" returns None (checked with the replay)."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-speaker-capitalize",
+  "lead": "backend/database/person_aliases.py:278 (find_person_by_name exact, case-sensitive `name ==`): a person the user saved as \"alice\" or \"Mcdonald\" is never resolved from \"My name is Alice\" / \"My name is McDonald\"; with Auto-create Speakers the live path (routers/listen/transcripts.py:1566-1581) creates a differently-cased duplicate. People already created as \"Mcdonald\" by this bug hit this after the fix."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-fairuse-public-status",
+  "lead": "backend/utils/fair_use.py:503 escalate_enforcement writes throttle_until = now+7d, but no backend code reads it (it is only cleared, at database/fair_use.py:152, routers/fair_use_admin.py:186 and utils/fair_use.py:574). Trigger: a user who was throttled once stays 'throttle' forever, and normalize_expired_restriction_state turns every expired restrict into permanent throttle. Meanwhile the throttle copy (routers/fair_use_admin.py:303-307 and the notification text in utils/fair_use.py) says 'This will reset automatically', and a user throttled long ago can jump straight to restrict after 3 violations in 7 days."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-fairuse-public-status",
+  "lead": "backend/routers/fair_use_admin.py:145 get_user_fair_use_detail (admin) returns the stored state without the expiry check, and get_flagged_users (backend/database/fair_use.py:167) with stage=restrict lists restrictions that have already expired. Trigger: support looking at a user after restrict_until sees an active 'restrict'. Lower confidence: the admin view may intend to show stored state."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-fairuse-public-status",
+  "lead": "backend/routers/fair_use_admin.py:222 overlap with open PR #19881 (xyz-is-best), which rewrites get_public_case_status and still reads the stage without the expiry check. Trigger: if #19881 merges after #22336, resolving the conflict could silently drop the normalize call."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-app-webhookswitch",
+  "lead": "app/lib/providers/developer_mode_provider.dart (webhook switch handlers; only getWebhooksStatus at ~L126-140 writes SharedPreferencesUtil().conversationEventsToggled etc.): a confirmed toggle never updates the cached flag. Trigger: turn Conversation Events on (succeeds), go offline, reopen Developer Settings: the status read fails and the switch shows the stale cached 'off' although the server has it on."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-app-webhookswitch",
+  "lead": "app/lib/providers/developer_mode_provider.dart:158-159 (initialize -> getWebhooksStatus): a status read started at page open that returns after a quick toggle overwrites the switch with the server's state from before the toggle. Trigger: slow network, open Developer Settings and flip a switch before the status read returns; the switch snaps back although the server applied the toggle."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-app-webhookswitch",
+  "lead": "backend/models/users.py:31 (webhook_url_from_setting: value.split(',')[0]) + app/lib/providers/developer_mode_provider.dart:160-168 (audio_bytes load expects exactly 2 comma parts): an audio-bytes webhook URL containing a comma (e.g. https://x.example/h?a=1,2) is truncated at the first comma when delivered, and the app shows the whole stored '<url>,<secs>' string as the URL and appends another ',5' on every Save."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-app-webhookswitch",
+  "lead": "app/lib/providers/developer_mode_provider.dart:281 (saveSettings setIsLoading after await) and the new failure path of the switch helper: notifyListeners runs after an await with no disposed check. Trigger: start a Save (or a failing toggle) and leave the page before it finishes; debug builds assert 'DeveloperModeProvider was used after being disposed' (no-op in release)."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-speaker-nonascii",
+  "lead": "backend/utils/speaker_identification.py:241 (main 5d43536, Thai pattern [\u0e00-\u0e7f]+): Thai has no word spaces, so polite particles stick to the name and count as explicit: '\u0e1c\u0e21\u0e0a\u0e37\u0e48\u0e2d\u0e2a\u0e21\u0e0a\u0e32\u0e22\u0e04\u0e23\u0e31\u0e1a' -> '\u0e2a\u0e21\u0e0a\u0e32\u0e22\u0e04\u0e23\u0e31\u0e1a', '\u0e09\u0e31\u0e19\u0e0a\u0e37\u0e48\u0e2d\u0e21\u0e32\u0e25\u0e35\u0e04\u0e48\u0e30 \u0e22\u0e34\u0e19\u0e14\u0e35\u0e17\u0e35\u0e48\u0e44\u0e14\u0e49\u0e23\u0e39\u0e49\u0e08\u0e31\u0e01' -> '\u0e21\u0e32\u0e25\u0e35\u0e04\u0e48\u0e30' (can create a person with the particle in the name)"
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-speaker-nonascii",
+  "lead": "backend/utils/speaker_identification.py:188 (Hindi): lead-ins use English word order ('\u092e\u0947\u0930\u093e \u0928\u093e\u092e \u0939\u0948 <name>', '\u092e\u0948\u0902 \u0939\u0942\u0901 <name>'); natural Hindi '\u092e\u0947\u0930\u093e \u0928\u093e\u092e \u0930\u093e\u092e \u0939\u0948' and '\u092e\u0948\u0902 \u0930\u093e\u092e \u0939\u0942\u0901' return None"
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-speaker-nonascii",
+  "lead": "backend/utils/speaker_identification.py:152-250 (Latin patterns): hyphenated given names are cut at the hyphen and still count as explicit: 'Je m'appelle Jean-Pierre' -> 'Jean', 'Ich hei\u00dfe Hans-Peter' -> 'Hans' (wrong-name suggestion or person creation)"
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-speaker-nonascii",
+  "lead": "backend/utils/speaker_identification.py:247 (Ukrainian [\u0410-\u042f\u0406\u0407\u0404\u0490][\u0430-\u044f\u0456\u0457\u0454\u0491]*): an apostrophe inside the name truncates it: '\u041c\u0435\u043d\u0435 \u0437\u0432\u0430\u0442\u0438 \u041c\u0430\u0440'\u044f\u043d\u0430' -> explicit '\u041c\u0430\u0440'; '\u041c\u0435\u043d\u0435 \u0437\u0432\u0430\u0442\u0438 \u0412'\u044f\u0447\u0435\u0441\u043b\u0430\u0432' -> None"
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-macos-search-error",
+  "lead": "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift:1272 - execute_sql's catch returns 'SQL Error: The local database could not complete that query.' (no 'Error:' prefix). LocalAgentAPIServer.toolResponse relays it to raw local-API clients as HTTP 200 ok:true; only the CLI special-cases that exact text (sdks/python-cli/omi_cli/local_client.py:82). Trigger: POST /v1/local/tool execute_sql with a SELECT that SQLite rejects, e.g. one naming an unknown column."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-macos-search-error",
+  "lead": "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift:789 - authorizedOwnerChangedResult() returns the JSON string {\"ok\":false,...}. LocalAgentAPIServer.toolResponse (LocalAgentAPIServer.swift:581) wraps it as HTTP 200 {\"ok\":true,\"result\":\"{...\\\"ok\\\":false...}\"}. Trigger: call any local-API tool while signed out of Omi Desktop (pinnedOwnerID is nil). Raw HTTP clients see success; the CLI unwraps the embedded JSON and is unaffected."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-macos-search-error",
+  "lead": "desktop/macos/Desktop/Sources/Providers/ChatLocalHybridTool.swift:68 - search_transcripts returns 'Failed to search transcripts: ...' without the 'Error:' prefix when the store or hybrid search throws. The local API does not serve this chat-only tool, so this is a consistency issue only."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-dart-sdk-parakeet",
+  "lead": "sdks/device/typescript/src/stt/index.ts:141-144 - createParakeetTranscriber: if the server closes with 1013 capacity_full/service_not_ready before ready, appendPcm (`if (ready && ws.readyState === 1)`) silently drops every chunk and stop() returns normally; nothing records the close (same bug as #22300/#22346)"
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-dart-sdk-parakeet",
+  "lead": "sdks/react-native/src/stt/parakeet.ts:41-44 - appendPcm guarded by `ready && ws.readyState === OPEN`; a 1013 close before ready is swallowed and all audio is dropped without an error (same class)"
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-dart-sdk-parakeet",
+  "lead": "sdks/swift/Sources/omi-lib/STT/ParakeetTranscriber.swift:37-39,58 - appendPcm returns when !ready, and receiveLoop's `.failure` case ends silently; a server refusal before ready loses the session's audio with no error (same class)"
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-dart-sdk-parakeet",
+  "lead": "sdks/device/dart/lib/stt/stt.dart:195-206 (main) - WhisperTranscriber: if stop() is called while a full batch is being transcribed (unawaited _flush from appendPcm), that batch's transcript is discarded (`!_stopped || deliverWhenStopped` is false) and stop() does not await it. Trigger: append >=5 s of PCM with a slow runner, then call stop() before it returns. Runner exceptions in that unawaited flush also become uncaught async errors (Dart counterpart of python-sdk #21577)"
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-dart-sdk-parakeet",
+  "lead": "sdks/device/dart/lib/stt/stt.dart:73-77 and 147-151 (main) - after the socket closes post-connect (Deepgram 401 at upgrade, server 1011 mid-stream, or Parakeet after ready), appendPcm keeps calling sink.add, which stream_channel's GuaranteeChannel silently drops once disconnected (guarantee_channel.dart:123), and stop() completes normally; Deepgram's onError `(_) => _markDrained()` also swallows connection errors"
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-web-filter-race",
+  "lead": "web/app/src/hooks/useConversations.ts:178-183 (main): when the filter-change effect loads the new filters from cache it never clears `error`. If a list fetch fails and you then switch to a folder or date whose list is cached, the 'Failed to load conversations' banner stays above that list (ConversationSplitView.tsx:806) and its empty state is hidden (:832)."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-web-filter-race",
+  "lead": "web/app/src/components/conversations/ConversationGallery.tsx:53-55 with useConversations.ts:110 (lower confidence): a `loadMore` during a background refresh (stale cache or the processing poll) is dropped by the fetch guard while `loading` stays false. `loadRequestedRef` only resets when `loading` or the item count changes, so scrolling at the bottom does nothing until the user scrolls away and back."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-web-star-revert",
+  "lead": "web/app/src/components/conversations/ConversationTile.tsx:37 (origin/main) - isStarred is useState(conversation.starred) and never follows the prop. Tiles keep their state across list refetches (keyed by id), so a star changed on another client and picked up by a refetch leaves the tile showing the old star while the Starred tab shows the new state."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-web-star-revert",
+  "lead": "web/app/src/components/conversations/ConversationSplitView.tsx:670 (origin/main, handleMoveToFolder) - a failed bulk move to a folder is only console.error'd; the Move dialog stays open with its spinner cleared and no error. Same at :620 (handleFolderSubmit, create/rename folder) and :643 (handleDeleteFolderConfirm)."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-app-vocab-input",
+  "lead": "app/lib/pages/settings/custom_vocabulary_page.dart:32 - dispose() cancels the 1 s deletion debounce timer, so tapping x on a word and leaving the page within a second never deletes it (no error; the word stays saved)"
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-app-vocab-input",
+  "lead": "app/lib/pages/settings/custom_vocabulary_page.dart:228-242 - _executeBatchDeletion ignores false from removeVocabularyWord: offline, tap x on a chip and after the spinner the chip comes back with no error"
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-app-vocab-input",
+  "lead": "app/lib/providers/user_provider.dart:342 - addVocabularyWords dedupes only against the saved list, not within the input: typing 'Omi, Omi' saves ['Omi','Omi'] (two chips; removing one removes both)"
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-app-vocab-input",
+  "lead": "backend/database/users.py:2339-2340 with app/lib/providers/user_provider.dart:325-328 - the server keeps only the first 100 vocabulary terms but still answers status ok; the app stores the full list, so a 101st word shows as saved but is never used for transcription and disappears on the next load, with no client cap or message"
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-app-vocab-input",
+  "lead": "app/lib/pages/settings/custom_vocabulary_page.dart:115 - the text field's submit stays active while removals are saving (isAdding excludes _isDeletingBatch, only the + button is disabled), so Enter fires an add the provider rejects as busy; after #22354 the words are kept but the error says to check the connection, which is the wrong cause"
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-macos-vocab-wipe",
+  "lead": "desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SettingsContentView+SettingsUpdates.swift:113 \u2014 saveVocabulary joins terms with \", \" and updateTranscriptionPreferences re-splits on \",\", so adding a vocabulary term containing a comma (e.g. \"Acme, Inc.\") saves it to the account as two terms while the pane and local copy keep one"
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-macos-vocab-wipe",
+  "lead": "desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SettingsContentView+SettingsUpdates.swift:118-124 \u2014 a failed vocabulary PATCH is only logged; the pane and local copy already show the word as added, and the next successful Settings load silently drops it (macOS analog of mobile #22353)"
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-macos-vocab-wipe",
+  "lead": "desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SettingsContentView+BillingHelpers.swift:871-934 with SettingsPage.swift:292-293 \u2014 loadBackendSettings is all-or-nothing; if any one of its five GETs fails, Notifications & Privacy shows the hard-coded defaults (recording permission off, Private Cloud Sync on) instead of the account's values, with no error"
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-sync-cancel",
+  "lead": "app/lib/services/wals/storage_sync.dart:349-385 with :251-256 (main 9f6da678ef): syncAll deletes a transferred file and shifts the other WALs' fileNum, but the synced WAL stays listed with its old index, which the firmware has now given to the next file. If a sync stops after file A (cancel or BLE drop) and the user taps 'Clear synced' (sync_page.dart:389 / auto_sync_page.dart:956 -> wal_syncs.dart:204-210) before the next device refresh, deleteAllSyncedWals deletes untransferred file B. That loses B's audio beyond what was downloaded."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-sync-cancel",
+  "lead": "app/lib/services/wals/storage_sync.dart:598-607 (main): the 5 s no-data timer starts before 'await connection.writeToStorage(...)'. If the CMD_READ_FILE write takes more than 5 s on a weak BLE link, completer.completeError(TimeoutException) runs before completer.future.timeout listens, so the error is reported to the zone as uncaught. The _isCancelled branch at :470-476 can do the same if a packet arrives during that write after a cancel."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-sync-cancel",
+  "lead": "app/lib/services/wals/storage_sync.dart:214-228 with :656-676 (main): after an interrupted multi-file transfer the downloaded part is saved, but the file is relisted with storageOffset 0. The next sync re-downloads and saves the same span again (the cancel dialog says 'You can resume later'). This likely uploads the overlapping audio twice; needs a check of whether the backend dedupes it."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-ring-sync-success",
+  "lead": "app/lib/services/wals/ring_storage_sync.dart:374-379 - syncWal never sets wal.isSyncing/syncStartedAt (SDCardWalSyncImpl.syncWal does at sdcard_wal_sync.dart:953-956), so wal_item_detail_page.dart:141/287 keeps showing 'Transfer to Phone' with no Cancel or progress during a ring transfer on fw 3.0.20+. Trigger: open a ring recording, press Transfer to Phone, and watch the button during the transfer."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-ring-sync-success",
+  "lead": "app/lib/services/wals/ring_storage_sync.dart:375-376 - syncWal has no _isSyncing guard (#22307 adds one for StorageSyncImpl). A second Transfer to Phone tap, or a tap while a syncAll ring drain is reading (SyncProvider.transferWalToPhone at sync_provider.dart:1177 has no _isTransferSeamBusy check), resets _isCancelled/_activeSyncDeviceId, and the second _syncRing cancels the first transfer's _notifyStream at :620. The first transfer then ends only on its 15 s idle timer, and its STOP stops the second read. Trigger: tap Transfer to Phone on the ring recording during an auto-sync drain, or tap it twice."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "?",
+  "lead": "backend/utils/conversations/process_conversation.py:2943 (and :2929): MERGE is not a reprocess (processing_trigger.py:64; lazy enrichment is off by default), so for merges _save_action_items and save_structured_vector run later on the background executor. When transfer() at merge_conversations.py:381 raises right after process_conversation returns (e.g. the overlapping-merge ReviewConflict, #22319), _cleanup_merged_target_after_failure can finish before those writes land. The tasks and the conversation vector are then created for the already-deleted merged id, which #21845's cleanup cannot catch."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "?",
+  "lead": "backend/utils/conversations/process_conversation.py:2971-2976: for MERGE (not a reprocess), conversation_created_webhook is queued for the merged target before transfer and source deletion. If the merge then rolls back (merge_conversations.py:967-969), integrations have already received 'conversation created' for an id that _cleanup_merged_target_after_failure deletes."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-search-memory-phrase",
+  "lead": "backend/utils/memory/memory_service.py:3548 - the memory-search tokenizer only splits on '.' and ','; searching 'coffee?' (or a quoted word) keeps the punctuation in the word and matches no memory containing 'coffee'. Same in backend/utils/memory/memory_read_api.py:31, and our #22275 doesn't change it"
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-search-memory-phrase",
+  "lead": "app/lib/pages/search/global_search.dart:805 - tapping a memory result saves the search to Recent without its date words (_searchedQuery), while conversation, recap and task taps (L554/L762/L792) save the typed text (_query.text); 'bluetooth sept 12' is saved as just 'bluetooth' when a memory was tapped"
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-search-memory-phrase",
+  "lead": "app/lib/providers/memories_provider.dart:267 - a category filter the user picked on Memories (saved in memories_filter_categories) still hides a tapped Global Search memory from another category, because the hand-off only sets the search text"
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-flashpage-sync",
+  "lead": "app/lib/services/wals/sdcard_wal_sync.dart:943-947 - SDCardWalSyncImpl.syncWal returns null for a recording not in _wals, and setDevice (:1015-1024) rebuilds _wals with new Wal instances on every connect. Trigger: legacy SD-card Omi, open a device recording, let the device reconnect, press Transfer to Phone: 'Transfer complete' with nothing read. #22307 only reroutes StorageSync-owned recordings."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-flashpage-sync",
+  "lead": "app/lib/services/wals/periodic_recording_sync.dart:29-32 - iOS background-task 'expire' calls WalSyncs.cancelSync(), which every sub-sync treats as a user cancel. Trigger: iOS, start Transfer to Phone, background the app until the periodic task expires: the transfer returns quietly and the still-mounted detail page shows 'Transfer complete'."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-flashpage-sync",
+  "lead": "app/lib/services/wals/flash_page_wal_sync.dart:178 - flash WAL timerStart is recomputed from DateTime.now() on every enumeration, so its id (device_timerStart) changes on each setDevice/refreshWalsFromDevice. Trigger: open a Limitless recording, then let a sync or reconnect run: WalItemDetailPage.getWalById(widget.wal.id) (wal_item_detail_page.dart:140) misses the live entry and the page shows the stale instance's state and progress."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-idempotency-limit",
+  "lead": "backend/utils/mcp_action_items.py:167 - when an MCP create matches an existing task, it re-upserts the search vector with the request text instead of the stored description (the REST router uses response.description at routers/action_items.py:399). Trigger: MCP-create 'Call mom', edit the task to 'Call mom about the trip', MCP-create 'Call mom' again: the edited task comes back but its vector now says 'Call mom'."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-mcp-convo-pages",
+  "lead": "backend/database/conversations.py:98 MCP_CONVERSATION_CARD_FIELD_PATHS omits dream_duplicate_of. The MCP, REST and Developer card lists (both the offset and keyset readers) therefore cannot hide Dream-merged duplicate captures: utils/agent_capabilities/cleanup_edits.py:187 and database/review_overlay_merge.py set dream_duplicate_of but leave discarded=false. The app list projection (conversations.py:1714) does include the field. Trigger: after a Dream merge_conversations edit, the source capture still shows in hosted MCP get_conversations. Check intent and duplicates first."
+ },
+ {
+  "run": "wf_b58ed482-15d",
+  "from": "loop4-mcp-convo-pages",
+  "lead": "backend/routers/developer.py:1626 X-Omi-Next-Offset = offset + len(conversations) counts only visible rows, while offset skips stored rows. On a budget-truncated developer conversations page with hidden rows in it, the next offset page repeats rows (duplicates, not loss; low priority)."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "?",
+  "lead": "desktop/windows/src/main/agentKernel/productToolExecutors.ts:1044 (filtered at :962): get_daily_recap gets its tasks from db.getLocalActionItems({ limit: 500 }). That list is sorted by sort_order, then due_at, then created_at DESC (taskStore.ts:306-307, :494), and it includes completed tasks, so the 500 kept are not the newest. A user with more than 500 non-deleted tasks loses tasks created in the recap window from '## Tasks (N)' when they sort late, for example new ones with no sort_order or due date. This is live data. The Mac recap filters action_items by createdAt inside the window."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "?",
+  "lead": "desktop/windows/src/main/agentKernel/productToolExecutors.ts:964 (bound at :1046, db.ts:2087): get_daily_recap shows db.recentMemories(10) and ignores days_ago. A Yesterday or Past-N recap therefore lists memories created today, and none from the window once 10 newer ones exist. The Mac recap filters memories by createdAt inside the window (ChatToolExecutor.swift Q5). The section is labelled 'recent', so check whether this is intended before fixing."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "?",
+  "lead": "desktop/windows/src/main/agentKernel/productToolExecutors.ts:965 and :1024-1032, with db.ts:1844: the recap still builds 'Screen Context' from the insights table, which nothing has written since #20494 retired Windows Insight. It can only show old rows from before the upgrade, and db.insertInsight is now unused. This is a cleanup or product decision (remove the section and the read, or feed it from live data), not a bug fix."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-web-toggle-restore",
+  "lead": "web/app/src/hooks/useActionItems.ts:603-607 (main) bulkDelete: Promise.all rejects on the first failed DELETE while other deletes may already have succeeded, and each success calls invalidateCache, which reloads the list. The catch then re-adds every selected task, so tasks already deleted on the server reappear. A failed task that a reload already brought back is shown twice (duplicate React key). Trigger: bulk-delete several tasks while one DELETE returns 5xx. Check against #22258/#22259 first; they cover reload storms, not this revert."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-web-toggle-restore",
+  "lead": "web/app/src/hooks/useActionItems.ts:563 (main) removeItem: the revert appends the task again ([...prev, item]). If a reload (from another invalidation) lands while its DELETE is in flight and that DELETE then fails, the task is listed twice."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-web-toggle-restore",
+  "lead": "web/app/src/hooks/useHomeTasks.ts:46-54 (main): when completing a task on the Home hub fails, the task quietly comes back. The error only goes to console.error and nothing is shown, so the row disappears and reappears with no explanation (same pattern as FC-control-shows-unconfirmed-write)."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-person-name-case",
+  "lead": "backend/routers/users.py:623-635 - POST /v1/users/people get-or-create is not atomic: two concurrent or retried requests with the same new name (e.g. a client retry after a timeout) both miss the lookup and create two people with random uuid4 ids; a deterministic id (document_id_from_seed of uid + casefolded name) or a transaction would make it truly idempotent"
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-person-name-case",
+  "lead": "backend/utils/sync/speaker_identity.py:337-339 - sync text naming calls users_db.get_person_by_name once per segment with a detected name and never caches misses; one speaker repeating an unknown introduction (or undiarized speaker_id<=0 segments) repeats the lookup N times, and after #22382 each miss also reads the owner's people"
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-person-name-case",
+  "lead": "backend/routers/listen/transcripts.py:1583-1594 - the live introduction suggestion sends the detected name as person_name and stores (person_id, name) in speaker_to_person, while sync uses the matched person's stored name (speaker_identity.py:351); with a case-insensitive or alias match, live shows a different spelling than the saved person"
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "?",
+  "lead": "sdks/react-native/src/stt/parakeet.ts:46-50 - stop() sends 'finalize' and then calls ws.close() straight away with no drain, so the final transcript Parakeet sends in reply to finalize can be lost. Same class as #13633/#13635/#13636 (fixed in TS/Dart/Go); RN Deepgram got a bounded drain in #20247 but Parakeet did not. Blocked by the same missing RN CI lane."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "?",
+  "lead": "sdks/react-native/src/stt/parakeet.ts:3-6 - parakeetWsUrl appends '/v3/stream?sample_rate=N' after the whole apiUrl, so a base URL with a query (e.g. https://host/p?key=x) becomes wss://host/p?key=x/v3/stream?sample_rate=16000. Same class as #13263/#13177/#13289 (fixed in TS/Go/Python) and #20243 (C++). Blocked by the same missing RN CI lane."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "?",
+  "lead": "sdks/swift/Sources/omi-lib/STT/ParakeetTranscriber.swift:44-51: stop() sends 'finalize' and then, in the same block, cancels the task (.goingAway) and calls invalidateAndCancel(), so the server's final transcript for the tail audio never arrives. The other SDKs wait: Go stt.go:126 notes that closing right after finalize drops trailing results, TS waits up to 5s, and Python drains with a timeout. Trigger: speak, then call stop(); the last utterance is never transcribed. Blocked the same way: no CI for sdks/swift."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "?",
+  "lead": "sdks/swift/Sources/omi-lib/STT/DeepgramTranscriber.swift:100-104,119-120: the receiveLoop .failure case returns silently and appendPcm ignores send errors ({ _ in }). Trigger: a rejected API key (HTTP 401 on upgrade) or a mid-stream close; the caller keeps sending audio into a dead socket and gets no transcripts and no error. Blocked the same way: no CI for sdks/swift."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "?",
+  "lead": "sdks/swift/Sources/omi-lib/STT/ParakeetTranscriber.swift:10,39,66 (also 49-50 vs 55): 'ready', 'task' and 'session' are shared between the omi.stt.parakeet DispatchQueue (appendPcm/stop) and URLSession's delegate queue (receive completion) with no synchronization. Trigger: the ready frame arrives while appendPcm runs; that is a data race TSan would report. Blocked the same way: no CI for sdks/swift."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "?",
+  "lead": "sdks/swift/Sources/omi-lib/STT/ParakeetTranscriber.swift:29 and DeepgramTranscriber.swift:92: URLSession(configuration:delegate:self) keeps a strong reference to the transcriber until invalidateAndCancel(), and only stop() calls that. Trigger: release a transcriber without calling stop(); it leaks and its WebSocket stays open. Blocked the same way: no CI for sdks/swift."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-macos-tool-errors",
+  "lead": "desktop/macos/agent/scripts/generate-tool-surfaces.mjs:636 + desktop/macos/Desktop/Sources/LocalAgentAPIServer.swift:318-321 \u2014 since 654e277307 (2026-07-04) the generated local-API tool list has only 'semantic_search' (the generator emits tool.name and ignores the manifest's local-agent-api adapterName 'search_screen_history', desktop/macos/agent/src/runtime/omi-tool-manifest.ts:1103), so POST /v1/local/tool {name:'search_screen_history'} returns 404 unknown_tool, 'omi local search-screen' (sdks/python-cli/omi_cli/commands/local.py:125) should exit 5, and the mapping at LocalAgentAPIServer.swift:331 is dead. No open PR fixes it. This also undercuts the repro described in our #22343/#22344."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-macos-tool-errors",
+  "lead": "desktop/macos/Desktop/Sources/LocalAgentAPIServer.swift:581-591 \u2014 structured {\"ok\":false} tool results are relayed as HTTP 200 ok:true. This covers ChatToolExecutor.authorizedOwnerChangedResult() (ChatToolExecutor.swift:789-791, returned by execute() when no account is signed in) for every relayed tool, and get_local_status's not-ready and failed payloads (ChatToolExecutor.swift:1495-1505, 1538-1548). Trigger: sign out of Omi Desktop with the local API enabled and call any local tool. The CLI masks it (#13157); a fix needs a JSON-aware toolResponse rule."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-macos-tool-errors",
+  "lead": "desktop/macos/Desktop/Sources/LocalAgentAPIServer.swift:582 + desktop/macos/Desktop/Sources/Chat/SQLQueryResultProjection.swift:38 \u2014 false positive: a successful execute_sql SELECT whose first column label starts with 'Error:' (e.g. SELECT 1 AS 'Error: count') renders a table header starting with 'Error:', so the API answers HTTP 400 ok:false for a successful query (sdks/python-cli/tests/test_sql_status_headings.py:12 assumes Desktop returns 200 here)."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-ts-sdk-parakeet",
+  "lead": "sdks/react-native/src/stt/parakeet.ts:41-45 - the React Native createParakeetTranscriber has the same bug: no onclose handler, and appendPcm only sends when ready && OPEN, so a 1013 capacity_full/service_not_ready close before ready silently drops all audio and stop() returns normally"
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-ts-sdk-parakeet",
+  "lead": "sdks/react-native/src/stt/parakeet.ts:46-53 - React Native stop() sends 'finalize' and closes the socket immediately without draining, so the transcript that arrives after finalize is lost (the TS device SDK fixed this in #13634 for issue #13633; React Native never got the fix)"
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-ts-sdk-parakeet",
+  "lead": "sdks/swift/Sources/omi-lib/STT/ParakeetTranscriber.swift:37-41,54-59 - the Swift OmiParakeetTranscriber returns silently on a receive failure and appendPcm checks `self.ready`, so a 1013 close before ready drops all audio with no error; `ready` is also written on the URLSession delegate queue but read on `queue` (a data race), and stop() cancels right after finalize without draining"
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-ts-sdk-parakeet",
+  "lead": "sdks/device/typescript/src/stt/index.ts:143 (main) - after ready, a server close (e.g. 1011 stream_initialization_failed from the except path at backend/parakeet/main.py:519-522) makes Parakeet appendPcm silently drop the rest of the session's audio through the readyState===1 check; Deepgram appendPcm (index.ts:59) does the same after any close"
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-web-move-folder",
+  "lead": "web/app/src/components/conversations/ConversationSplitView.tsx:621 handleFolderSubmit: a failed create or rename (createFolder/updateFolder rejects) is only console.error'd, so FolderDialog stays open with no error shown"
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-web-move-folder",
+  "lead": "web/app/src/components/conversations/ConversationSplitView.tsx:643 handleDeleteFolderConfirm: a failed deleteFolder is only console.error'd, so DeleteFolderDialog stays open with no error"
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-web-move-folder",
+  "lead": "web/app/src/components/conversations/ConversationSplitView.tsx:580 initial getFolders failure is swallowed: folders stay [], so only All/Starred tabs show and the Move dialog says 'No folders yet. Create one...', which invites duplicate folders; there is no error or retry"
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-web-move-folder",
+  "lead": "web/app/src/components/conversations/ConversationSplitView.tsx:464/471 enterSelectionMode and enterSelectionModeWithId call setSelection(null) ('Deselect any viewed tile'), but preventAutoSelect.current stays false, so the auto-select effect at :307 re-selects the newest tile straight away and its detail pane stays open in selection mode (desktop widths)"
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-web-move-folder",
+  "lead": "web/app/src/components/conversations/ConversationSplitView.tsx:545 handleDeleteConfirm: per-id deletes go through Promise.all, so on a partial failure the deleted tiles stay in the list (no refresh) until a retry or reload, and the selection still holds the deleted ids"
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-web-filter-error",
+  "lead": "web/app/src/hooks/useMemories.ts:384-394 - the category-change effect shows a fresh cached category and returns without clearing `error`. An uncached category whose first fetch fails sets it (~line 442), and MemoriesPage.tsx:563 renders it. Trigger: go offline, pick a memory category you have not opened, go back online, then pick an already-loaded category within 5 minutes. The error banner stays over valid memories."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-web-filter-error",
+  "lead": "web/app/src/hooks/useConversations.ts:189-193 (uncached branch) together with ConversationSplitView.tsx:855 (the gallery renders whenever dayGroups.length > 0) - switching to an uncached folder or date keeps the previous filter's conversations, and if that first fetch fails they stay listed under the new folder next to the error banner. Trigger: let All load, go offline, click a folder you have not opened: All's conversations are shown as that folder's."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-dart-whisper-stop",
+  "lead": "sdks/device/dart/lib/ble/flutter_blue_plus_omi_ble.dart:123 - audioPackets() checks `_audioSub == null` before `_audioSub` is assigned (that only happens after `await setNotifyValue` in a scheduled microtask). Calling audioPackets() and audioPayloads() back to back, exactly as the Dart README quickstart does, subscribes onValueReceived twice, so every listener gets each audio packet twice and the first subscription is overwritten (only cancelled on a real disconnect)."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-dart-whisper-stop",
+  "lead": "sdks/device/dart/lib/stt/stt.dart:232 (createTranscriber whisper branch on main) - the sampleRate argument is silently ignored for SttEngine.whisper. WhisperTranscriber hard-codes 16000 in its batch size, so createTranscriber(engine: whisper, sampleRate: 8000, ...) mis-sizes batches and hands 8 kHz PCM to the runner without any error. This is the Dart counterpart of the still-open TS issue #13122 (open PR #13313), so check maintainer direction first."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-dart-whisper-stop",
+  "lead": "sdks/device/go/omidevice/stt/stt.go:254 - whisperBatch has no stopped flag, so AppendPCM after Stop() keeps buffering and calls the runner/onTranscript after Stop returned. The Dart, TS and React Native transcribers ignore PCM after stop. Parity gap, unverified against the Go Deepgram/Parakeet post-Stop behaviour."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-app-vocab-delete",
+  "lead": "app/lib/providers/user_provider.dart:340-348 addVocabularyWords only dedupes against the saved list, not within the input: typing 'Omi, Omi' saves 'Omi' twice (backend/database/users.py:2341 stores the list as given), so two identical chips appear and tapping x on one marks both pending. Check against #22309/#22354 lines first."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-app-vocab-delete",
+  "lead": "backend/database/users.py:2340-2341 silently keeps only vocabulary[:100] while app/lib/providers/user_provider.dart:325-328 stores the full list locally after the 200: past 100 words the app shows words the server dropped, and they vanish on the next load with no error or limit in the app."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-app-vocab-delete",
+  "lead": "desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SettingsContentView+SettingsUpdates.swift:107-126 updateTranscriptionPreferences only logs a failed PATCH, so a macOS vocabulary add or remove (removeVocabularyWord at SettingsContentView+Transcription.swift:399) that fails updates the local list and AssistantSettings silently. Check against our open #22356, which covers only the load-failure case."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-app-vocab-delete",
+  "lead": "desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Transcription.swift:383-395 addVocabularyWord keeps typed 'Omi, Callie' as one local term, but saveVocabulary joins with ', ' and the sync re-splits on ',', so the server stores two words while the pane shows one chip until reload."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-vocab-server-cap",
+  "lead": "desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Transcription.swift:383-411 (with SettingsContentView+SettingsUpdates.swift:107-125): macOS adds the word to vocabularyList/AssistantSettings before the PATCH and only logs a failed save, so after a refused or failed save (offline, or the new 400 at 101 terms) the pane still shows a word the account doesn't have until Settings reloads. #22356 keeps this fire-and-forget save."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-vocab-server-cap",
+  "lead": "desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Transcription.swift:384,410 + SettingsContentView+SettingsUpdates.swift:114: macOS adds the typed text as one term without splitting on commas, but saves the list joined with ', ' and splits it again on ','. Typing 'Acme, Inc' shows one term locally while the account stores 'Acme' and 'Inc', which appear as two terms after a reload."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-vocab-server-cap",
+  "lead": "backend/utils/listen_session_bootstrap.py:64 + backend/utils/stt/live_session.py:105: 'Omi' is put first in the user's vocabulary before the [:100] cut. A user with exactly 100 saved terms (none of them 'Omi') gets only the first 99 boosted in live speech-to-text, and the 100th is silently dropped."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-vocab-server-cap",
+  "lead": "app/lib/providers/user_provider.dart:340-348: addVocabularyWords removes only words already in the list, not repeats within the input, so typing 'Omi, Omi' saves 'Omi' twice. removeVocabularyWord (where w != word) then deletes both chips at once. Check #22309/#22399 before picking this up, since they touch these lines."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "?",
+  "lead": "backend/utils/conversations/process_conversation.py:1922-1924 + backend/utils/conversations/action_item_identity.py:186-193 + backend/utils/task_sync.py:159-165: a user with a connected default task integration (Todoist/Asana/ClickUp/Google Tasks) merges conversations whose tasks were already exported. The merged conversation re-extracts them (merge sources are excluded from dedup at notes_task_context.py:13-23) as NEW rows under a new conversation id with no exported marker; plan_replacement only matches rows from the same conversation (_eligible), and the already-exported check in _sync_to_cloud_service only looks at the same document id. auto_sync_action_items_batch therefore creates a second copy of every task in the task app. The source rows are deleted at merge_conversations.py:843-844 but their task-app copies stay. No issue or PR covers this."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "?",
+  "lead": "backend/utils/conversations/process_conversation.py:2937-2943 (follow-up to #21845): MERGE is not a reprocess, so _save_action_items for the merged conversation is fire-and-forget on postprocess_executor. If the merge then fails before source deletion (e.g. transfer raises at merge_conversations.py:381), #21845's purge in _cleanup_merged_target_after_failure can run before the queued task write lands, leaving orphaned duplicate tasks that point at the deleted merged conversation. A possible fix is to write MERGE tasks inline like the reprocess branch; that only matters once #21845 lands."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "?",
+  "lead": "backend/utils/conversations/merge_conversations.py:845-848: in a manual merge (retain_capture=False), an exception while reading or deleting a source's tasks is only logged. The merge still reports success and deletes the source conversation, so that source's tasks survive next to the merged conversation's re-extracted copies and point at a deleted conversation. Open PR #21525 makes the conversation-delete step raise but does not cover this task-delete step."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-macos-vocab-patch",
+  "lead": "desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+NotificationsPrivacy.swift:343,354 (via SettingsContentView+SettingsUpdates.swift:87-105): Store Recordings / Private Cloud Sync toggles only log a failed PATCH, so the toggle stays flipped while the account is unchanged. Trigger: flip Store Recordings offline."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-macos-vocab-patch",
+  "lead": "desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+NotificationsPrivacy.swift:198,231 (via SettingsContentView+SettingsUpdates.swift:26-34): the Daily Summary toggle and Summary Time keep the new value when updateDailySummarySettings fails (only logged). Trigger: toggle Daily Summary offline, then reopen Settings online."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-macos-vocab-patch",
+  "lead": "desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Transcription.swift:31-37,95-99: the Auto-Detect / Single Language buttons set the pane and AssistantSettings, then updateTranscriptionPreferences(singleLanguageMode:) only logs a failure; the next loadBackendSettings() silently reverts the choice. saveSingleLanguageSelection (~366-380) also discards TranscriptionLanguageWriter's Outcome. Trigger: pick Single Language offline, then reopen Settings online."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-macos-vocab-patch",
+  "lead": "desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SettingsContentView+SettingsUpdates.swift updateTranscriptionPreferences(vocabulary:): each edit sends the whole list in its own unordered Task, so two quick edits can land out of order and the account keeps the older list. Trigger: add two words within about a second on a slow connection."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-macos-vocab-patch",
+  "lead": "desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Settings.swift:42-58: updateTranscriptionPreferences does a PATCH then a GET and throws if the GET fails after a successful PATCH, so callers report a stored change as failed. Trigger: GET /v1/users/transcription-preferences fails right after a successful PATCH."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-storage-sync-filenum",
+  "lead": "app/lib/services/wals/storage_sync.dart:369-380 + app/lib/services/devices/connectors/omi_connection.dart:609-614: deleteStorageFile gives up after 5 s and returns false, but the multi-file firmware runs the delete deferred on its storage thread and can still complete it. syncAll then does not shift the remaining WALs, so the next file in the same loop is read with writeToStorage(fileNum, 0x11, ...) one index too high. It downloads the following file's audio under the wrong WAL's timestamp/size, then deletes that file. Trigger: a firmware delete slower than 5 s mid-sync."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-storage-sync-filenum",
+  "lead": "app/lib/services/devices/connectors/omi_connection.dart:600-607: performDeleteStorageFile takes the first notification of any kind on the shared storage data characteristic as the delete result (value[0]==0). If Clear pending/synced runs during an active multi-file sync (both buttons are enabled while syncing, auto_sync_page.dart:1079/1089 -> storage_sync.dart:269-295), a streaming data packet is read as the result. The delete is reported failed while the firmware still deletes and re-indexes, so app indices drift."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-storage-sync-filenum",
+  "lead": "Our open #22307 (StorageSyncImpl.syncWal): it drops the WAL from _wals only when _deleteTransferredFile returns true. The same 5 s timeout plus deferred firmware delete leaves a stale synced entry that Clear synced deletes by index. Consider dropping it unconditionally, as #22405 now does in syncAll."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-memory-category-hit",
+  "lead": "app/lib/providers/memories_provider.dart:520-526 vs :338-347 - 'All' is stored as an empty set and clearCategoryFilter deletes the saved key, but _loadFilter turns a missing key into all four categories. After reopening Memories (or on a fresh install), 'All' shows unchecked and System/Interesting/Manual show checked, so tapping Manual hides Manual memories instead of filtering to them."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-memory-category-hit",
+  "lead": "app/lib/pages/memories/widgets/memory_management_sheet.dart:43-46 - there is no Workflow option, yet filteredMemories filters on MemoryCategory.workflow (the backend has workflow memories). After picking any single category from 'All', workflow memories are hidden and only 'All' brings them back."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-memory-category-hit",
+  "lead": "app/lib/providers/memories_provider.dart:250-254,276-281 - a Memories view left on History, or with 'This device' on, still hides a Global Search memory hit when the tap opens Memories. Trigger: sliders -> History, then Global Search 'coffee' -> tap a current memory -> not listed. 'This device' also limits what is fetched from the server."
+ },
+ {
+  "run": "wf_1b0fb7b8-73f",
+  "from": "w5-memory-category-hit",
+  "lead": "app/lib/providers/memories_provider.dart:529 - _loadFilter maps an unknown saved category name to System (orElse), so a stale name silently checks System."
+ },
+ {
+  "run": "wf_5d8ebf62-8cd",
+  "from": "w5-sdcard-stale-wal",
+  "lead": "app/lib/services/wals/sdcard_wal_sync.dart:437 (same at :673 in the marker path): `timeoutTimer = Timer(5s, ...)` replaces the reference without cancelling it. If storage packets arrive while `await _writeToStorage(deviceId, fileNum, 0, offset)` (:435/:671) is still pending, they set a 15 s stall timer (:366/:527) that is never cancelled, because later packets cancel only the newer timer. A legacy SD transfer that runs longer than 15 s can then abort with TimeoutException('SD card read stalled'). Trigger: BLE notifications delivered before the write future completes, which is what the test fake _FakeSdCard does with scheduleMicrotask. The real-device event order is not confirmed."
+ },
+ {
+  "run": "wf_5d8ebf62-8cd",
+  "from": "w6-merge-webhook",
+  "lead": "backend/utils/conversations/process_conversation.py:2929,2943 (origin/main): for a MERGE target, save_structured_vector and _save_action_items are queued on postprocess_executor before review_overlay_merge.transfer. When transfer raises ReviewConflict, _cleanup_merged_target_after_failure (merge_conversations.py:902, delete_vector at :930) can run before those queued jobs, which then write a vector and tasks for the deleted merged conversation. Candidate race; #21845's task purge runs at the same too-early point."
+ },
+ {
+  "run": "wf_5d8ebf62-8cd",
+  "from": "w6-merge-webhook",
+  "lead": "backend/utils/conversations/process_conversation.py:1992 (origin/main): _save_action_items auto-syncs the merged target's tasks to the user's external task app (auto_sync_action_items_batch) during merge processing, before transfer. A merge rolled back by a transfer ReviewConflict never retracts them, leaving external tasks for a conversation that no longer exists next to the restored sources' tasks. Same failure class as #22413; not covered by #21845's rollback purge."
+ },
+ {
+  "run": "wf_5d8ebf62-8cd",
+  "from": "w5-flash-wal-id",
+  "lead": "app/lib/services/wals/ring_storage_sync.dart:219 - refreshWalsFromDevice sets displayTimerStart = now - estimatedSecs on every refresh (Offline Sync open via discoverDeviceWals, coordinator wakes), so the ring recording's Wal.id and start time change each time; deleteWal (:255) and auto_sync_page.dart:567/:721 id lookups then miss it"
+ },
+ {
+  "run": "wf_5d8ebf62-8cd",
+  "from": "w5-flash-wal-id",
+  "lead": "app/lib/services/wals/sdcard_wal_sync.dart:192 - when the device reports no file timestamp (legacy SD-card firmware), timerStart = now - seconds is recomputed on each setDevice listing, so the SD recording's id and start time drift the same way"
+ },
+ {
+  "run": "wf_5d8ebf62-8cd",
+  "from": "w5-flash-wal-id",
+  "lead": "app/lib/services/wals/flash_page_wal_sync.dart:138-148 with app/lib/pages/conversations/sync_page.dart:145-153 - swiping to delete a pending Limitless recording confirms 'This cannot be undone' but only removes it from the in-memory list (no ACK for miss status), so it reappears on the next pendant re-read; needs a product decision (wording vs behaviour)"
+ },
+ {
+  "run": "wf_5d8ebf62-8cd",
+  "from": "w5-dream-dup-field",
+  "lead": "backend/database/conversation_scan.py:64 \u2014 PEOPLE_STATS_FIELD_PATHS omits dream_duplicate_of (and status/relevance_decision), yet iter_conversations (:180) filters those projected rows with is_visible_conversation, and aggregate_people_stats (utils/people_stats.py:31-37) skips only discarded/locked rows. GET /v1/users/people stats (conversation_count, talk_seconds, last_heard_at) therefore count a Dream-folded duplicate capture twice and also count legacy completed rule discards. Trigger: a person heard in a conversation recorded on two devices that Dream folded into one."
+ },
+ {
+  "run": "wf_5d8ebf62-8cd",
+  "from": "w5-dev-next-offset",
+  "lead": "backend/database/conversations.py:899,914 + backend/routers/developer.py:1617 \u2014 after more than _RULE_DISCARD_PAGE_SKIP_CAP (64) hidden rows, _collect_visible_conversation_page returns a short page without marking it truncated, so the Developer API offset modes send X-Omi-Has-More: false and pagination ends while visible conversations remain. One trigger: include_transcript=true&limit=200 when 65+ of the first 201 stored rows are Dream duplicates or legacy rule discards; then there is no follow-up read at all. The app list route reads the same short page as the end of the list."
+ },
+ {
+  "run": "wf_5d8ebf62-8cd",
+  "from": "w5-dev-next-offset",
+  "lead": "backend/routers/developer.py:1626 (cards path, outside #22378's lines) \u2014 offset>0 with the request budget truncating get_mcp_conversation_cards after hidden rows still emits X-Omi-Next-Offset = offset + len(visible), which repeats rows. After #22378 lands that reader walks past hidden rows by keyset, so the gap can grow. It can adopt the same scan_stats rows_read count."
+ },
+ {
+  "run": "wf_a8e78b41-84c",
+  "from": "?",
+  "lead": "app/lib/providers/developer_mode_provider.dart:40,80-84,142-156 + app/lib/pages/settings/developer.dart:342-347: during initialize `_savedWebhookText` is still `const {}`, so any cached webhook value (the audio interval is cached as '5' on every visit) makes hasUnsavedWebhookChanges true. Trigger: open Developer Settings a second time and press back while it is loading; it asks 'Discard changes?' though nothing was edited, and the Save button shows because initialize reuses savingSettingsLoading."
+ },
+ {
+  "run": "wf_a8e78b41-84c",
+  "from": "?",
+  "lead": "app/lib/pages/settings/developer.dart:344-346 + app/lib/providers/developer_mode_provider.dart:264-272,295-301: choosing Discard while a Save is in flight pops the page, but the save keeps running. On success it caches the reverted (discarded) field text while the server keeps the new URLs, then shows 'Settings saved!' even though the user chose Discard. Trigger: edit a webhook URL, tap Save, press back, tap Discard before the save returns."
+ },
+ {
+  "run": "wf_a8e78b41-84c",
+  "from": "?",
+  "lead": "app/lib/providers/developer_mode_provider.dart:321-328: dispose() removes listeners but never disposes its seven TextEditingControllers (minor leak every time Developer Settings is opened)."
+ },
+ {
+  "run": "wf_a8e78b41-84c",
+  "from": "?",
+  "lead": "app/lib/providers/developer_mode_provider.dart:40,80-84,142-156 + app/lib/pages/settings/developer.dart:341-347: during initialize(), _savedWebhookText is still const {}, so any cached webhook value (the audio interval is cached as '5' on every visit) makes hasUnsavedWebhookChanges true; reopen Developer Settings and press back while it loads -> spurious 'Discard changes?' prompt (and the Save button shows, since initialize reuses savingSettingsLoading via setIsLoading(true))."
+ },
+ {
+  "run": "wf_a8e78b41-84c",
+  "from": "?",
+  "lead": "app/lib/pages/settings/developer.dart:344-346 + app/lib/providers/developer_mode_provider.dart:264-272,295-301: tap Save, then press back and choose Discard while the save is in flight -> the page pops, but the already-sent writes succeed on the server; saveSettings then caches the reverted (discarded) controller text in SharedPreferences while the server keeps the new URLs, and shows 'Settings saved!' after the user chose Discard."
+ },
+ {
+  "run": "wf_a8e78b41-84c",
+  "from": "?",
+  "lead": "app/lib/providers/developer_mode_provider.dart:321-328: dispose() removes listeners but never disposes its seven TextEditingControllers (minor leak each time Developer Settings is opened)."
+ }
+]
