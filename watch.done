@@ -16,3 +16,11 @@
 2026-10-20T06:20:58Z #22775 w7-people-stats-dream fix/people-stats-field-paths 2cc0f84a73 green cleaned
 2026-10-20T06:20:59Z #22777 w6-goals-0 fix/workstream-detail-recent-events 3f3f28cc79 green cleaned
 2026-10-20T06:25:05Z #22779 w6-goals-1 fix/user-goals-focus-and-limit-order ecb12faf3b green cleaned
+2026-10-20T06:54:11Z #22786 w7-sdcard-timeout-timer fix/sdcard-timeout-timer-cancel 531b623b00 green cleaned
+2026-10-20T06:58:14Z #22784 w7-win-recap-memories fix/windows-recap-memories-window 610a1e632b green cleaned
+2026-10-20T07:08:58Z #22781 w7-mac-settings-toggles fix/macos-settings-toggle-rollback c3a0e46624 green cleaned
+2026-10-20T07:12:08Z #22788 w7-mac-prefs-get-after-patch fix/macos-transcription-prefs-get-after-patch b59f4e4374 green cleaned
+2026-10-20T07:23:58Z #22788 w7-mac-prefs-get-after-patch fix/macos-transcription-prefs-get-after-patch b59f4e4374 green no-worktree
+2026-10-20T07:24:00Z #22790 w7-ring-sync-state fix/ring-transfer-syncing-state dcb9a0aea8 green cleaned
+2026-10-20T07:24:02Z #22794 w7-vocab-dedup fix/vocabulary-add-dedup-input 56e2d2e865 green cleaned
+2026-10-20T07:24:03Z #22796 w8-chatsessions-time fix/win-chatsessions-time-buckets efd26556ff green cleaned
