@@ -94,3 +94,8 @@ Open PRs awaiting maintainers: #22439 #22423 #22395 #22347 #22340 #22317 #22257 
 - #22807 OPEN (fixes #22806) fix(mcp): charge the transcript budget for original_text
 - Not opened: RN/Swift Parakeet stream-closed-before-ready parity gap; neither SDK has a CI workflow,
   so the regression test could not run in Omi CI. See the cursor checkpoint notes.
+
+## Wave 11 (2026-10-20, OpenCode continuation)
+- #22844 OPEN (fixes #22843) fix(mcp): index the saved task description on idempotent create
+- #22848 OPEN (fixes #22847) fix(action-items): notify the sharer only when a task first completes
+- #22850 OPEN (fixes #22849) fix(cli): structure unindexed and stats-error empty screen searches
