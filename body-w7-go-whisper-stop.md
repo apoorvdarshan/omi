@@ -1,6 +1,6 @@
 ## What changed and why
 
-Fixes #ISSUE_NUMBER
+Fixes #22770
 
 `stt.NewWhisper` returns a `whisperBatch` with no stopped state. `Stop` flushes the buffered tail and clears the buffer, but the transcriber still takes audio afterwards. A chunk that reaches `AppendPCM` after `Stop` returned (for example a BLE frame already in flight when the caller stopped) is buffered as usual. Once the buffer reaches a full batch (160,000 bytes, five seconds of 16 kHz PCM16), `AppendPCM` runs the injected Whisper runner and calls `onTranscript` for a session the caller has already ended. A second `Stop` then flushes whatever was left.
 
@@ -40,6 +40,6 @@ New class `FC-stopped-transcriber-accepts-late-audio`.
 
 - Violated contract: once a streaming transcriber's `Stop` has returned, audio appended afterwards must be refused, not buffered into a session nobody owns and transcribed after the caller has moved on.
 - Canonical guard: `Stop` records a terminal stopped state before its final flush, and the input path checks it before touching the buffer. `TestWhisperRefusesAudioAfterStop` appends a full batch after `Stop` and checks that it is refused and never reaches the runner or the handler.
-- Evidence: issue #ISSUE_NUMBER and `stt.go` on `origin/main` before this change. `evidence_prs` is empty because this PR is the first instance.
+- Evidence: issue #22770 and `stt.go` on `origin/main` before this change. `evidence_prs` is empty because this PR is the first instance.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)

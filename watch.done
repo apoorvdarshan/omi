@@ -10,3 +10,8 @@
 2026-10-19T07:43:19Z #22443 w7-web-memories-error fix/web-memories-stale-error 60245f194f green cleaned
 2026-10-19T15:38:08Z #22303 - fix/cli-search-screen-hybrid-results 9cd465c894 pr-MERGED no-worktree
 2026-10-19T19:07:36Z #22439 - fix/people-create-race 93bf2be7dd green no-worktree
+2026-10-20T06:00:43Z #22771 - fix/go-sdk-whisper-stop b1d55d1a2e green no-worktree
+2026-10-20T06:04:45Z #22771 - fix/go-sdk-whisper-stop b1d55d1a2e green no-worktree
+2026-10-20T06:16:53Z #22773 w6-apps-0 fix/apps-catalog-sort-by-installs f6554c63a6 green cleaned
+2026-10-20T06:20:58Z #22775 w7-people-stats-dream fix/people-stats-field-paths 2cc0f84a73 green cleaned
+2026-10-20T06:20:59Z #22777 w6-goals-0 fix/workstream-detail-recent-events 3f3f28cc79 green cleaned
