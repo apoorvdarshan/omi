@@ -28,3 +28,5 @@
 2026-10-20T07:40:13Z #22800 w9-web-tasks-select-all fix/web-tasks-select-all-visible 7e0aa84b8f green cleaned
 2026-10-20T08:08:19Z #22804 w9-web-bulk-delete fix/web-bulk-delete-partial-failure 1bfd34eaab green cleaned
 2026-10-20T08:32:29Z #22807 w10-mcp-transcript-budget fix/mcp-transcript-original-text-budget c09877388a green cleaned
+2026-10-20T12:04:53Z #22844 w11-mcp-task-vector-saved-desc fix/mcp-task-create-vector-saved-description fd3f584ff9 green cleaned
+2026-10-20T12:08:57Z #22850 w11-cli-screen-search-empty fix/cli-screen-search-empty-messages c7dac848a9 green cleaned

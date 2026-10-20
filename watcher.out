@@ -7,3 +7,5 @@ GREEN #22800 (w9-web-tasks-select-all) cleaned/recorded
 GREEN #22804 (w9-web-bulk-delete) cleaned/recorded
 GREEN #22807 (w10-mcp-transcript-budget) cleaned/recorded
 watcher: time box reached; 0 PR(s) still watched
+GREEN #22844 (w11-mcp-task-vector-saved-desc) cleaned/recorded
+GREEN #22850 (w11-cli-screen-search-empty) cleaned/recorded
