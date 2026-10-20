@@ -1,6 +1,6 @@
 ## What changed and why
 
-Fixes #ISSUE_NUM.
+Fixes #22780.
 
 In macOS Settings, the Daily Summary, Store Recordings and Private Cloud Sync switches change on screen as soon as they are flipped, then send that value to the account. When the request failed (offline, a server error, an expired session), the `catch` only logged it. The pane kept a setting the account never stored. The next Settings load showed the account's value again and the change was gone, with no message.
 

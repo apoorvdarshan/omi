@@ -1,1 +1,3 @@
-22779 w6-goals-1 fix/user-goals-focus-and-limit-order
+22781 w7-mac-settings-toggles fix/macos-settings-toggle-rollback
+22784 w7-win-recap-memories fix/windows-recap-memories-window
+22786 w7-sdcard-timeout-timer fix/sdcard-timeout-timer-cancel
