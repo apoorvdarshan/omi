@@ -87,3 +87,10 @@ Not started (no PRs, per user): wave-7 leads (mac settings toggles, mac GET-afte
 filter persistence, sdcard timeout timer, relist start time, people-stats dream, Windows recap memories) and wave-6
 candidates whose verifiers died (offline-sync created webhook regression, Tasks Select All hidden rows, etc.).
 Open PRs awaiting maintainers: #22439 #22423 #22395 #22347 #22340 #22317 #22257 #21706 #21619.
+
+## Wave 10 (2026-10-20, OpenCode continuation)
+- #22800 OPEN (fixes #22799) fix(web): make Tasks Select All use the rows the view shows
+- #22804 OPEN (fixes #22803) fix(web): keep the tasks a failed bulk delete did not remove
+- #22807 OPEN (fixes #22806) fix(mcp): charge the transcript budget for original_text
+- Not opened: RN/Swift Parakeet stream-closed-before-ready parity gap; neither SDK has a CI workflow,
+  so the regression test could not run in Omi CI. See the cursor checkpoint notes.
