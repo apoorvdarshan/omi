@@ -31,3 +31,5 @@
 2026-10-20T12:04:53Z #22844 w11-mcp-task-vector-saved-desc fix/mcp-task-create-vector-saved-description fd3f584ff9 green cleaned
 2026-10-20T12:08:57Z #22850 w11-cli-screen-search-empty fix/cli-screen-search-empty-messages c7dac848a9 green cleaned
 2026-10-20T12:13:02Z #22848 w11-shared-task-complete-notify fix/shared-task-repeat-completion-notification ab117a4e1c green cleaned
+2026-10-20T18:54:21Z #22915 w12-web-conversations-uncached-filter fix/web-conversations-clear-uncached-filter f77316c730 green cleaned
+2026-10-20T18:58:23Z #22917 w12-web-conversation-tile-star-sync fix/web-conversation-tile-star-prop-sync 2cbb41fead green cleaned

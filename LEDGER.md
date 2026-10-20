@@ -99,3 +99,16 @@ Open PRs awaiting maintainers: #22439 #22423 #22395 #22347 #22340 #22317 #22257 
 - #22844 OPEN (fixes #22843) fix(mcp): index the saved task description on idempotent create
 - #22848 OPEN (fixes #22847) fix(action-items): notify the sharer only when a task first completes
 - #22850 OPEN (fixes #22849) fix(cli): structure unindexed and stats-error empty screen searches
+
+## Wave 12 (2026-10-20 evening, OpenCode continuation — user asked to stop looping after this batch)
+- #22915 OPEN (fixes #22914) fix(web): clear the old conversations list when switching to an uncached filter — FC-fetch-error-outlives-cached-view-switch; GREEN
+- #22917 OPEN (fixes #22916) fix(web): sync a conversation tile's star when the list updates — FC-control-shows-unconfirmed-write; GREEN
+- #22919 OPEN (fixes #22918) fix(web): keep the detail pane closed when entering selection mode — new FC-default-selection-effect-overrides-explicit-clear
+
+Wave 12 verification note: web PRs do run their tests — `web-app-checks` (`web/app/test.sh`,
+typecheck + vitest) is selected by the check manifest inside the `Hygiene` job's PR preflight.
+#22915 passed it (154 files) and #22917 passed. #22919 first failed it: the new selection-mode test
+clicks Select, the toolbar's TextSwap then reads `prefers-reduced-motion`, and jsdom has no
+`window.matchMedia`, which took the suite down. Fixed with a `matchMedia` stub in
+`ConversationSplitView.test.tsx` (commit eed8ffb6e1). An earlier note here wrongly claimed these
+tests never ran on PRs; the body edits that followed from it were reverted.
