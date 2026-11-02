@@ -80,8 +80,8 @@ void main() {
     mockedChannels.clear();
   });
 
-  Future<void> pumpPage(WidgetTester tester) async {
-    final provider = DeviceProvider();
+  Future<void> pumpPage(WidgetTester tester, {DeviceProvider? deviceProvider}) async {
+    final provider = deviceProvider ?? DeviceProvider();
     addTearDown(provider.dispose);
     await tester.pumpWidget(
       ChangeNotifierProvider.value(
@@ -114,6 +114,31 @@ void main() {
   }
 
   Color? textColor(WidgetTester tester, String text) => tester.widget<Text>(find.text(text)).style?.color;
+
+  testWidgets('Right Now shows no battery reading while the pendant is disconnected', (tester) async {
+    mockBleHostApi('getDeviceDiagnostics', diagnostics(const [], connectedAt: 0));
+    mockBleHostApi('getExtendedDeviceDiagnostics', '{}');
+    // The last level seen before the link dropped; the provider keeps it after disconnecting.
+    final provider = DeviceProvider()..batteryLevel = 73;
+    expect(provider.isConnected, isFalse);
+
+    await pumpPage(tester, deviceProvider: provider);
+
+    expect(find.text('Right Now'), findsOneWidget);
+    expect(find.text('73%'), findsNothing);
+  });
+
+  testWidgets('Right Now shows the battery while the pendant is connected', (tester) async {
+    mockBleHostApi('getDeviceDiagnostics', diagnostics(const []));
+    mockBleHostApi('getExtendedDeviceDiagnostics', '{}');
+    final provider = DeviceProvider()
+      ..batteryLevel = 73
+      ..isConnected = true;
+
+    await pumpPage(tester, deviceProvider: provider);
+
+    expect(find.text('73%'), findsOneWidget);
+  });
 
   testWidgets('Last 7 Days leads with the window counts and keeps lifetime in the footnote', (tester) async {
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -151,6 +176,39 @@ void main() {
     expect(find.text('10048'), findsNothing);
     expect(find.text('12'), findsNothing);
   });
+
+  for (final hasRecentEvents in [false, true]) {
+    testWidgets('seven-day cards expire retained events without another native write ($hasRecentEvents)', (
+      tester,
+    ) async {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      const dayMs = 24 * 3600 * 1000;
+      mockBleHostApi(
+        'getDeviceDiagnostics',
+        BleDeviceDiagnostics(
+          disconnectHistory: [
+            _event(now - 8 * dayMs, timeToReconnectMs: 5000),
+            _event(now - 8 * dayMs, eventType: 'fail_to_connect'),
+            if (hasRecentEvents) _event(now - dayMs, timeToReconnectMs: 6000),
+            if (hasRecentEvents) _event(now - dayMs, eventType: 'fail_to_connect'),
+          ],
+          reconnectionCount: 10048,
+          connectedAt: 0,
+          failToConnectCount: 12,
+          nativeBackgroundBytesConsumed: 0,
+          nativeBackgroundPacketsConsumed: 0,
+        ),
+      );
+      mockBleHostApi('getExtendedDeviceDiagnostics', jsonEncode({'counters_since': now - 14 * dayMs}));
+
+      await pumpPage(tester);
+
+      expect(find.text('Drops'), findsOneWidget);
+      expect(find.text('Failed connections'), findsOneWidget);
+      expect(find.text(hasRecentEvents ? '1' : '0'), findsNWidgets(2));
+      expect(find.text('Since pairing: 10048 drops, 12 failed connections.'), findsOneWidget);
+    });
+  }
 
   testWidgets('missing window anchor falls back to lifetime counts, labelled since pairing', (tester) async {
     mockBleHostApi('getDeviceDiagnostics', diagnostics(const [], connectedAt: 0));

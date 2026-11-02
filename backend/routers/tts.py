@@ -10,6 +10,8 @@ Rate limits per user (Redis-backed sliding-window + daily counter):
   - 5,000 characters per single request (hard cap, 400)
 """
 
+from utils.generated_compute import require_generated_compute, generated_compute_configured
+
 import asyncio
 import logging
 import os
@@ -105,6 +107,8 @@ async def tts_synthesize(
     ),
 ):
     """Synthesize MP3 speech through Gemini, with a legacy rollback path."""
+    if generated_compute_configured():
+        await run_blocking(db_executor, require_generated_compute, uid, 'desktop_tts', allow_byok=False)
     if 'voice_id' in req.model_fields_set:
         voice_id = req.voice_id
     else:
@@ -125,7 +129,7 @@ async def tts_synthesize(
 
     status, retry_after = await run_blocking(
         critical_executor,
-        redis_db.check_tts_rate_limit,
+        redis_db.check_tts_rate_limit_for_user,
         uid,
         char_count=char_count,
         burst_limit=_TTS_BURST_PER_MINUTE,
@@ -143,7 +147,7 @@ async def tts_synthesize(
         logger.warning(f"tts_synthesize: daily character limit exceeded uid={uid}")
         raise HTTPException(
             status_code=429,
-            detail="Daily TTS character limit exceeded. Resets at midnight UTC.",
+            detail="Daily TTS character limit exceeded. Resets at midnight in your time zone.",
             headers={"Retry-After": str(retry_after or 3600)},
         )
     # status == -1 (Redis error): fail-open intentionally — TTS is best-effort.

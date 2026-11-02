@@ -3,10 +3,16 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/pages/episodes/episode_moments_section.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets.dart';
+import 'package:omi/pages/on_device/on_device_provenance_section.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -21,19 +27,26 @@ import 'package:uuid/uuid.dart';
 import 'conversation_screenshots_section.dart';
 import 'feedback_prompt_policy.dart';
 import 'feedback_sheet.dart';
+import 'summary_task_recovery.dart';
 
 class SummaryTab extends StatefulWidget {
   final bool reviewEnabled;
+  final ValueChanged<String>? onOpenSource;
   final String searchQuery;
   final int currentResultIndex;
   final VoidCallback? onTapWhenSearchEmpty;
 
+  /// Switches the page to the Transcript tab.
+  final VoidCallback? onOpenTranscript;
+
   const SummaryTab(
       {super.key,
       this.reviewEnabled = false,
+      this.onOpenSource,
       this.searchQuery = '',
       this.currentResultIndex = -1,
-      this.onTapWhenSearchEmpty});
+      this.onTapWhenSearchEmpty,
+      this.onOpenTranscript});
 
   @override
   State<SummaryTab> createState() => _SummaryTabState();
@@ -44,9 +57,27 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
   @override
   bool get wantKeepAlive => true;
 
+  /// A moment recorded in another conversation of the same episode opens that conversation.
+  Future<void> _openConversation(BuildContext context, String id) async {
+    final known = context.read<ConversationProvider?>()?.conversations.where((c) => c.id == id).firstOrNull;
+    final conversation = known ?? await getConversationById(id);
+    if (conversation == null || !context.mounted) return;
+    routeToPage(context, ConversationDetailPage(conversation: conversation));
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final transcriptionProvider = context.watch<ConversationDetailProvider>();
+    final conversationId = transcriptionProvider.conversationOrNull?.id;
+    if (transcriptionProvider.loadingReprocessTranscription &&
+        conversationId != null &&
+        transcriptionProvider.reprocessConversationId == conversationId) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 18.0),
+        child: OmiLoadingState(label: context.l10n.retranscribingConversation),
+      );
+    }
     return GestureDetector(
       excludeFromSemantics: true,
       behavior: HitTestBehavior.translucent,
@@ -61,7 +92,9 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
         builder: (context, provider, child) {
           final conversation = provider.conversationOrNull;
           final discarded = conversation?.discarded ?? true;
-          final summarySelection = provider.getSummarySelection();
+          // Base the surrounding tab state on the summary the user is actually looking at
+          // (the displayed source chip), not the canonical server selection.
+          final summarySelection = provider.getDisplayedSummarySelection();
           // Room under the tab row (Omi v8 `.sum`). A leading section heading brings its own.
           final leadsWithHeading = summarySelection.content.trimLeft().startsWith('#');
           // App-result summaries require result coordinates for trustworthy
@@ -87,9 +120,10 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                 !_isEditing &&
                 !provider.isLoading &&
                 !provider.loadingReprocessConversation &&
+                !provider.loadingReprocessTranscription &&
                 conversation?.status == ConversationStatus.completed &&
                 !discarded &&
-                provider.getSummarySelection().content.trim().isNotEmpty,
+                summarySelection.content.trim().isNotEmpty,
             child: Stack(
               children: [
                 CustomScrollView(
@@ -102,11 +136,17 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                       sliver: SliverMainAxisGroup(slivers: [
                         // Title and facts live in the page header, shared by every tab.
                         SliverToBoxAdapter(child: SizedBox(height: leadsWithHeading ? 0 : 18)),
+                        // Where the transcript and summary were made, when the phone made them.
+                        // Redo with Omi Cloud waits on a re-transcription endpoint.
+                        if (conversation != null && !discarded)
+                          SliverToBoxAdapter(child: OnDeviceProvenanceSection(conversationId: conversation.id)),
                         discarded
                             ? const SliverToBoxAdapter(child: ReprocessDiscardedWidget())
                             : GetAppsWidgets(
+                                onOpenSource: widget.onOpenSource,
                                 searchQuery: widget.searchQuery,
                                 currentResultIndex: widget.currentResultIndex,
+                                onOpenTranscript: widget.onOpenTranscript,
                                 canStartEditing: () {
                                   final connectivityProvider =
                                       Provider.of<ConnectivityProvider>(context, listen: false);
@@ -132,6 +172,12 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                                       );
                                 },
                               ),
+                        if (conversation != null &&
+                            !_isEditing &&
+                            !summarySelection.isApp &&
+                            !provider.isLoading &&
+                            !provider.loadingReprocessConversation)
+                          SliverToBoxAdapter(child: SummaryTaskRecovery(conversation: conversation)),
                       ]),
                     ),
                     // Where the Mac puts its strip: after the note's own sections. Only a completed
@@ -144,6 +190,15 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                     SliverPadding(
                       padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
                       sliver: SliverMainAxisGroup(slivers: [
+                        // The episode this conversation belonged to, when it had several moments.
+                        if (!discarded && conversation != null && conversation.status == ConversationStatus.completed)
+                          SliverToBoxAdapter(
+                            child: EpisodeMomentsSection(
+                              key: ValueKey('episode-moments-${conversation.id}'),
+                              conversationId: conversation.id,
+                              onOpenConversation: (id) => _openConversation(context, id),
+                            ),
+                          ),
                         if (feedbackKind == FeedbackPromptKind.summary)
                           SummaryFeedbackPrompt(
                             key: ValueKey('summary-feedback-${conversation?.id ?? ''}'),

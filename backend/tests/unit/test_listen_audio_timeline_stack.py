@@ -333,6 +333,8 @@ def gcs(monkeypatch):
 
 @pytest.fixture
 def pusher_env(monkeypatch):
+    # Shared by the historical mixed-version/reconnect probes as well.
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
     audio_files_by_conversation = {}
 
     monkeypatch.setattr(pusher, 'get_audio_bytes_webhook_seconds', lambda uid: None)
@@ -341,12 +343,11 @@ def pusher_env(monkeypatch):
     monkeypatch.setattr(pusher.users_db, 'get_data_protection_level', lambda uid: 'standard')
     monkeypatch.setattr(pusher, 'PUSHER_ACTIVE_WS_CONNECTIONS', MagicMock())
     monkeypatch.setattr(pusher, 'PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS', MagicMock())
-    monkeypatch.setattr(pusher, 'is_audio_merge_dispatch_enabled', lambda: False)
     monkeypatch.setattr(pusher.ReadinessGate, 'is_serving', lambda: True)
     monkeypatch.setattr(pusher, 'schedule_person_voice_learning_retry', lambda *args, **kwargs: None)
     monkeypatch.setattr(pusher, 'run_authorized_person_learning', _async_noop)
 
-    def update_conversation(uid, conversation_id, data):
+    def update_conversation(uid, conversation_id, data, *, record_owner_out=None):
         row = audio_files_by_conversation.setdefault(conversation_id, {'audio_files': []})
         if 'audio_files' in data:
             row['audio_files'] = data['audio_files']
@@ -360,11 +361,16 @@ class _Stack:
     """One hermetic listen session wired to real pusher server tasks."""
 
     def __init__(self, monkeypatch, *, v2: bool, conversation_id: str, spans: bool = False):
+        # Historical-clock transport replay exercises the live persistence rollback.
+        monkeypatch.setenv('LATE_AUDIO_SYNC_INTAKE_ENABLED', 'false')
+        # This fixture models the historical timeline algorithm. Custody's
+        # default-on fault matrix and real ASGI stack are separate gates.
+        monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
         self.clock = {'wall': T0, 'mono': 0.0}
         self.v2 = v2
         self.spans = spans
         monkeypatch.setenv('AUDIO_TIMELINE_V2', 'true' if v2 else 'false')
-        monkeypatch.setenv('AUDIO_TIMELINE_SPANS', 'true' if spans else 'false')
+
         # Control the receiver's arrival observations (module-scoped shim).
         self._real_time_module = receiver_module.time
         receiver_module.time = SimpleNamespace(time=lambda: self.clock['wall'], monotonic=lambda: self.clock['mono'])
@@ -451,7 +457,7 @@ class _Stack:
             return False
 
     def start_pusher_server(self, peer=None):
-        self.server_ws = FakeServerWebSocket()
+        self.server_ws = HeldServerWebSocket()
         self.server_task = asyncio.create_task(
             (peer or pusher)._websocket_util_trigger(
                 self.server_ws, UID, RATE, 'test', 2 if (self.v2 or self.spans) else None
@@ -459,8 +465,10 @@ class _Stack:
         )
 
     async def stop_pusher_server(self):
-        # Exhausting the server's frames ends receive_tasks; the drain flushes
-        # every queued/batched chunk before the task completes.
+        # End input explicitly after the listen flush; idle time under CPU
+        # contention must not disconnect before accepted audio is delivered.
+        self.server_ws.released.set()
+        # The server drains every queued/batched chunk before completing.
         deadline = time.monotonic() + 30
         while not self.server_task.done() and time.monotonic() < deadline:
             await asyncio.sleep(0.05)
@@ -1284,6 +1292,11 @@ def _round3_module(name, relpath):
         capture_output=True,
         text=True,
     ).stdout
+    # Historical red comparisons still exercise the graduated consumer path.
+    source = source.replace(
+        'from config.audio_timeline import live_speaker_span_resolution_enabled',
+        'def live_speaker_span_resolution_enabled(): return True',
+    )
     module = types.ModuleType(name)
     exec(compile(source, relpath, 'exec'), module.__dict__)
     return module
@@ -1452,7 +1465,7 @@ async def test_overlapping_spans_from_two_sockets_refuse_ambiguous_windows(monke
     _patch_stage_io(monkeypatch, stage_module, store, diarizer, uploads)
     if old_stage is not None:
         _patch_stage_io(monkeypatch, old_stage, store, diarizer, uploads)
-    monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'true')
+
     monkeypatch.setenv('AUDIO_TIMELINE_V2', 'false')
 
     epoch = datetime.fromtimestamp(0.0, tz=timezone.utc)

@@ -7,11 +7,13 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
 
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/http/api_edge_throttle_telemetry.dart';
 import 'package:omi/backend/http/clock_skew_detector.dart';
 import 'package:omi/backend/http/http_pool_manager.dart';
 import 'package:omi/backend/http/streaming_error.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/utils/app_channel.dart';
 import 'package:omi/utils/jwt_expiry.dart';
 import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
@@ -40,15 +42,38 @@ class AuthTokenUnavailableException implements Exception {
   String toString() => 'AuthTokenUnavailableException(${result.runtimeType})';
 }
 
+// A connection that dies mid-request reaches callers as a bare
+// http.ClientException: dart:io rewraps the socket error as
+// HttpException(<OS error text>), so the SocketException type and errno are
+// gone. iOS reports a network switch under an open upload as EADDRNOTAVAIL
+// ("Can't assign requested address", errno 49): the socket's local address
+// left with the old network.
+const _droppedConnectionMessages = [
+  "can't assign requested address", // EADDRNOTAVAIL (iOS)
+  'cannot assign requested address', // EADDRNOTAVAIL (Android)
+  'operation timed out', // ETIMEDOUT (iOS)
+  'connection timed out', // ETIMEDOUT (Android)
+  'no route to host', // EHOSTUNREACH
+  'broken pipe', // EPIPE
+  'read failed', // dart:io socket read error
+  'write failed', // dart:io socket write error
+  'bad_record_mac', // TLS record damaged in transit
+];
+
 // Normal-mode connectivity failures on mobile (no network, DNS failure,
 // connection reset, TLS handshake during reconnect, request timeout, OS abort
-// when the app backgrounds mid-upload). Reporting these to Crashlytics drowns
-// out real signal — caller logs them locally and either returns null or
-// rethrows for the upstream sync state machine.
+// when the app backgrounds mid-upload, a network switch under an open
+// connection). Reporting these to Crashlytics drowns out real signal — caller
+// logs them locally and either returns null or rethrows for the upstream sync
+// state machine.
 bool isTransientNetworkError(Object e) {
   if (e is SocketException) return true;
   if (e is HandshakeException) return true;
   if (e is TimeoutException) return true;
+  if (e is http.ClientException) {
+    final message = e.message.toLowerCase();
+    if (_droppedConnectionMessages.any(message.contains)) return true;
+  }
   final text = e is http.ClientException ? e.message : e.toString();
   final lower = text.toLowerCase();
   return text.contains('SocketException') ||
@@ -176,19 +201,35 @@ Future<Map<String, String>> buildHeaders({
   AuthSessionSnapshot? sessionSnapshot,
   AuthService? authService,
 }) async {
+  final effectiveAuthCheck = shouldHonorRequestedOmiAuth(
+    requested: requireAuthCheck,
+    customBackendActive: Env.hasApiBaseUrlOverride,
+    url: url,
+  );
   final headers = <String, String>{
     'X-Request-Start-Time': (DateTime.now().millisecondsSinceEpoch / 1000).toString(),
     'X-App-Platform': PlatformManager.instance.platform,
     'X-Device-Id-Hash': PlatformManager.instance.deviceIdHash,
     'X-App-Version': PlatformManager.instance.appVersion,
+    'X-Omi-Plan-Identity': '1',
     'X-App-Build': PlatformManager.instance.appBuild,
+    appChannelHeader: currentAppChannel().wire,
     ...fromHeaders,
   };
+
+  // `fromHeaders` is used by older callers and may itself contain credentials.
+  // Treat the override as a hard boundary for every header source, including
+  // multipart/custom callers. Official Omi destinations remain explicitly
+  // trusted while an override is active.
+  if (Env.hasApiBaseUrlOverride && (url == null || !shouldAttachOmiCredentials(url))) {
+    headers.removeWhere(
+        (name, _) => name.toLowerCase() == 'authorization' || name.toLowerCase() == 'x-account-generation');
+  }
 
   if (shouldAttachAccountGenerationHeader(
     url: url,
     method: method,
-    requireAuthCheck: requireAuthCheck,
+    requireAuthCheck: effectiveAuthCheck,
     forWebSocket: forWebSocket,
   )) {
     final accountGeneration = AccountCutoverRuntime.instance.control.accountGeneration;
@@ -199,7 +240,7 @@ Future<Map<String, String>> buildHeaders({
     }
   }
 
-  if (requireAuthCheck) {
+  if (effectiveAuthCheck) {
     // Authenticated requests must never degrade into anonymous traffic. A
     // typed exception stops the request before it reaches the network.
     headers['Authorization'] = await getAuthHeader(
@@ -224,8 +265,11 @@ String normalizeOmiApiUrlForHostMatch(String url) {
 }
 
 bool _isRequiredAuthCheck(String url) {
-  // Agent VM endpoints always hit prod even when app uses dev
-  if (url.contains('api.omi.me')) return true;
+  if (shouldAttachOmiCredentials(url)) return true;
+  // A runtime override is a separate trust boundary. Never send the user's
+  // Omi credential to it, even when it happens to share a path with the
+  // configured API base URL.
+  if (Env.hasApiBaseUrlOverride) return false;
   final base = Env.apiBaseUrl;
   if (base != null && base.isNotEmpty) {
     final normalizedUrl = normalizeOmiApiUrlForHostMatch(url);
@@ -235,6 +279,29 @@ bool _isRequiredAuthCheck(String url) {
     }
   }
   return false;
+}
+
+/// Omi credentials are scoped to Omi-owned product API authorities. Hostname
+/// parsing avoids substring matches such as `api.omi.me.attacker.example`.
+/// A debug hermetic journey may additionally trust its registered loopback
+/// fixture; that registry stays empty for user-configured overrides.
+@visibleForTesting
+bool shouldAttachOmiCredentials(String url) {
+  final uri = Uri.tryParse(url);
+  if (uri == null || uri.host.isEmpty) return false;
+  if (Env.debugTrustedFixtureAuthority(uri)) return true;
+  if (!{'https', 'wss'}.contains(uri.scheme.toLowerCase())) return false;
+  return {'api.omi.me', 'api.omiapi.com'}.contains(uri.host.toLowerCase());
+}
+
+/// Central guard for callers that historically requested auth unconditionally.
+/// A custom backend remains credential-free, while explicit calls to an
+/// official Omi authority (such as the agent VM) retain authentication.
+@visibleForTesting
+bool shouldHonorRequestedOmiAuth({required bool requested, required bool customBackendActive, String? url}) {
+  if (!requested) return false;
+  if (!customBackendActive) return true;
+  return url != null && shouldAttachOmiCredentials(url);
 }
 
 const _mutatingHttpMethods = {'POST', 'PUT', 'PATCH', 'DELETE'};
@@ -318,6 +385,20 @@ Future<http.StreamedResponse> makeRawApiCall({
       );
       if (response.statusCode == 401) return _authUnavailableStreamedResponse();
     }
+    if (requireAuthCheck && response.statusCode == HttpStatus.forbidden) {
+      // The fence is in the body; read it once and hand the caller an
+      // equivalent response.
+      final materialized = await _materializeErrorResponse(response);
+      await _expireSessionIfAccountDeleted(materialized.statusCode, materialized.body, authService: service);
+      return http.StreamedResponse(
+        Stream<List<int>>.value(materialized.bodyBytes),
+        materialized.statusCode,
+        contentLength: materialized.bodyBytes.length,
+        request: response.request,
+        headers: materialized.headers,
+        reasonPhrase: materialized.reasonPhrase,
+      );
+    }
     return response;
   } on AuthTokenUnavailableException catch (e) {
     await _handleAuthUnavailable(e, expireTerminalSession: signOutOn401);
@@ -369,6 +450,43 @@ Future<http.Response> _materializeErrorResponse(http.StreamedResponse response) 
     Logger.debug('Failed to materialize streaming error response: ${e.runtimeType}');
     return http.Response('{}', response.statusCode, reasonPhrase: response.reasonPhrase, headers: response.headers);
   }
+}
+
+/// The backend's deleted-account fence (`enforce_account_deletion_http_access`):
+/// every request of an account whose deletion wipe is pending or failed is
+/// answered 403 with this `detail.code`; WebSockets close with
+/// [accountDeletionWebSocketCloseCode]. Nothing the app can do with that
+/// account succeeds, so the session is terminal and the user goes back to
+/// sign-in instead of being walked into dead-end prompts (the forced
+/// language sheet whose save then fails).
+const String accountDeletionInProgressCode = 'account_deletion_in_progress';
+const int accountDeletionWebSocketCloseCode = 4005;
+
+/// The wipe status carried by a deleted-account 403 body, or null when
+/// [body] is any other response.
+String? accountDeletionStatusOf(String body) {
+  if (body.isEmpty) return null;
+  try {
+    final decoded = jsonDecode(body);
+    if (decoded is! Map) return null;
+    final detail = decoded['detail'];
+    if (detail is! Map || detail['code'] != accountDeletionInProgressCode) return null;
+    return detail['status']?.toString() ?? '';
+  } on FormatException {
+    return null;
+  }
+}
+
+/// Expires the session (once; [AuthService.expireSession] is idempotent) when
+/// a 403 is the deleted-account fence. Any other 403 is left to the caller.
+Future<void> _expireSessionIfAccountDeleted(int statusCode, String body, {AuthService? authService}) async {
+  if (statusCode != HttpStatus.forbidden) return;
+  final status = accountDeletionStatusOf(body);
+  if (status == null) return;
+  Logger.debug('Account deletion in progress (wipe status: $status): expiring the session');
+  await (authService ?? AuthService.instance).expireSession(
+    AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.accountDeleted, code: status),
+  );
 }
 
 Future<void> _handleAuthUnavailable(
@@ -507,6 +625,7 @@ Future<http.Response> sendUncaughtApiCall({
         },
       );
     }
+    await _expireSessionIfAccountDeleted(response.statusCode, response.body, authService: execution.auth);
     return response;
   }
 
@@ -556,6 +675,7 @@ Future<http.Response> sendUncaughtApiCall({
       },
     );
   }
+  if (requireAuthCheck) await _expireSessionIfAccountDeleted(response.statusCode, response.body);
 
   _checkClockSkewResponse(response);
   return response;
@@ -569,6 +689,7 @@ Future<http.Response?> makeApiCall({
   Duration? timeout,
   int? retries,
   bool signOutOn401 = true,
+  bool Function()? canSend,
 }) async {
   try {
     return await sendUncaughtApiCall(
@@ -579,6 +700,7 @@ Future<http.Response?> makeApiCall({
       timeout: timeout,
       retries: retries,
       signOutOn401: signOutOn401,
+      canSend: canSend,
     );
   } on AuthTokenUnavailableException catch (e) {
     await _handleAuthUnavailable(e, expireTerminalSession: signOutOn401);
@@ -673,6 +795,7 @@ Future<http.MultipartRequest> _buildMultipartRequest({
   required String fileFieldName,
   required String method,
   Future<void>? abortTrigger,
+  Map<String, File> namedFiles = const {},
 }) async {
   // Abortable when a trigger is supplied: an abandoned POST (setup deadline
   // expired) must not keep running server-side, or a user retry submits the
@@ -689,11 +812,24 @@ Future<http.MultipartRequest> _buildMultipartRequest({
     var multipartFile = http.MultipartFile(fileFieldName, stream, length, filename: basename(file.path));
     request.files.add(multipartFile);
   }
+  for (var entry in namedFiles.entries) {
+    var length = await entry.value.length();
+    var stream = http.ByteStream(entry.value.openRead());
+    request.files.add(http.MultipartFile(entry.key, stream, length, filename: basename(entry.value.path)));
+  }
 
   return request;
 }
 
 typedef UploadProgressCallback = void Function(int bytesSent, int totalBytes, double speedKBps);
+
+/// The upload send has a header timeout, but the body read had none: a socket
+/// that dies after the headers would hold the upload lane (and its transfer
+/// pass) forever. Bodies here are small JSON acknowledgements.
+const multipartBodyReadTimeout = Duration(minutes: 2);
+
+Future<http.Response> _readMultipartBody(http.StreamedResponse response) =>
+    http.Response.fromStream(response).timeout(multipartBodyReadTimeout);
 
 Future<http.Response> makeMultipartApiCall({
   required String url,
@@ -703,6 +839,7 @@ Future<http.Response> makeMultipartApiCall({
   String fileFieldName = 'files',
   String method = 'POST',
   UploadProgressCallback? onUploadProgress,
+  Map<String, File> namedFiles = const {},
 }) async {
   try {
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
@@ -720,10 +857,11 @@ Future<http.Response> makeMultipartApiCall({
       fields: fields,
       fileFieldName: fileFieldName,
       method: method,
+      namedFiles: namedFiles,
     );
 
     var streamedResponse = await _sendMultipartWithProgress(request, onUploadProgress);
-    var response = await http.Response.fromStream(streamedResponse);
+    var response = await _readMultipartBody(streamedResponse);
 
     if (requireAuthCheck && response.statusCode == 401) {
       response = await refreshAndReplayAfter401(
@@ -739,12 +877,14 @@ Future<http.Response> makeMultipartApiCall({
             fields: fields,
             fileFieldName: fileFieldName,
             method: method,
+            namedFiles: namedFiles,
           );
           streamedResponse = await _sendMultipartWithProgress(request, onUploadProgress);
-          return http.Response.fromStream(streamedResponse);
+          return _readMultipartBody(streamedResponse);
         },
       );
     }
+    if (requireAuthCheck) await _expireSessionIfAccountDeleted(response.statusCode, response.body);
 
     _checkClockSkewResponse(response);
     return response;
@@ -793,7 +933,8 @@ Future<http.Response> makeMultipartApiCallUnpooled({
     HttpPoolManager.stampRequestTime(request);
 
     var streamedResponse = await client.send(request).timeout(const Duration(minutes: 10));
-    var response = await http.Response.fromStream(streamedResponse);
+    ApiEdgeThrottleTelemetry.instance.observe(request, streamedResponse);
+    var response = await _readMultipartBody(streamedResponse);
 
     if (requireAuthCheck && response.statusCode == 401) {
       response = await refreshAndReplayAfter401(
@@ -812,10 +953,12 @@ Future<http.Response> makeMultipartApiCallUnpooled({
           );
           HttpPoolManager.stampRequestTime(request);
           streamedResponse = await client.send(request).timeout(const Duration(minutes: 10));
-          return http.Response.fromStream(streamedResponse);
+          ApiEdgeThrottleTelemetry.instance.observe(request, streamedResponse);
+          return _readMultipartBody(streamedResponse);
         },
       );
     }
+    if (requireAuthCheck) await _expireSessionIfAccountDeleted(response.statusCode, response.body);
 
     _checkClockSkewResponse(response);
     return response;
@@ -925,12 +1068,18 @@ Stream<String> makeStreamingApiCall({
   String body = '',
   String method = 'POST',
   ApiStreamingSeams? seams,
+  Future<void>? cancelSignal,
 }) async* {
   // Setup-deadline abort (same rationale as the multipart variant): the POST
   // must die with the wait, or a retry can submit the chat turn twice. Armed
   // before the try so the error handlers can cancel it.
   final setupAbort = Completer<void>();
   final setupAbortTimer = Timer(ApiClient.streamSetupTimeout, () {
+    if (!setupAbort.isCompleted) setupAbort.complete();
+  });
+  // The caller's stop aborts the request at any point, including mid-body, so
+  // the server sees the disconnect and stops generating.
+  cancelSignal?.then((_) {
     if (!setupAbort.isCompleted) setupAbort.complete();
   });
   try {
@@ -1017,6 +1166,7 @@ Stream<String> makeMultipartStreamingApiCall({
   Map<String, String> fields = const {},
   String fileFieldName = 'files',
   ApiStreamingSeams? seams,
+  Future<void>? abort,
 }) async* {
   // Setup-deadline abort: without this, the timeout below abandons the wait
   // but the POST keeps running and can still reach the server — a retry then
@@ -1051,7 +1201,9 @@ Stream<String> makeMultipartStreamingApiCall({
           fields: fields,
           fileFieldName: fileFieldName,
           method: 'POST',
-          abortTrigger: setupAbort.future,
+          // A caller's abort (for example a total response deadline) also ends the
+          // request mid-body, so a stalled stream cannot keep the turn running.
+          abortTrigger: abort == null ? setupAbort.future : Future.any([setupAbort.future, abort]),
         );
 
     var response = await send(await buildRequest()).timeout(ApiClient.streamSetupTimeout);
@@ -1126,14 +1278,15 @@ dynamic extractContentFromResponse(
     }
     return data['choices'][0]['message']['content'];
   } else {
-    Logger.debug('Error fetching data: ${response?.statusCode}');
-    // TODO: handle error, better specially for script migration
+    var errorBody = response?.body;
+    Logger.debug('Error fetching data: ${response?.statusCode} Body: $errorBody');
     PlatformManager.instance.crashReporter.reportCrash(
       Exception('Error fetching data: ${response?.statusCode}'),
       StackTrace.current,
       userAttributes: {
         'response_null': (response == null).toString(),
         'response_status_code': response?.statusCode.toString() ?? '',
+        'response_body': errorBody ?? '',
         'is_embedding': isEmbedding.toString(),
         'is_function_calling': isFunctionCalling.toString(),
       },

@@ -32,25 +32,24 @@ fails the sync job by itself.
 
 from __future__ import annotations
 
-import json
 import logging
 import math
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional, Sequence
 
-from config.capture_evidence import capture_evidence_dark_write_enabled
 from config.sync_lineage import (
     sync_lineage_resolve_enabled,
     sync_lineage_resolve_uid_allowed,
-    sync_lineage_s1_required,
 )
 from config.sync_live_dedupe import sync_live_dedupe_active_for, sync_live_dedupe_enabled
 from config.sync_telemetry import bounded_correlation_ref, bounded_exception_class
-from utils.capture_evidence import parse_sync_file_claims
+from utils.capture_evidence import parse_sync_file_claims, validate_sync_file_claims
 from utils.metrics import OMI_SYNC_LINEAGE_RESOLVE_TOTAL
 from utils.observability.fallback import record_fallback
 from utils.sync.lineage_diagnostics import classify_generation_row, probe_token
+from utils.sync.lineage_frame_evidence import unique_committed_canonical
 from utils.sync.lineage_intervals import pick_overlapping
 from utils.sync.recording_session_target import (
     START_SKEW_SECONDS,
@@ -87,7 +86,27 @@ OUTCOMES = (
     'lookup_failed',
     'disabled',
     'not_allowlisted',
+    's1_refused',
 )
+
+S1_REFUSAL_REASONS = ('no_claims', 'parse_failed', 'count_mismatch', 'filename_mismatch', 'not_admitted')
+S1_STAGES = ('http_boundary', 'intake', 'batch_projection', 'coordinator')
+
+
+def _s1_count_bucket(count: Optional[int]) -> str:
+    if type(count) is not int or count < 0:
+        return 'none'
+    if count == 0:
+        return '0'
+    if count == 1:
+        return '1'
+    if count <= 5:
+        return '2_5'
+    if count <= 10:
+        return '6_10'
+    if count <= 20:
+        return '11_20'
+    return 'gt_20'
 
 
 @dataclass(frozen=True)
@@ -97,6 +116,8 @@ class _Generation:
     end: float
     canonical: str
     deleted: bool
+    discarded: bool = False
+    evidence: Any = None
 
 
 @dataclass
@@ -116,8 +137,7 @@ class LineagePlan:
 def _s1_claims_complete(capture_evidence_claims: Optional[Mapping], filenames: Sequence[str]) -> bool:
     """Complete validated S1 metadata for the exact uploaded basename set."""
     if (
-        not capture_evidence_dark_write_enabled()
-        or not isinstance(capture_evidence_claims, Mapping)
+        not isinstance(capture_evidence_claims, Mapping)
         or not capture_evidence_claims
         or not filenames
         or len(capture_evidence_claims) > 20
@@ -125,13 +145,99 @@ def _s1_claims_complete(capture_evidence_claims: Optional[Mapping], filenames: S
     ):
         return False
     try:
-        payload = json.dumps(
-            {'version': 1, 'files': [dict(claim, name=name) for name, claim in capture_evidence_claims.items()]}
+        parsed = validate_sync_file_claims(
+            [dict(claim, name=name) for name, claim in capture_evidence_claims.items()], filenames
         )
-        parsed = parse_sync_file_claims(payload, filenames)
     except Exception:
         return False
     return len(parsed) == len(filenames) == len(capture_evidence_claims)
+
+
+def _s1_refusal_reason(capture_evidence_claims: object, filenames: Sequence[str]) -> str:
+    """Bounded reason for a false S1 gate; never raises and never leaks claim content.
+
+    Claims rejected at the upload HTTP boundary arrive here as ``{}`` — the
+    queued shape does not carry the earlier refusal, so those classify as
+    ``no_claims`` rather than the original parse failure.
+    """
+    try:
+        if capture_evidence_claims is None:
+            return 'no_claims'
+        if not isinstance(capture_evidence_claims, Mapping):
+            return 'parse_failed'
+        if not capture_evidence_claims:
+            return 'no_claims'
+        for claim in capture_evidence_claims.values():
+            if not isinstance(claim, Mapping):
+                return 'parse_failed'
+            try:
+                uuid.UUID(str(claim['capture_root']))
+                epoch, start, count, rate = (
+                    claim[key] for key in ('clock_epoch', 'source_frame_start', 'frame_count', 'rate_hz')
+                )
+                if (
+                    any(type(number) is not int or number < 0 for number in (epoch, start, count, rate))
+                    or count == 0
+                    or rate == 0
+                    or claim['codec'] not in {'pcm16', 'opus'}
+                    or claim.get('channel') != 'mono'
+                ):
+                    return 'parse_failed'
+            except Exception:
+                return 'parse_failed'
+        if not filenames or len(capture_evidence_claims) > 20 or len(filenames) > 20:
+            return 'count_mismatch'
+        if len(capture_evidence_claims) != len(filenames) or len(set(filenames)) != len(filenames):
+            return 'count_mismatch'
+        if set(capture_evidence_claims.keys()) != set(filenames):
+            return 'filename_mismatch'
+        return 'parse_failed'
+    except Exception:
+        return 'parse_failed'
+
+
+def emit_s1_refusal(
+    reason: str, *, stage: str = 'intake', claim_count: Optional[int] = None, file_count: Optional[int] = None
+) -> None:
+    """One bounded s1_refused outcome per refused validation check; no ids, names or claim content."""
+    safe_reason = reason if reason in S1_REFUSAL_REASONS else 'parse_failed'
+    safe_stage = stage if stage in S1_STAGES else 'intake'
+    claims = _s1_count_bucket(claim_count) if safe_reason == 'count_mismatch' else 'none'
+    files = _s1_count_bucket(file_count) if safe_reason == 'count_mismatch' else 'none'
+    try:
+        OMI_SYNC_LINEAGE_RESOLVE_TOTAL.labels(
+            outcome='s1_refused', stage=safe_stage, claim_count_bucket=claims, file_count_bucket=files
+        ).inc()
+    except Exception:
+        pass
+    try:
+        logger.info(
+            'event=sync_lineage_resolve outcome=s1_refused reason=%s stage=%s '
+            'claim_count_bucket=%s file_count_bucket=%s job_ref=none',
+            safe_reason,
+            safe_stage,
+            claims,
+            files,
+        )
+    except Exception:
+        pass
+
+
+def parse_s1_upload_claims(value: Optional[str], filenames: Sequence[str]) -> dict[str, dict]:
+    """HTTP parsing, with a content-free diagnostic for a supplied invalid header.
+
+    Downstream validation still sees the parser's empty mapping and may report
+    no_claims at its own stage; stage counts measure checks, not unique uploads.
+    """
+    claims = parse_sync_file_claims(value, filenames)
+    if isinstance(value, str) and value and not claims:
+        emit_s1_refusal('parse_failed', stage='http_boundary')
+    return claims
+
+
+def emit_s1_mapping_refusal(mapped_count: int, wav_count: int) -> None:
+    """Coordinator refused incomplete decoded position maps for surviving WAVs."""
+    emit_s1_refusal('count_mismatch', stage='coordinator', claim_count=mapped_count, file_count=wav_count)
 
 
 def lineage_resolution_requested(
@@ -143,6 +249,7 @@ def lineage_resolution_requested(
     job_id: Optional[str] = None,
     capture_evidence_claims: Optional[Mapping] = None,
     filenames: Sequence[str] = (),
+    stage: str = 'intake',
 ) -> bool:
     """True when this upload binds per segment; otherwise records why for eligible uploads.
 
@@ -168,7 +275,13 @@ def lineage_resolution_requested(
             diagnostics=sync_live_dedupe_active_for(uid),
         )
         return False
-    if sync_lineage_s1_required() and not _s1_claims_complete(capture_evidence_claims, filenames):
+    if not _s1_claims_complete(capture_evidence_claims, filenames):
+        emit_s1_refusal(
+            _s1_refusal_reason(capture_evidence_claims, filenames),
+            stage=stage,
+            claim_count=len(capture_evidence_claims) if isinstance(capture_evidence_claims, Mapping) else None,
+            file_count=len(filenames),
+        )
         return False
     return True
 
@@ -238,7 +351,7 @@ def _generations(
     wanted_source = source_value(source)
     device_id = clean_text(client_device_id)
     redirects: dict[str, str] = {}
-    candidates: list[tuple[str, float, float, bool]] = []
+    candidates: list[tuple[str, float, float, bool, Mapping[str, Any]]] = []
     for row in rows:
         row_id = clean_text(row.get('id'))
         reason = classify_generation_row(
@@ -267,10 +380,18 @@ def _generations(
         end = unix_seconds(row.get('finished_at'))
         if start is None or end is None:
             continue
-        candidates.append((row_id, start, end, bool(row.get('deleted'))))
+        candidates.append((row_id, start, end, bool(row.get('deleted')), row))
     generations = [
-        _Generation(row_id, start, end, _chain_end(row_id, redirects), deleted)
-        for row_id, start, end, deleted in sorted(candidates)
+        _Generation(
+            row_id,
+            start,
+            end,
+            _chain_end(row_id, redirects),
+            deleted,
+            bool(row.get('discarded')),
+            row.get('capture_evidence') if isinstance(row.get('capture_evidence'), Mapping) else None,
+        )
+        for row_id, start, end, deleted, row in sorted(candidates, key=lambda item: item[:4])
     ]
     if diagnostics is not None:
         diagnostics['candidate_count_after'] = len(generations)
@@ -291,6 +412,49 @@ def _unique(matches: list[_Generation]) -> Optional[str]:
     return min(generation.id for generation in matches)
 
 
+def _visible_canonicals(matches: list[_Generation]) -> set[str]:
+    """Canonicals established by a visible covering row inside this pass's matches.
+
+    Only a row that IS its canonical — present, not deleted, not discarded —
+    proves the canonical has a live surface competing for the segment. A donor
+    redirect or a canonical id not matched this pass establishes nothing.
+    """
+    return {
+        generation.canonical
+        for generation in matches
+        if generation.id == generation.canonical and not generation.deleted and not generation.discarded
+    }
+
+
+def _decide_overlap(
+    matches: list[_Generation],
+    stamp: Optional[str],
+    start: float,
+    end: float,
+    source_position_map: Any,
+) -> tuple[Optional[str], bool]:
+    """Safe-overlap tiebreak inside one pass's multi-canonical match set.
+
+    The stamp can only choose among canonicals a visible covering row proves;
+    a hidden (discarded or donor-only) canonical never wins against visible
+    covering rows. Failing the stamp, exactly one canonical backed by a
+    validated committed live run covering or exactly adjoining the segment's
+    source coordinates wins; failing that, exactly one visible canonical
+    wins regardless of frame evidence. Anything else stays undecidable.
+    """
+    visible = _visible_canonicals(matches)
+    eligible = [g for g in matches if g.canonical in visible] if visible else list(matches)
+    pick = pick_overlapping(eligible, stamp)
+    if pick is not None:
+        return _unique([pick]), False
+    supported = unique_committed_canonical(eligible, start, end, source_position_map)
+    if supported is not None:
+        return _unique([g for g in eligible if g.canonical == supported]), False
+    if len(visible) == 1:
+        return _unique([g for g in matches if g.canonical == next(iter(visible))]), False
+    return None, True
+
+
 def _bind(
     generations: list[_Generation],
     start: float,
@@ -298,6 +462,7 @@ def _bind(
     *,
     stamp: Optional[str] = None,
     safe_overlap: bool = False,
+    source_position_map: Any = None,
 ) -> tuple[Optional[str], bool]:
     """The explicit target, plus whether several distinct canonicals stayed undecidable."""
     strict = [g for g in generations if g.start <= start and end <= g.end]
@@ -307,8 +472,7 @@ def _bind(
             return unique, False
         if not safe_overlap:
             return None, False
-        pick = pick_overlapping(strict, stamp)
-        return (_unique([pick]) if pick is not None else None), pick is None
+        return _decide_overlap(strict, stamp, start, end, source_position_map)
     tolerant = [
         g
         for g in generations
@@ -324,8 +488,7 @@ def _bind(
         return unique, False
     if not safe_overlap:
         return None, False
-    pick = pick_overlapping(tolerant, stamp)
-    return (_unique([pick]) if pick is not None else None), pick is None
+    return _decide_overlap(tolerant, stamp, start, end, source_position_map)
 
 
 def ambiguous_binding_pending(uid: Optional[str], binding: Optional[str]) -> bool:
@@ -345,6 +508,7 @@ def select_segment_targets(
     truncated_before: Optional[float] = None,
     lookup_failed: bool = False,
     safe_overlap: Optional[bool] = None,
+    segment_source_maps: Optional[Mapping[str, Any]] = None,
 ) -> LineagePlan:
     """Pure per-segment plan: unique generation or stamp-disambiguated overlap, else the stamp or unbound."""
     if safe_overlap is None:
@@ -385,7 +549,14 @@ def select_segment_targets(
         elif truncated_before is not None:
             misses.add('truncated')
         else:
-            bound, pending = _bind(generations, start, end, stamp=stamp, safe_overlap=safe_overlap)
+            bound, pending = _bind(
+                generations,
+                start,
+                end,
+                stamp=stamp,
+                safe_overlap=safe_overlap,
+                source_position_map=(segment_source_maps or {}).get(key),
+            )
             if bound is None:
                 misses.add('ambiguous_overlap' if pending else 'interval_miss')
         if bound is not None:
@@ -551,6 +722,7 @@ def resolve_segment_targets(
     job_id: Optional[str] = None,
     firestore_client: Any = None,
     binding_reasons: Optional[dict] = None,
+    segment_source_maps: Optional[Mapping[str, Any]] = None,
 ) -> dict[str, Optional[str]]:
     """Per-segment explicit targets; blocking (one bounded indexed query, sometimes two)."""
     if not spans:
@@ -558,6 +730,10 @@ def resolve_segment_targets(
     truncated_before: Optional[float] = None
     failed = True
     lineage_module: list = []
+    safe_overlap = sync_live_dedupe_active_for(uid)
+    want_capture_evidence = bool(
+        (safe_overlap and segment_source_maps and any(mapping is not None for mapping in segment_source_maps.values()))
+    )
     try:
         try:
             started_before = datetime.fromtimestamp(
@@ -571,6 +747,7 @@ def resolve_segment_targets(
                 firestore_client,
                 finished_after,
                 on_module=lineage_module.append,
+                include_capture_evidence=want_capture_evidence,
             )
             failed = False
         except Exception as exc:
@@ -586,7 +763,8 @@ def resolve_segment_targets(
             is_locked=is_locked,
             truncated_before=truncated_before,
             lookup_failed=failed,
-            safe_overlap=sync_live_dedupe_active_for(uid),
+            safe_overlap=safe_overlap,
+            segment_source_maps=segment_source_maps if want_capture_evidence else None,
         )
     except Exception as exc:
         _warning('event=sync_lineage_plan outcome=failed exception_type=%s', bounded_exception_class(exc))
@@ -642,6 +820,9 @@ def plan_segment_targets(
     is_locked: bool,
     job_id: Optional[str],
     binding_reasons: Optional[dict],
+    *,
+    segment_source_maps: Optional[Mapping[str, Any]] = None,
+    capture_time_offset: float = 0.0,
 ) -> dict[str, Optional[str]]:
     """Blocking span construction plus per-segment lineage resolution for one upload.
 
@@ -652,8 +833,19 @@ def plan_segment_targets(
     for the existing failed-segment/re-upload path. A key proven pending in any
     pass keeps the token unless a later pass binds it; a degraded or ordinary
     miss cannot silently revert it to the stamp or temporal path.
+
+    ``capture_time_offset`` is the request-wide server-clock offset for skewed
+    captures: span values (and the lineage query bounds they derive) shift by
+    it so comparisons land on the server-clock stored rows, while the span
+    keys keep the raw capture-clock segment identity.
     """
-    spans = {path: (timestamp_of(path), timestamp_of(path) + duration_of(path)) for path in segment_list}
+    spans = {
+        path: (
+            timestamp_of(path) - capture_time_offset,
+            timestamp_of(path) + duration_of(path) - capture_time_offset,
+        )
+        for path in segment_list
+    }
     proven_pending: set = set()
     pass_reasons: dict = {}
     targets: dict = {}
@@ -669,6 +861,7 @@ def plan_segment_targets(
             is_locked=is_locked,
             job_id=job_id,
             binding_reasons=pass_reasons,
+            segment_source_maps=segment_source_maps,
         )
         proven_pending |= {key for key, token in pass_reasons.items() if token == 'ambiguous_pending'}
         if 'ambiguous_pending' not in pass_reasons.values():
@@ -717,7 +910,9 @@ def _emit(plan: LineagePlan, job_id: Optional[str], diagnostics: Optional[bool] 
         diagnostics = sync_live_dedupe_enabled()
     outcome = plan.outcome if plan.outcome in OUTCOMES else 'lookup_failed'
     try:
-        OMI_SYNC_LINEAGE_RESOLVE_TOTAL.labels(outcome=outcome).inc()
+        OMI_SYNC_LINEAGE_RESOLVE_TOTAL.labels(
+            outcome=outcome, stage='none', claim_count_bucket='none', file_count_bucket='none'
+        ).inc()
     except Exception:
         pass
     counts = plan.counts

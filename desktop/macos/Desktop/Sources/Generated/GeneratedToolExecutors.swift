@@ -16,13 +16,6 @@ enum GeneratedSwiftTool: String, CaseIterable {
   case getMemories = "get_memories"
   case searchMemories = "search_memories"
   case createMemory = "create_memory"
-  case searchKnowledge = "search_knowledge"
-  case readPlaybook = "read_playbook"
-  case searchHistoricalFacts = "search_historical_facts"
-  case getEntityTimelineTool = "get_entity_timeline_tool"
-  case savePlaybook = "save_playbook"
-  case createStandingTrigger = "create_standing_trigger"
-  case closeFact = "close_fact"
   case getActionItems = "get_action_items"
   case createActionItem = "create_action_item"
   case createContextReminder = "create_context_reminder"
@@ -30,6 +23,7 @@ enum GeneratedSwiftTool: String, CaseIterable {
   case captureScreen = "capture_screen"
   case checkPermissionStatus = "check_permission_status"
   case requestPermission = "request_permission"
+  case getProductKb = "get_product_kb"
   case scanFiles = "scan_files"
   case setUserPreferences = "set_user_preferences"
   case askFollowup = "ask_followup"
@@ -42,6 +36,12 @@ enum GeneratedSwiftTool: String, CaseIterable {
   case screenshot = "screenshot"
   case reportScreenObservation = "report_screen_observation"
   case pointClick = "point_click"
+  case searchContacts = "search_contacts"
+  case listMessageChats = "list_message_chats"
+  case readMessageHistory = "read_message_history"
+  case listMailMessages = "list_mail_messages"
+  case sendMessage = "send_message"
+  case runApplescript = "run_applescript"
   case createCanonicalGoal = "create_canonical_goal"
   case getCanonicalGoals = "get_canonical_goals"
   case renderChatBlocks = "render_chat_blocks"
@@ -55,8 +55,8 @@ enum GeneratedSwiftToolExecutor: String {
 
 enum GeneratedToolExecutors {
   static let manifestVersion = 1
-  static let manifestDigest = "sha256:4229125ab7bc141b319e17bfe8b1732a33b75a9a41cea75bbb3898782d174421"
-  static let chatFirstManifestDigest = "sha256:9eb8045b6417eda6dcde0fb018f76fefe14d85e1753a8c843a1faf94d3599dc3"
+  static let manifestDigest = "sha256:2485219c4f7346983e817847193494a8e8a1520ec1272925521e8bc7370ee23e"
+  static let chatFirstManifestDigest = "sha256:ce20a45ebe23f393a8c6898b1efde8b49b6367b53e0d494d6d958c4a6a334b58"
 
   static let aliasToCanonical: [String: GeneratedSwiftTool] = [
     "search_screen_history": .semanticSearch,
@@ -79,13 +79,6 @@ enum GeneratedToolExecutors {
     .getMemories: .chatToolExecutor,
     .searchMemories: .chatToolExecutor,
     .createMemory: .chatToolExecutor,
-    .searchKnowledge: .chatToolExecutor,
-    .readPlaybook: .chatToolExecutor,
-    .searchHistoricalFacts: .chatToolExecutor,
-    .getEntityTimelineTool: .chatToolExecutor,
-    .savePlaybook: .chatToolExecutor,
-    .createStandingTrigger: .chatToolExecutor,
-    .closeFact: .chatToolExecutor,
     .getActionItems: .chatToolExecutor,
     .createActionItem: .chatToolExecutor,
     .createContextReminder: .chatToolExecutor,
@@ -93,6 +86,7 @@ enum GeneratedToolExecutors {
     .captureScreen: .chatToolExecutor,
     .checkPermissionStatus: .chatToolExecutor,
     .requestPermission: .chatToolExecutor,
+    .getProductKb: .chatToolExecutor,
     .scanFiles: .chatToolExecutor,
     .setUserPreferences: .chatToolExecutor,
     .askFollowup: .chatToolExecutor,
@@ -105,6 +99,12 @@ enum GeneratedToolExecutors {
     .screenshot: .realtimeHub,
     .reportScreenObservation: .realtimeHub,
     .pointClick: .realtimeHub,
+    .searchContacts: .chatToolExecutor,
+    .listMessageChats: .chatToolExecutor,
+    .readMessageHistory: .chatToolExecutor,
+    .listMailMessages: .chatToolExecutor,
+    .sendMessage: .chatToolExecutor,
+    .runApplescript: .chatToolExecutor,
     .createCanonicalGoal: .chatToolExecutor,
     .getCanonicalGoals: .chatToolExecutor,
     .renderChatBlocks: .chatToolExecutor,
@@ -154,13 +154,6 @@ enum GeneratedToolExecutors {
     case getMemories
     case searchMemories
     case createMemory
-    case searchKnowledge
-    case readPlaybook
-    case searchHistoricalFacts
-    case getEntityTimelineTool
-    case savePlaybook
-    case createStandingTrigger
-    case closeFact
     case getActionItems
     case createActionItem
     case createContextReminder
@@ -168,12 +161,19 @@ enum GeneratedToolExecutors {
     case captureScreen
     case checkPermissionStatus
     case requestPermission
+    case getProductKb
     case scanFiles
     case setUserPreferences
     case askFollowup
     case completeOnboarding
     case getEmailInsights
     case createCalendarEvent
+    case searchContacts
+    case listMessageChats
+    case readMessageHistory
+    case listMailMessages
+    case sendMessage
+    case runApplescript
     case createCanonicalGoal
     case getCanonicalGoals
     case renderChatBlocks
@@ -200,13 +200,6 @@ enum GeneratedToolExecutors {
     case .getMemories: return .getMemories
     case .searchMemories: return .searchMemories
     case .createMemory: return .createMemory
-    case .searchKnowledge: return .searchKnowledge
-    case .readPlaybook: return .readPlaybook
-    case .searchHistoricalFacts: return .searchHistoricalFacts
-    case .getEntityTimelineTool: return .getEntityTimelineTool
-    case .savePlaybook: return .savePlaybook
-    case .createStandingTrigger: return .createStandingTrigger
-    case .closeFact: return .closeFact
     case .getActionItems: return .getActionItems
     case .createActionItem: return .createActionItem
     case .createContextReminder: return .createContextReminder
@@ -214,12 +207,19 @@ enum GeneratedToolExecutors {
     case .captureScreen: return .captureScreen
     case .checkPermissionStatus: return .checkPermissionStatus
     case .requestPermission: return .requestPermission
+    case .getProductKb: return .getProductKb
     case .scanFiles: return .scanFiles
     case .setUserPreferences: return .setUserPreferences
     case .askFollowup: return .askFollowup
     case .completeOnboarding: return .completeOnboarding
     case .getEmailInsights: return .getEmailInsights
     case .createCalendarEvent: return .createCalendarEvent
+    case .searchContacts: return .searchContacts
+    case .listMessageChats: return .listMessageChats
+    case .readMessageHistory: return .readMessageHistory
+    case .listMailMessages: return .listMailMessages
+    case .sendMessage: return .sendMessage
+    case .runApplescript: return .runApplescript
     case .createCanonicalGoal: return .createCanonicalGoal
     case .getCanonicalGoals: return .getCanonicalGoals
     case .renderChatBlocks: return .renderChatBlocks

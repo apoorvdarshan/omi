@@ -108,6 +108,72 @@ class OmiBleEnergyPolicyTest < Minitest::Test
     end
   end
 
+  def test_resolved_outage_ages_from_resolution_and_unresolved_start_still_prunes
+    Dir.mktmpdir('omi-ble-resolution-retention') do |directory|
+      harness = File.join(directory, 'main.swift')
+      binary = File.join(directory, 'omi-ble-resolution-retention-test')
+      File.write(harness, <<~SWIFT)
+        import Foundation
+
+        @main
+        struct ResolutionRetentionHarness {
+            static func main() {
+                let hour: Int64 = 3_600_000
+                let day: Int64 = 24 * hour
+                let now: Int64 = 10 * day
+                let retentionMs: Int64 = 7 * day
+                var diagnostics = OmiBleReconnectDiagnostics()
+                let resolvedStart = now - 8 * day
+                let resolvedAt = now - hour
+                let unresolvedStart = resolvedStart - 1
+                let events: [[String: Any]] = [
+                    ["timestamp": resolvedStart, "lostAudioResolvedAt": resolvedAt, "eventType": "disconnect"],
+                    ["timestamp": unresolvedStart, "eventType": "disconnect"],
+                ]
+                precondition(OmiBleReconnectDiagnostics.retentionTimestamp(events[0]) == resolvedAt)
+                precondition(OmiBleReconnectDiagnostics.retentionTimestamp(events[1]) == unresolvedStart)
+                let kept = diagnostics.retainedHistory(
+                    events, nowMs: now, retentionMs: retentionMs, limit: 500,
+                    timestampOf: OmiBleReconnectDiagnostics.retentionTimestamp
+                )
+                precondition(kept.count == 1)
+                precondition(kept[0]["timestamp"] as? Int64 == resolvedStart)
+                precondition(kept[0]["lostAudioResolvedAt"] as? Int64 == resolvedAt)
+
+                // Resolution outside the window still prunes; the count cap is unchanged.
+                let staleResolved: [String: Any] = [
+                    "timestamp": now - 20 * day,
+                    "lostAudioResolvedAt": now - 8 * day,
+                ]
+                let pruned = diagnostics.retainedHistory(
+                    [staleResolved], nowMs: now, retentionMs: retentionMs, limit: 500,
+                    timestampOf: OmiBleReconnectDiagnostics.retentionTimestamp
+                )
+                precondition(pruned.isEmpty)
+
+                // Unresolved reconnect matching still keys off the start.
+                diagnostics.recordEvent(timestampMs: 1_000, eventType: "disconnect", isManual: false)
+                let open: [[String: Any]] = [["timestamp": Int64(1_000), "timeToReconnectMs": Int64(0)]]
+                let backfilled = diagnostics.backfilledHistory(
+                    open, nowMs: 2_000, hadConnection: true,
+                    timestampOf: OmiBleReconnectDiagnostics.retentionTimestamp,
+                    withDuration: { event, duration in
+                        var updated = event
+                        updated["timeToReconnectMs"] = duration
+                        return updated
+                    }
+                )
+                precondition(backfilled?[0]["timeToReconnectMs"] as? Int64 == 1_000)
+            }
+        }
+      SWIFT
+      stdout, stderr, compile = Open3.capture3('swiftc', '-parse-as-library', POLICY_SOURCE, harness, '-o', binary)
+      assert compile.success?, "swiftc failed:\n#{stdout}\n#{stderr}"
+      stdout, stderr, run = Open3.capture3(binary)
+      assert run.success?, "resolution retention assertions failed:\n#{stdout}\n#{stderr}"
+    end
+  end
+
   def test_recovery_latency_tracks_the_disconnect_across_failed_retries
     Dir.mktmpdir('omi-ble-recovery') do |directory|
       harness = File.join(directory, 'main.swift')
@@ -221,9 +287,27 @@ class OmiBleEnergyPolicyTest < Minitest::Test
                     defaults.set(history, forKey: "battery_history_test")
                     precondition((defaults.array(forKey: "battery_history_test") as? [[String: Any]])?.count == 1)
                 }
+                for charging in [true, false] {
+                    let history = [
+                        OmiBleEnergyPolicy.batteryHistoryEntry(timestampMs: 0, level: 100, charging: nil),
+                        OmiBleEnergyPolicy.batteryHistoryEntry(timestampMs: 5, level: 45, charging: nil),
+                    ]
+                    let updated = OmiBleEnergyPolicy.backfillLatestBatteryCharging(history, charging: charging, nowMs: 5 + OmiBleEnergyPolicy.batteryBackfillMaxAgeMs)!
+                    precondition(updated.count == 2)
+                    precondition(updated[0]["charging"] == nil)
+                    precondition(updated[1]["ts"] as? Int64 == 5)
+                    precondition(updated[1]["level"] as? Int == 45)
+                    precondition(updated[1]["charging"] as? Bool == charging)
+                    precondition(OmiBleEnergyPolicy.backfillLatestBatteryCharging(updated, charging: !charging, nowMs: 5 + OmiBleEnergyPolicy.batteryBackfillMaxAgeMs) == nil)
+                    // A point older than the backfill window stays unknown.
+                    precondition(OmiBleEnergyPolicy.backfillLatestBatteryCharging(history, charging: charging, nowMs: 6 + OmiBleEnergyPolicy.batteryBackfillMaxAgeMs) == nil)
+                    defaults.set(updated, forKey: "battery_history_backfill")
+                    precondition((defaults.array(forKey: "battery_history_backfill") as? [[String: Any]])?.last?["charging"] as? Bool == charging)
+                }
+                precondition(OmiBleEnergyPolicy.backfillLatestBatteryCharging([], charging: true, nowMs: 0) == nil)
                 precondition(OmiBleFirmwareDiagnostics.parse(Data(repeating: 0, count: 24), timestampMs: 1) == nil)
                 precondition(OmiBleFirmwareDiagnostics.parse(Data(repeating: 0, count: 25), timestampMs: 1) == nil)
-                var diagnostic = Data(repeating: 0, count: 30)
+                var diagnostic = Data(repeating: 0, count: 25)
                 diagnostic[0] = 1
                 diagnostic[1] = 0x11 // RESET_PIN | RESET_WATCHDOG
                 diagnostic[5] = 42
@@ -236,6 +320,25 @@ class OmiBleEnergyPolicyTest < Minitest::Test
                 precondition(parsed["uptime_s"] as? UInt32 == 42)
                 precondition(parsed["battery_mv"] as? NSNumber == 0x1234)
                 precondition(parsed["charging"] as? NSNumber == true)
+                for key in ["last_off_charger_mv", "charge_pin_edges", "soc_frozen"] { precondition(parsed[key] == nil) }
+                var tail = diagnostic
+                tail.append(contentsOf: [0x34, 0x12, 0x78, 0x56, 1])
+                let extended = OmiBleFirmwareDiagnostics.parse(tail, timestampMs: 123)!
+                for (key, value) in parsed { precondition((value as AnyObject).isEqual(extended[key])) }
+                precondition(extended["last_off_charger_mv"] as? NSNumber == 0x1234)
+                precondition(extended["charge_pin_edges"] as? NSNumber == 0x5678)
+                precondition(extended["soc_frozen"] as? Bool == true)
+                tail.append(contentsOf: [1, 2, 3])
+                precondition(NSDictionary(dictionary: extended).isEqual(to: OmiBleFirmwareDiagnostics.parse(tail, timestampMs: 123)!))
+                tail[29] = 0
+                precondition(OmiBleFirmwareDiagnostics.parse(tail, timestampMs: 123)!["soc_frozen"] as? Bool == false)
+                for offset in 25...29 { tail[offset] = 0xff }
+                let unknownTail = OmiBleFirmwareDiagnostics.parse(tail, timestampMs: 123)!
+                for key in ["last_off_charger_mv", "charge_pin_edges", "soc_frozen"] { precondition(unknownTail[key] == nil) }
+                for length in 26...29 {
+                    let partial = OmiBleFirmwareDiagnostics.parse(Data(tail.prefix(length)), timestampMs: 123)!
+                    precondition(partial["last_off_charger_mv"] == nil)
+                }
                 precondition((try? PropertyListSerialization.data(fromPropertyList: [parsed], format: .binary, options: 0)) != nil)
                 var unknown = Data(repeating: 0xff, count: 25)
                 unknown[0] = 1

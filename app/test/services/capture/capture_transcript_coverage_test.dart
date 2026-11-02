@@ -27,7 +27,14 @@ void main() {
 
   setUp(() async {
     directory = await Directory.systemTemp.createTemp('capture_safety_copy_');
-    world = await CaptureReplayWorld.boot(tempDir: directory, pendantCodec: BleAudioCodec.opus);
+    // These custody fixtures intentionally delay transcripts for several minutes.
+    // Keep capture admitted using the existing four-hour setting; default silence
+    // pause is exercised separately in tiered_capture_test.dart.
+    world = await CaptureReplayWorld.boot(
+      tempDir: directory,
+      pendantCodec: BleAudioCodec.opus,
+      initialPrefs: {'conversationSilenceDuration': -1},
+    );
   });
 
   tearDown(() async {
@@ -110,7 +117,7 @@ void main() {
     var last = '';
     for (var i = 0; i < 40; i++) {
       await world.settle();
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await Future<void>.delayed(const Duration(milliseconds: 15));
       final wals = await world.wal.syncs.phone.getAllWals();
       final now = [
         for (final wal in wals) '${wal.id}:${wal.status.name}:${wal.conversationId}',
@@ -130,7 +137,7 @@ void main() {
       final wals = await world.wal.syncs.phone.getAllWals();
       if (done(wals) && done(await WalFileManager.loadWals())) return wals;
       await world.settle();
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await Future<void>.delayed(const Duration(milliseconds: 15));
     }
     final wals = await world.wal.syncs.phone.getAllWals();
     final state = [
@@ -165,7 +172,7 @@ void main() {
   Future<void> telemetryReaches(bool Function() done) async {
     for (var i = 0; i < 200 && !done(); i++) {
       await world.settle();
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await Future<void>.delayed(const Duration(milliseconds: 15));
     }
     expect(done(), isTrue);
   }

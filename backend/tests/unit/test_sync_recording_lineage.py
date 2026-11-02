@@ -51,7 +51,7 @@ def dependencies():
 @pytest.fixture(autouse=True)
 def default_flag(monkeypatch):
     monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, raising=False)
-    monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, raising=False)
+    monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, '')
 
 
 def at(seconds):
@@ -347,13 +347,12 @@ def test_early_sync_append_preserves_a_pinned_live_clock(monkeypatch, flag):
     result, _, _ = intake(store, chunk, target_id=gen_id(L))
     # The live host continues to emit offsets against the pinned origin.
     # Moving it on sync intake shifts every later live line by one second.
-    assert result['started_at'] == at(origin if flag == '' else origin - 1)
+    assert result['started_at'] == at(origin)
     live = next(s for s in result['transcript_segments'] if s['text'] == live_text(L, 0))
     assert result['started_at'].timestamp() + live['start'] == origin + 1
     incoming = next(s for s in result['transcript_segments'] if s['text'] == chunk['transcript_segments'][0]['text'])
     assert result['started_at'].timestamp() + incoming['start'] == origin - 1
-    if flag == '':
-        assert incoming['audio_alignment'] == 'unplaced'
+    assert incoming['audio_alignment'] == 'unplaced'
     from database import conversations as db
 
     written = db.update_conversation_segments(
@@ -374,7 +373,7 @@ def test_early_sync_append_preserves_a_pinned_live_clock(monkeypatch, flag):
         ],
     )
     fresh = next(s for s in written.segments if s.get('id') == 'LIVE-FRESH')
-    assert result['started_at'].timestamp() + fresh['start'] == origin + (20 if flag == '' else 19)
+    assert result['started_at'].timestamp() + fresh['start'] == origin + 20
 
 
 @pytest.mark.asyncio
@@ -950,6 +949,7 @@ class _FakeQuery:
 
     def select(self, field_paths):
         self.ops.append(('select', tuple(field_paths)))
+        self.field_paths = tuple(field_paths)
         return self
 
     def limit(self, count):
@@ -957,7 +957,33 @@ class _FakeQuery:
         return self
 
     def stream(self):
-        return iter(self.docs)
+        return iter(self.projected_docs())
+
+    def projected_docs(self):
+        """Each doc's dict narrowed to the selected field paths, as the real
+        backend serves a ``select`` projection (dotted paths nest)."""
+        if getattr(self, 'field_paths', None) is None:
+            return self.docs
+        projected = []
+        for doc in self.docs:
+            data = doc.to_dict()
+            out = {}
+            for path in self.field_paths:
+                parts = path.split('.')
+                value = data
+                for part in parts:
+                    if not isinstance(value, dict) or part not in value:
+                        value = None
+                        break
+                    value = value[part]
+                if value is None:
+                    continue
+                target = out
+                for part in parts[:-1]:
+                    target = target.setdefault(part, {})
+                target[parts[-1]] = deepcopy(value)
+            projected.append(SimpleNamespace(id=doc.id, to_dict=lambda out=out: deepcopy(out)))
+        return projected
 
 
 def test_lineage_reads_are_bounded_indexed_and_transcript_free(monkeypatch):
@@ -992,6 +1018,97 @@ def test_lineage_reads_are_bounded_indexed_and_transcript_free(monkeypatch):
     ]
 
 
+def test_lineage_projection_always_carries_deleted_and_discarded(monkeypatch):
+    from database import sync_recording_lineage as lineage_db
+
+    monkeypatch.setattr(lineage_db, 'record_firestore_read', lambda *args: None)
+    full = {
+        'created_at': at(T0),
+        'started_at': at(T0),
+        'finished_at': at(T0 + 60),
+        'source': 'omi',
+        'client_device_id': 'pendant',
+        'is_locked': False,
+        'deleted': False,
+        'discarded': True,
+        'sync_merged_into': 'GEN-MERGED',
+        'smart_merge': {'role': 'donor', 'survivor_id': 'GEN-MERGED'},
+        'external_data': {'recording_session_id': 'SESSION-X', 'recording_origin_id': ORIGIN},
+        'capture_evidence': {'version': 1, 'origin': 'live'},
+        'transcript_segments': [{'text': 'hidden'}],
+        'structured': {'title': 'hidden'},
+    }
+    doc = SimpleNamespace(id='GEN-DONOR', to_dict=lambda: deepcopy(full))
+    for include in (False, True):
+        query = _FakeQuery([doc])
+        rows = lineage_db.get_recording_generations(
+            'u',
+            ORIGIN,
+            started_before=at(T0 + 600),
+            finished_after=at(T0),
+            limit=8,
+            include_capture_evidence=include,
+            firestore_client=query,
+        )
+        selected = next(op[1] for op in query.ops if op[0] == 'select')
+        assert 'deleted' in selected and 'discarded' in selected
+        assert ('capture_evidence' in selected) is include
+        assert rows[0]['discarded'] is True and rows[0]['deleted'] is False
+        assert 'transcript_segments' not in rows[0] and 'structured' not in rows[0]
+        assert ('capture_evidence' in rows[0]) is include
+        origin = _FakeQuery([doc])
+        rows = lineage_db.get_origin_generation(
+            'u', ORIGIN, limit=5, include_capture_evidence=include, firestore_client=origin
+        )
+        selected = next(op[1] for op in origin.ops if op[0] == 'select')
+        assert 'deleted' in selected and 'discarded' in selected
+        assert ('capture_evidence' in selected) is include
+        assert rows[0]['discarded'] is True and ('capture_evidence' in rows[0]) is include
+
+
+def test_projected_discard_flag_reaches_the_planner(monkeypatch):
+    """Real query + projection: a discarded covering row cannot compete with a
+    visible one, so the single visible canonical wins instead of pending."""
+    from database import sync_recording_lineage as lineage_db
+
+    monkeypatch.setenv('SYNC_LINEAGE_LIVE_DEDUPE_ENABLED', 'true')
+    monkeypatch.setattr(lineage_db, 'record_firestore_read', lambda *args: None)
+    base = {
+        'created_at': at(gen_start(1)),
+        'started_at': at(gen_start(1)),
+        'finished_at': at(gen_start(1) + DURATION),
+        'source': 'omi',
+        'client_device_id': 'pendant',
+        'is_locked': False,
+        'deleted': False,
+        'external_data': {'recording_session_id': ORIGIN, 'recording_origin_id': ORIGIN},
+        'transcript_segments': [{'text': 'hidden'}],
+    }
+    visible = dict(base, discarded=False)
+    hidden = dict(base, discarded=True)
+    query = _FakeQuery(
+        [
+            SimpleNamespace(id='LIVE-V', to_dict=lambda: deepcopy(visible)),
+            SimpleNamespace(id='LIVE-D', to_dict=lambda: deepcopy(hidden)),
+        ]
+    )
+    start = gen_start(1) + 30.0
+    reasons = {}
+    targets = resolve_segment_targets(
+        'u',
+        ORIGIN,
+        {'seg.wav': (start, start + 10.0)},
+        stamped_target=None,
+        source='omi',
+        client_device_id='pendant',
+        is_locked=False,
+        firestore_client=query,
+        binding_reasons=reasons,
+    )
+    assert targets == {'seg.wav': 'LIVE-V'}
+    assert reasons == {'seg.wav': 'bound'}
+
+
 # --- Kill switch --------------------------------------------------------------
 
 
@@ -1023,7 +1140,10 @@ def coordinator():
         sync_v2_harness.TestAsyncCoordinatorBehavioral._cleanup(stubs['saved_modules'])
 
 
-def _drive(module, stubs, chunks, monkeypatch, *, stamp, s1_claims=None):
+_DEFAULT_S1_CLAIMS = object()
+
+
+def _drive(module, stubs, chunks, monkeypatch, *, stamp, s1_claims=_DEFAULT_S1_CLAIMS):
     pipeline = stubs['pipeline']
     paths = {f"/tmp/job-lineage/seg_{chunk['started_at'].timestamp():.0f}.wav": chunk for chunk in chunks}
     wav_path = '/tmp/job-lineage/w.wav'
@@ -1065,6 +1185,18 @@ def _drive(module, stubs, chunks, monkeypatch, *, stamp, s1_claims=None):
         '_candidate_rows',
         lambda *_args, **_kwargs: candidates,
     )
+    if s1_claims is _DEFAULT_S1_CLAIMS:
+        s1_claims = {
+            'f.opus': {
+                'capture_root': '12345678-1234-4234-8234-123456789abc',
+                'clock_epoch': 0,
+                'source_frame_start': 0,
+                'frame_count': 100,
+                'rate_hz': 16000,
+                'channel': 'mono',
+                'codec': 'opus',
+            }
+        }
     if s1_claims:
         mapping = {'claim': next(iter(s1_claims.values())), 'offsets': [0, 16000], 'incomplete': False}
 
@@ -1087,7 +1219,7 @@ def _drive(module, stubs, chunks, monkeypatch, *, stamp, s1_claims=None):
 async def test_coordinator_forwards_each_segment_its_generation(coordinator, monkeypatch, flag):
     module, stubs = coordinator
     monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, flag)
-    monkeypatch.setenv('SYNC_LINEAGE_S1_REQUIRED', 'off')
+
     chunks = upload_straddling_next_two()
     captured, kwargs = _drive(module, stubs, chunks, monkeypatch, stamp=gen_id(L))
     await module._run_full_pipeline_background_async(
@@ -1100,7 +1232,7 @@ async def test_coordinator_forwards_each_segment_its_generation(coordinator, mon
 @pytest.mark.asyncio
 async def test_coordinator_lineage_exception_keeps_stamp_and_processes_siblings(coordinator, monkeypatch, caplog):
     module, stubs = coordinator
-    monkeypatch.setenv('SYNC_LINEAGE_S1_REQUIRED', 'off')
+
     chunks = upload_straddling_next_two()
     captured, kwargs = _drive(module, stubs, chunks, monkeypatch, stamp='STAMP')
 
@@ -1116,7 +1248,9 @@ async def test_coordinator_lineage_exception_keeps_stamp_and_processes_siblings(
         'job-lineage', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-lineage', **vars(kwargs)
     )
     assert captured == {chunk['id']: 'STAMP' for chunk in chunks}
-    metrics.labels.assert_called_once_with(outcome='lookup_failed')
+    metrics.labels.assert_called_once_with(
+        outcome='lookup_failed', stage='none', claim_count_bucket='none', file_count_bucket='none'
+    )
     metrics.labels.return_value.inc.assert_called_once()
     assert sum('event=sync_lineage_resolve' in r.getMessage() for r in caplog.records) == 1
 
@@ -1126,7 +1260,7 @@ async def test_coordinator_lineage_exception_keeps_stamp_and_processes_siblings(
 async def test_retry_after_append_before_enrichment_reprocesses_the_landed_row(coordinator, monkeypatch, flag):
     module, stubs = coordinator
     monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, flag)
-    monkeypatch.setenv('SYNC_LINEAGE_S1_REQUIRED', 'off')
+
     chunks = upload_straddling_next_two()[:1]
     captured, kwargs = _drive(module, stubs, chunks, monkeypatch, stamp=gen_id(L))
     pipeline = stubs['pipeline']
@@ -1184,7 +1318,7 @@ def test_finalized_and_processing_targets_and_off_keep_reprocessing(dependencies
     process = MagicMock()
     monkeypatch.setattr(pipeline, 'process_conversation', process)
     pipeline._reprocess_conversation_after_update('u', row['id'], 'en')
-    process.assert_called_once()
+    assert len(process.call_args_list) == (0 if status == 'in_progress' else 1)
 
 
 @pytest.mark.parametrize('flag', ['', 'off'])

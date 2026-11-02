@@ -267,8 +267,12 @@ async def test_disconnect_drains_accepted_tail_and_final_transcript(monkeypatch)
         await until(lambda: soniox._ws.byte_count >= len(prefix))
         soniox._ws.gate.clear()
         held = [marker(7, 2), marker(8, 2)]
+        accepted_end = actual.capture_timeline.next_sample + sum(len(packet) // 2 for packet in held)
         for packet in held:
             ws.feed_audio(packet)
+        # The prefix writer may still be marked in-flight. Wait for both
+        # client packets to be receiver-accepted before testing tail drain.
+        await until(lambda: actual.capture_timeline.next_sample >= accepted_end)
         await until(lambda: bool(actual.stt_socket.tail) or soniox._send_queue.qsize() or soniox._send_queue.inflight)
         emitted = {'last': False}
 
@@ -993,7 +997,7 @@ async def test_stalled_soniox_queue_during_drain_reports_local_capacity(monkeypa
         raw._send_queue.put_nowait(b'\x01\x00')
     try:
         assert not await raw.wait_send_capacity()
-        assert raw.typed_death_reason == 'capacity_full'
+        assert raw.typed_death_reason == 'replay_send_stalled'
         assert raw.is_connection_dead
     finally:
         await stop([raw])

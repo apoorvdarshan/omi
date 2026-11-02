@@ -1,4 +1,4 @@
-"""Rollout ownership/isolation contracts for the #20391 careful canary."""
+"""Rollout ownership/isolation contracts for the #20391 canary and #20696 stable flip."""
 
 from __future__ import annotations
 
@@ -15,6 +15,9 @@ import websockets
 import yaml
 from websockets.legacy.server import serve
 
+from config.live_stt_recovery import current_recovery_enabled, recovery_enabled
+from config.soniox_idle import idle_close_seconds
+from deploy.compose_runtime_env import compose_manifest
 from testing.live_stt_soak.manifest import render as soak_manifest
 from testing.live_stt_soak.run import metric_samples, session, summarize, validate_pod, public_pcm, pod_generation
 from testing.live_stt_soak.safety import validate_environment, validate_target
@@ -28,6 +31,105 @@ assert SPEC and SPEC.loader
 renderer = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(renderer)
 IMAGE = 'gcr.io/based-hardware-dev/backend@sha256:' + 'a' * 64
+
+
+@pytest.fixture(scope='module', params=['committed', 'composed'])
+def runtime_manifest(request):
+    loader = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
+    manifest = (
+        yaml.load((ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=loader)
+        if request.param == 'committed'
+        else compose_manifest()
+    )
+    return loader, manifest
+
+
+def test_stable_recovery_flag_is_scoped_to_prod_listen(runtime_manifest):
+    flag = 'STT_FAILOVER_RECOVERY_ENABLED'
+    loader, manifest = runtime_manifest
+
+    def declarations(node, path=()):
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key == flag:
+                    yield path, value
+                else:
+                    yield from declarations(value, (*path, key))
+        elif isinstance(node, list):
+            for index, value in enumerate(node):
+                yield from declarations(value, (*path, index))
+
+    # Exhaustive paths also reject declarations (even false/secret-backed) on
+    # pusher, sync, desktop-backend, jobs, shared config or any future service.
+    assert dict(declarations(manifest)) == {
+        ('environments', 'prod', 'gke', 'backend-listen', 'env'): {'value': 'true', 'category': 'rollout'},
+        ('environments', 'dev', 'gke', 'backend-listen', 'env'): {'value': 'false', 'category': 'rollout'},
+    }
+
+    for environment, expected in (('prod', 'true'), ('dev', 'false')):
+        values = yaml.load(
+            (ROOT / f'backend/charts/backend-listen/{environment}_omi_backend_listen_values.yaml').read_text(),
+            Loader=loader,
+        )
+        assert [entry for entry in values['env'] if entry['name'] == flag] == [{'name': flag, 'value': expected}]
+
+
+@pytest.mark.parametrize('value', [None, 'false'], ids=['unset', 'false'])
+def test_stable_recovery_code_default_remains_off(monkeypatch, value):
+    flag = 'STT_FAILOVER_RECOVERY_ENABLED'
+    if value is None:
+        monkeypatch.delenv(flag, raising=False)
+    else:
+        monkeypatch.setenv(flag, value)
+    token = current_recovery_enabled.set(None)
+    try:
+        assert recovery_enabled() is False
+    finally:
+        current_recovery_enabled.reset(token)
+
+
+def test_idle_close_uses_code_default_in_every_environment(runtime_manifest):
+    flag = 'SONIOX_IDLE_CLOSE_SECONDS'
+    loader, manifest = runtime_manifest
+
+    def declarations(node, path=()):
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key == flag:
+                    yield path, value
+                else:
+                    yield from declarations(value, (*path, key))
+        elif isinstance(node, list):
+            for index, value in enumerate(node):
+                yield from declarations(value, (*path, index))
+
+    # The code default (45 s, on) governs every environment; a declaration
+    # would only be needed for a value that differs from it.
+    assert dict(declarations(manifest)) == {}
+    prod_values = yaml.load(
+        (ROOT / 'backend/charts/backend-listen/prod_omi_backend_listen_values.yaml').read_text(),
+        Loader=loader,
+    )
+    dev_values = yaml.load(
+        (ROOT / 'backend/charts/backend-listen/dev_omi_backend_listen_values.yaml').read_text(),
+        Loader=loader,
+    )
+    assert [entry for entry in prod_values['env'] if entry['name'] == flag] == []
+    assert [entry for entry in dev_values['env'] if entry['name'] == flag] == []
+
+
+@pytest.mark.parametrize(
+    'value,expected',
+    [(None, 45.0), ('nope', 45.0), ('0', 0.0), ('-1', 0.0), ('off', 0.0)],
+    ids=['unset', 'invalid', 'zero', 'negative', 'off'],
+)
+def test_idle_close_code_default_is_on_with_kill_switch(monkeypatch, value, expected):
+    flag = 'SONIOX_IDLE_CLOSE_SECONDS'
+    if value is None:
+        monkeypatch.delenv(flag, raising=False)
+    else:
+        monkeypatch.setenv(flag, value)
+    assert idle_close_seconds() == expected
 
 
 @pytest.mark.parametrize('environment', ['prod', 'dev'])

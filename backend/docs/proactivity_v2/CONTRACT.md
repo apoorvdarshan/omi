@@ -5,6 +5,16 @@ Date: 2026-10-03. Branch: `lane/proactivity-v2-spine`.
 Integration destination: `lane/proactivity-v2`; no PR to main from this lane.
 Source baseline: `159df547f4dc4657af0c92675e99a0202949711a` (fetched main).
 
+> **Retirement update (2026-10-26):** the real-time mentor
+> (`conversation_mentor_v2`) and commitment follow-up (`commitment_followup`)
+> producers were deleted; the producer registry is empty. `GET /v1/proactivity/feed`
+> and `POST /v1/proactivity/items/{id}/outcomes` remain as compatibility stubs
+> (feed reports `enabled=false`, outcomes are a recorded no-op) for one release
+> so shipped clients keep decoding responses. The sections below are the
+> historical G1 design record: the item ledger, Budget Authority, redis, flags
+> and gateway enforcement they describe still exist pending the follow-up
+> retirement PR; the producer trigger, queue and client surfaces do not.
+
 ## 1. Scope and binding decisions
 
 One backend-owned item ledger, feed, outcome API and Budget Authority serve all
@@ -14,7 +24,7 @@ Adding a producer means a registration row and its event-driven caller.
 
 All v2 generation and delivery require server-resolved `proactivity_v2=true`.
 Model-driven work is paid-only in practice: free/basic has a zero-dollar cap.
-Mentor additionally requires its existing opt-in and `MENTOR_PIPELINE=v2` or `cohort` (server-side per-user selection).
+Mentor additionally requires its existing opt-in and `MENTOR_PIPELINE=cohort` (server-side per-user selection).
 Daily recap generation, scheduling, storage and routes remain outside this budget;
 interesting-memory review remains unchanged. Neither becomes a v2 model producer
 in this build. Task follow-ups never create, complete or modify a task themselves.
@@ -43,7 +53,7 @@ original measurement-before-enable restrictions below.
 | `utils/llm/managed_spend_ledger.py` | Same `llm_gateway_attempts` event schema; do not introduce direct provider calls. Its best-effort background write is not budget authority. |
 | `llm_gateway/gateway/accounting.py` | `rate_card_for`, normalized provider usage, `build_accounting_event`, `estimated_cost_micro_usd`; count every attempt, including errors. |
 | `database/llm_gateway_accounting.py` | Immutable attempt IDs and create-once persistence; existing rollups are projections, never available balance. |
-| `llm_gateway/gateway/jit_budget.py`, `executor.py` | Existing durable reservation and immediately-before-provider-call pattern. Port the narrow pattern into v2 ownership before the other lane removes JIT; no runtime dependency on retired JIT modules. |
+| `llm_gateway/gateway/executor.py` | The legacy JIT budget module was removed on 2026-10-18. V2 keeps its own durable reservation immediately before provider calls and has no runtime dependency on JIT modules. |
 | `routers/chat.py`, plan catalog | Dollars already have quota unit `cost_usd`. Keep proactivity a separate daily allowance, not a debit against Architect monthly chat. |
 | `config/plan_catalog.json` and generator | Canonical plan IDs, paid status, aliases and a generated budget policy; no Stripe request at admission. |
 | `database/redis_db.py` | Shared lazy connection and atomic/token-owned Lua conventions. Do not reuse expiring notification leases as refundable money reservations. |
@@ -267,7 +277,7 @@ the complete serialized request plus provider framing with the supported model's
 conservative token upper bound; reject models whose framing/tokenization cannot
 be bounded. Price all input as uncached, at the applicable highest context tier;
 no speculative cache savings or Flex discount in the reservation. The existing
-JIT UTF-8 byte method is a precedent, not permission to ignore provider framing.
+The retired JIT UTF-8 byte method was a precedent, not permission to ignore provider framing.
 
 Actual estimate above hold is an invariant failure: retain actual spend, block the
 user day and producer, emit critical telemetry. It cannot undo a provider charge;
@@ -502,10 +512,19 @@ or enablement require explicit coordinator action with new version/evidence.
 | Control | Authority / default |
 | --- | --- |
 | `proactivity_v2` | Server PostHog exposure flag; absent/unknown/error = off for generation and push; no UID bypass. |
-| `MENTOR_PIPELINE` | Server env `legacy|v2|cohort`, default legacy; cohort resolves the same server-side `proactivity_v2` flag/client/cache as admission: true selects v2, false/unknown/error selects unchanged legacy; invalid denies mentor invocation. Mentor owner implements exclusive dispatch; v2 failure never falls back to legacy automatically. |
+| `MENTOR_PIPELINE` | Server env, `cohort` is the only valid value (default unset denies); cohort resolves the same server-side `proactivity_v2` flag/client/cache as admission: true selects v2, false/unknown/error selects nothing — the legacy mentor lane was deleted, so flag errors deny (fail closed) rather than fall back. Invalid values invoke no mentor path and fail the runtime env validator. |
 | Producer registration / health | Provisional targets permit enablement; durable kill overrides registry enabled. |
 | User producer preference | Explicit false wins every admission/publication/push check. |
 | `LLM_GATEWAY_ACCOUNTING_ENABLED` | Must be true for v2; existing sink semantics unchanged for other traffic. |
+
+Server flag resolution caches both true and false per UID for **300 seconds**
+per process, with a **60-second** failure cache and a 4,096-entry LRU bound.
+Concurrent same-user misses share one lookup. Errors deny both cohort mentor
+dispatch and v2 admission; a content-free warning records exception
+type and HTTP status at most once per minute per process. Realtime mentor
+validates the env value first, then runs its existing shared paid/opt-in,
+buffering and debounce admission. Only admitted messages with a conversation id
+resolve a cohort flag; any non-cohort env value skips mentor dispatch entirely.
 
 Structured events: `proactivity_v2_admission`, `proactivity_v2_budget_reserved`,
 `proactivity_v2_budget_settled`, `proactivity_v2_item_terminal`,
@@ -568,22 +587,48 @@ revisions cannot publish a follow-up. Missing queue bindings keep scheduling off
 
 | Host / role | Required bindings before cohort enablement |
 | --- | --- |
-| Backend API (including desktop-backend wherever feed/outcome routes are served) | Customer-data Firestore identity; shared Redis `REDIS_DB_HOST` / `REDIS_DB_PORT` / credentials; `POSTHOG_PROJECT_API_KEY` (or `POSTHOG_API_KEY`) and matching `POSTHOG_HOST`; integrated routes and registry. |
-| Mentor production on listen/backend and pusher | Same customer-data/Redis/PostHog bindings; `MENTOR_PIPELINE=cohort` for a per-user rollout (true `proactivity_v2` selects v2; false/unknown/error retains legacy), or `v2` only for a host whose mentor users are all enabled; working authenticated `OMI_LLM_GATEWAY_URL`/gateway service bindings. Pusher is a separate image/release: enabling only backend does not switch it. |
+| Backend API (including desktop-backend wherever feed/outcome routes are served) | Customer-data Firestore identity; shared Redis `REDIS_DB_HOST` / `REDIS_DB_PORT` / credentials; plain `PROACTIVITY_V2_POSTHOG_TOKEN` and matching `PROACTIVITY_V2_POSTHOG_HOST`; integrated routes and registry. |
+| Mentor production on listen/backend and pusher | Same customer-data/Redis/PostHog bindings; `MENTOR_PIPELINE=cohort` (true `proactivity_v2` selects v2; false/unknown/error dispatches nothing — the legacy lane was deleted); working authenticated `OMI_LLM_GATEWAY_URL`/gateway service bindings. Pusher is a separate image/release: enabling only backend does not switch it. |
 | Task create/update/reminder hosts and commitment callback worker | All five queue/project/location bindings above, plus the same PostHog, customer-data and gateway bindings on the worker. Propagate enqueue bindings to every host that invokes reminder scheduling, not just the callback host. |
-| LLM gateway | `LLM_GATEWAY_ACCOUNTING_ENABLED=true`; customer-data Firestore, shared Redis and PostHog bindings; **the same `MENTOR_PIPELINE=cohort` (or host-wide `v2`) selection as mentor hosts for admission here too**; existing Luna and System One/Jev provider credentials and the committed routes/rate cards. No direct-provider fallback. |
+| LLM gateway | `LLM_GATEWAY_ACCOUNTING_ENABLED=true`; customer-data Firestore, shared Redis and PostHog bindings; **the same `MENTOR_PIPELINE=cohort` selection as mentor hosts for admission here too**; existing Luna and System One/Jev provider credentials and the committed routes/rate cards. No direct-provider fallback. |
 | Mobile, macOS, Windows | Updated generated clients and consumers, ordinary authenticated backend routing, existing notification preferences/permissions. No local flag or UID bypass grants server admission. Live listen sockets carry identity-only v2 wakeups; all desktop content is fetched through the feed. Offline sockets catch up through foreground/active polling. |
+
+V2 flag lookup uses **only** `PROACTIVITY_V2_POSTHOG_TOKEN`, stripped and
+required to start with `phc_`. This is the Omi project's public client token
+(project **302298**, already committed in
+`desktop/macos/Desktop/Sources/PostHogManager.swift`), bound as a plain value,
+with zero new Secret Manager references. `PROACTIVITY_V2_POSTHOG_HOST` defaults
+to `https://us.posthog.com`, including when unset or whitespace-only.
+The shared `POSTHOG_PROJECT_API_KEY` is intentionally `disabled`: **do not
+repoint it**, `POSTHOG_API_KEY`, or generic `POSTHOG_HOST` to enable v2. The
+legacy `jit-processing-*` controls were retired on 2026-10-18; `proactivity_v2`
+admission remains an independent feature. Backend capture telemetry keeps its
+existing configuration.
+Missing, blank, `disabled`, or non-`phc_` dedicated tokens fail closed with
+`flag_unavailable`; diagnostics contain no token and are rate-limited to once
+per 60 seconds per process. There is no shared-key fallback in dev, local,
+test, or production.
+
+Bind the dedicated public token on **pusher, backend-listen, llm-gateway,
+backend, backend-sync, backend-sync-backfill, backend-integration, and
+desktop-backend** in both serving environments. The gateway budget executor
+calls `utils.proactivity.ensure_admitted`, so it needs its own binding even
+when the producer already resolved the flag. Desktop-backend serves the
+feed/outcome routes and deploys through separate workflows. Local `.env`
+users must set the dedicated variable to opt in; offline/emulator setups
+leave it unset and fail closed without contacting PostHog.
 
 Create the PostHog **`proactivity_v2`** boolean flag in the same project used by
 these server/gateway clients, initially **disabled / zero-percent**. Its registry
 entry is a declaration, not creation or enablement. Absent, unknown or failed flag
 resolution denies v2 generation and push; do not use a user-ID bypass. Verify all
-hosts resolve the same bounded cohort before increasing exposure. No creation or
-flag update is performed by this PR.
+hosts resolve the same bounded cohort before increasing exposure. Allow up to
+300 seconds for cached flag results to reflect an enablement or rollback change,
+and 60 seconds before retrying a failed lookup (see rollback notes below).
+No creation or flag update is performed by this PR.
 
-The rollout defaults remain off: `proactivity_v2` absent/false,
-`MENTOR_PIPELINE=legacy`, and empty commitment queue bindings. Producer registry
-rows are enabled behind those gates, not globally active switches. Once v2 is
+The rollout defaults remain off: `proactivity_v2` absent/false, `MENTOR_PIPELINE`
+unset (which denies mentor dispatch), and empty commitment queue bindings. Producer registry
 explicitly enabled, the mentor draft-usefulness judge defaults to **shadow**;
 this is an internal measurement mode, not a rollout flag. Its prefilter is disabled,
 safety escalation suppresses, follow-ups remain feed-only, and mentor push remains
@@ -607,10 +652,22 @@ released clients while v2 feed cards target the source conversation.
 5. Flag off initially. Enable bounded cohort only with provisional or measured producer rows,
    readiness checks and actual mobile/macOS feed-to-object/action verification.
 
-Rollback: set `proactivity_v2=false`; all new v2 generation/push stops, in-flight
-calls retain reservations and settle, publication rechecks flag and suppresses.
-Feed returns disabled, outcomes for existing items still work. Coordinator may
-explicitly flip mentor to legacy; never an automatic failure fallback. Preserve
+Rollback: disable the PostHog `proactivity_v2` flag. Unsetting
+`PROACTIVITY_V2_POSTHOG_TOKEN` also fails closed once the new environment reaches
+fresh processes; the SDK client and flag results are process-cached, so changing
+a file or a live process environment alone is not an immediate kill switch.
+Never change the shared PostHog secret as part of rollback. Cached enabled results expire within
+**300 seconds per process** before new v2 generation/push stops and feed reads
+return disabled. Enablement/ramp changes have the same maximum cache latency;
+flag failures deny immediately on the next uncached check and retry after
+**60 seconds**. Allow this rollback window when checking all serving hosts;
+the legacy mentor lane is gone, so mentor rollback is the `proactivity_v2`
+flag itself, or setting `MENTOR_PIPELINE` to any non-cohort value, which
+denies mentor entirely once that env change reaches the process.
+In-flight calls retain reservations and settle; publication rechecks the cached
+flag and suppresses after disable becomes visible.
+Feed returns disabled, outcomes for existing items still work. A failed cohort
+flag lookup denies mentor dispatch before invoking v2; once v2 is invoked, failures never retry through legacy. Preserve
 ledger/budgets/attempt IDs until TTL; no historical rewrite or refund-on-rollback.
 No old ledger backfill. Released clients continue existing routes while the
 integration owner handles retirement using `contracts/client-compat/` policy.
@@ -673,8 +730,8 @@ Phase 2 spine modifications:
 No `.github/` workflow additions. If live generator output ownership includes
 another required derived file, list it in the reviewed contract before building
 rather than hand-editing or bypassing its drift guard. Shared gateway/deletion
-files must be integrated against the deletion lane's current diff; preserve the
-v2 attempt hook when JIT qualification code is removed.
+files must be integrated against the deletion lane's current diff; the v2
+attempt hook remains self-contained and does not depend on retired JIT code.
 
 Other lanes own producer source hooks, prompts, model selection experiments,
 `MENTOR_PIPELINE` dispatch, client UI, old-path removal and deployment manifests.

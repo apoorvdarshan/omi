@@ -7,6 +7,13 @@ import 'package:omi/services/devices/transports/device_transport.dart';
 /// subscribes to a real connection, and the test pushes frames with [emitAudio]. It records how many
 /// audio subscriptions are open, so a scenario can tell whether the pendant is streaming.
 class ScriptedDeviceConnection implements DeviceConnection {
+  /// When set, packets emitted while capture holds no audio subscription reach
+  /// [OrphanAudioRoute] as NativeBleTransport delivers them (the GATT
+  /// subscription outlives Dart listeners); otherwise they are dropped.
+  ScriptedDeviceConnection({this.orphanDeviceId});
+
+  final String? orphanDeviceId;
+
   @override
   final _ScriptedTransport transport = _ScriptedTransport();
 
@@ -20,7 +27,17 @@ class ScriptedDeviceConnection implements DeviceConnection {
 
   /// A BLE audio packet: a 3-byte header then [payloadLength] bytes of [value].
   void emitAudio({int value = 7, int payloadLength = 80}) {
-    _audio.add([0, 0, 0, ...List<int>.filled(payloadLength, value)]);
+    emitRawAudio([0, 0, 0, ...List<int>.filled(payloadLength, value)]);
+  }
+
+  /// Emit a caller-owned packet so capture tests can exercise buffer reuse.
+  void emitRawAudio(List<int> packet) {
+    final orphanId = orphanDeviceId;
+    if (_open == 0 && orphanId != null) {
+      OrphanAudioRoute.deliver(orphanId, packet);
+      return;
+    }
+    _audio.add(packet);
   }
 
   @override

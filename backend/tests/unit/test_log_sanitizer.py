@@ -1,6 +1,7 @@
 """Tests for utils.log_sanitizer — masks sensitive tokens while preserving searchability."""
 
 import asyncio
+import importlib.util
 import io
 import json
 import logging
@@ -153,13 +154,13 @@ class TestSanitizeEmails:
 
     def test_simple_email(self):
         result = sanitize("john@example.com")
-        assert "example.com" in result
+        assert result == "j***n@example.com"
         assert "john" not in result
         assert "***" in result
 
     def test_email_in_log_message(self):
         result = sanitize("Found contact: John Doe -> john.doe@gmail.com")
-        assert "gmail.com" in result
+        assert result == "Found contact: John Doe -> j***e@gmail.com"
         assert "john.doe" not in result
 
     def test_short_local_part(self):
@@ -168,13 +169,12 @@ class TestSanitizeEmails:
 
     def test_email_with_digits(self):
         result = sanitize("user123@company.org")
-        assert "company.org" in result
+        assert result == "u***3@company.org"
         assert "***" in result
 
     def test_multiple_emails(self):
         result = sanitize("from alice@a.com to bob@b.com")
-        assert "a.com" in result
-        assert "b.com" in result
+        assert result == "from a***e@a.com to b***b@b.com"
         assert "alice" not in result
         assert "bob" not in result
 
@@ -218,7 +218,7 @@ class TestSanitizePii:
 
     def test_email_via_pii(self):
         result = sanitize_pii("john.doe@gmail.com")
-        assert "gmail.com" in result
+        assert result == "j***e@gmail.com"
         assert "john.doe" not in result
 
     def test_none(self):
@@ -245,7 +245,7 @@ class TestSanitizePii:
         assert "John" not in result
         assert "Doe" not in result
         assert "john" not in result
-        assert "example.com" in result  # domain preserved
+        assert result == "*** *** j***n@example.com"  # domain preserved
 
     def test_single_char_email(self):
         """Single char local part -> ***@domain."""
@@ -599,7 +599,7 @@ async def test_soniox_arbitrary_error_type_stays_typed_and_bounded(monkeypatch, 
 
 
 def test_soniox_persistent_rate_limit_log_redacts_payload(monkeypatch, caplog):
-    monkeypatch.setattr(soniox, '_last_rate_limit_error_log', 0.0)
+    monkeypatch.setattr(soniox, '_last_rate_limit_error_log', float('-inf'))
     monkeypatch.setattr(soniox, '_rate_limit_events', [])
     with caplog.at_level(logging.WARNING, logger='utils.stt.soniox'):
         soniox._rate_limit_persistent_error(f'429 limit_exceeded {SENTINEL} {SENTINEL_URL}', force=True)
@@ -609,6 +609,18 @@ def test_soniox_persistent_rate_limit_log_redacts_payload(monkeypatch, caplog):
     assert 'limit_exceeded' in errors[0].getMessage()
     assert SENTINEL not in _caplog_text(caplog)
     assert SENTINEL_URL not in _caplog_text(caplog)
+
+
+def test_soniox_first_rate_limit_escalation_logs_on_a_freshly_booted_host(monkeypatch, caplog):
+    # A pristine module copy exercises the real initial throttle state, which other
+    # tests overwrite; the monotonic clock is two minutes past boot, inside the window.
+    spec = importlib.util.find_spec('utils.stt.soniox')
+    fresh = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fresh)
+    monkeypatch.setattr(fresh.time, 'monotonic', lambda: 120.0)
+    with caplog.at_level(logging.WARNING, logger='utils.stt.soniox'):
+        fresh._rate_limit_persistent_error('429 limit_exceeded', force=True)
+    assert [r for r in caplog.records if 'rate limiting persists' in r.getMessage()]
 
 
 @pytest.mark.asyncio
@@ -905,3 +917,20 @@ async def test_parakeet_window_invalid_body_logs_no_payload(monkeypatch, caplog)
     assert SENTINEL not in _caplog_text(caplog)
     sock.finish()
     await asyncio.gather(sock._pump_task, return_exceptions=True)
+
+
+@pytest.mark.parametrize('address', ['alice+tag@sub.example.com', 'a.b%tag@example.co.uk'])
+def test_email_subdomains_and_special_local_parts_remain_masked(address):
+    assert address.split('@')[0] not in sanitize(address)
+    assert address.split('@')[1] in sanitize(address)
+
+
+def test_email_pattern_handles_long_unmatched_and_matched_local_parts():
+    from utils.log_sanitizer import _EMAIL_PATTERN
+
+    assert _EMAIL_PATTERN.sub('masked', '%' * 100_000) == '%' * 100_000
+    assert _EMAIL_PATTERN.sub('masked', '%' * 100_000 + '@example.com') == 'masked'
+
+
+def test_email_redaction_preserves_sentence_punctuation():
+    assert sanitize('Contact john@example.com.') == 'Contact j***n@example.com.'
